@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getNavItemsForRoles } from "@/lib/constants";
-import { ROLE_LABELS } from "@/lib/labels";
+import { getRoleLabels } from "@/lib/labels";
 import { useSession, signOut } from "@/lib/auth-client";
+import { useI18n } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/language-toggle";
 import { NotificationBell } from "@/components/notification-bell";
 import { Footer } from "@/components/ui/footer";
 import {
@@ -43,7 +45,9 @@ const iconMap: Record<string, React.ReactNode> = {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const ROLE_LABELS = getRoleLabels(t);
 
   const role = ((session?.user as Record<string, unknown>)?.role as string) || "AUTHOR";
   const userId = (session?.user as Record<string, unknown>)?.id as string | undefined;
@@ -118,7 +122,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 {iconMap[item.icon] || <LayoutDashboard className="h-5 w-5" />}
-                {item.label}
+                {t(item.label as any)}
               </Link>
             );
           })}
@@ -138,6 +142,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <div className="flex-1" />
 
+          <LanguageToggle />
           <NotificationBell />
 
           {/* User info */}
@@ -165,7 +170,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 }
               }}
               className="p-1.5 rounded-lg text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all cursor-pointer"
-              title="ออกจากระบบ"
+              title={t("common.signOut")}
             >
               <LogOut className="h-4 w-4" />
             </button>

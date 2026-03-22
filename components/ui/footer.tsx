@@ -1,5 +1,8 @@
+"use client";
+
 import { APP_VERSION } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 interface FooterProps {
   variant?: "light" | "dark";
@@ -7,6 +10,7 @@ interface FooterProps {
 }
 
 export function Footer({ variant = "light", className }: FooterProps) {
+  const { t } = useI18n();
   return (
     <footer
       className={cn(
@@ -17,11 +21,8 @@ export function Footer({ variant = "light", className }: FooterProps) {
         className
       )}
     >
-      <p>
-        พัฒนาโดย คณะกรรมการฝ่ายวิชาการ งานประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี
-        นักเรียนทุน พสวท.
-      </p>
-      <p>คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร</p>
+      <p>{t("footer.developedBy")}</p>
+      <p>{t("footer.university")}</p>
       <p className="mt-1 opacity-60">v{APP_VERSION}</p>
     </footer>
   );

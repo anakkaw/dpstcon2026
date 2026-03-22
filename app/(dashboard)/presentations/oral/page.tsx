@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
 import { formatDateTime } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import { Mic, Calendar, Save, Plus, Users, ClipboardList, X, Check, Clock, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download } from "lucide-react";
 import { TrackFilter } from "@/components/track-filter";
 
@@ -57,6 +58,7 @@ interface ScoringPresentation {
 }
 
 export default function OralPresentationPage() {
+  const { t, locale } = useI18n();
   const [presentations, setPresentations] = useState<PresentationData[]>([]);
   const [criteria, setCriteria] = useState<CriterionData[]>([]);
   const [committeeUsers, setCommitteeUsers] = useState<CommitteeUser[]>([]);
@@ -144,7 +146,7 @@ export default function OralPresentationPage() {
         }),
       });
       if (res.ok) {
-        setMessage("บันทึกตารางสำเร็จ");
+        setMessage(t("common.save"));
         setEditingId(null);
         await reload();
       }
@@ -171,7 +173,7 @@ export default function OralPresentationPage() {
         setCriteria([...criteria, data.criterion]);
         setCriteriaForm({ name: "", description: "", maxScore: "10", weight: "1" });
         setShowAddCriteria(false);
-        setMessage("เพิ่มเกณฑ์สำเร็จ");
+        setMessage(t("common.save"));
       }
     } catch {}
     setAddingCriteria(false);
@@ -186,7 +188,7 @@ export default function OralPresentationPage() {
         body: JSON.stringify({ judgeIds: selectedJudges }),
       });
       if (res.ok) {
-        setMessage(`แต่งตั้ง Committee ${selectedJudges.length} คนสำเร็จ`);
+        setMessage(t("presentations.selectedCount", { n: selectedJudges.length }));
         setAssignPresId(null);
         setSelectedJudges([]);
       }
@@ -219,10 +221,10 @@ export default function OralPresentationPage() {
   }
 
   const tabs = [
-    { key: "schedule" as const, label: "จัดตาราง", icon: <Calendar className="h-3.5 w-3.5" /> },
-    { key: "criteria" as const, label: "เกณฑ์ประเมิน", icon: <ClipboardList className="h-3.5 w-3.5" /> },
-    { key: "committee" as const, label: "Committee", icon: <Users className="h-3.5 w-3.5" /> },
-    { key: "scoring" as const, label: "คะแนนประเมิน", icon: <BarChart3 className="h-3.5 w-3.5" /> },
+    { key: "schedule" as const, label: t("presentations.schedule"), icon: <Calendar className="h-3.5 w-3.5" /> },
+    { key: "criteria" as const, label: t("presentations.criteria"), icon: <ClipboardList className="h-3.5 w-3.5" /> },
+    { key: "committee" as const, label: t("presentations.committee"), icon: <Users className="h-3.5 w-3.5" /> },
+    { key: "scoring" as const, label: t("presentations.scoring"), icon: <BarChart3 className="h-3.5 w-3.5" /> },
   ];
 
   const filteredScoring = scoringData.filter((p) => !trackFilter || p.submission.track?.id === trackFilter);
@@ -241,23 +243,23 @@ export default function OralPresentationPage() {
   return (
     <div className="space-y-6">
       <SectionTitle
-        title="Oral Presentation"
-        subtitle={`${filteredPresentations.length} รายการ`}
+        title={t("presentations.oral")}
+        subtitle={`${filteredPresentations.length}`}
       />
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         <div className="rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 px-4 py-3">
           <p className="text-2xl font-bold text-blue-700">{filteredPresentations.length}</p>
-          <p className="text-xs text-blue-600/70 font-medium">ทั้งหมด</p>
+          <p className="text-xs text-blue-600/70 font-medium">{t("presentations.total")}</p>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-100 px-4 py-3">
           <p className="text-2xl font-bold text-emerald-700">{scheduledCount}</p>
-          <p className="text-xs text-emerald-600/70 font-medium">จัดตารางแล้ว</p>
+          <p className="text-xs text-emerald-600/70 font-medium">{t("presentations.scheduled")}</p>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 px-4 py-3">
           <p className="text-2xl font-bold text-amber-700">{pendingCount}</p>
-          <p className="text-xs text-amber-600/70 font-medium">รอจัดตาราง</p>
+          <p className="text-xs text-amber-600/70 font-medium">{t("presentations.pendingSchedule")}</p>
         </div>
       </div>
 
@@ -288,7 +290,7 @@ export default function OralPresentationPage() {
          ══════════════════════════════════════════════════════════════ */}
       {activeTab === "schedule" && (
         filteredPresentations.length === 0 ? (
-          <EmptyState icon={<Mic className="h-12 w-12" />} title="ยังไม่มี Oral Presentation" body="จะถูกสร้างอัตโนมัติเมื่อบทความได้รับการตอบรับ" />
+          <EmptyState icon={<Mic className="h-12 w-12" />} title={t("presentations.noPresentations")} body={t("presentations.autoCreated")} />
         ) : (
           <Card>
             <CardBody className="p-0">
@@ -296,12 +298,12 @@ export default function OralPresentationPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-alt/80 border-b border-border/60">
-                      <SortTh label="บทความ" sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%] px-5" />
+                      <SortTh label={t("presentations.paper")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%] px-5" />
                       <SortTh label="Track" sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                      <SortTh label="วัน-เวลา" sortKey_="scheduledAt" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                      <SortTh label="ห้อง" sortKey_="room" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                      <SortTh label="นาที" sortKey_="duration" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
-                      <SortTh label="สถานะ" sortKey_="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                      <SortTh label={t("presentations.dateTime")} sortKey_="scheduledAt" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                      <SortTh label={t("presentations.room")} sortKey_="room" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                      <SortTh label={t("presentations.minutes")} sortKey_="duration" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                      <SortTh label={t("presentations.statusCol")} sortKey_="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                       <th className="text-right px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider" />
                     </tr>
                   </thead>
@@ -335,13 +337,13 @@ export default function OralPresentationPage() {
                           </td>
                           <td className="px-4 py-3.5 text-center">
                             <Badge tone={p.status === "SCHEDULED" ? "success" : "warning"} dot>
-                              {p.status === "SCHEDULED" ? "จัดแล้ว" : "รอจัด"}
+                              {p.status === "SCHEDULED" ? t("presentations.statusScheduled") : t("presentations.statusPending")}
                             </Badge>
                           </td>
                           <td className="px-5 py-3.5 text-right">
                             {editingId === p.id ? (
                               <div className="flex gap-1 justify-end">
-                                <Button size="sm" onClick={() => handleSchedule(p.id)} loading={saving}><Check className="h-3.5 w-3.5" />บันทึก</Button>
+                                <Button size="sm" onClick={() => handleSchedule(p.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
                                 <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
                               </div>
                             ) : (
@@ -351,7 +353,7 @@ export default function OralPresentationPage() {
                                 className="opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={() => { setEditingId(p.id); setEditForm({ scheduledAt: p.scheduledAt || "", room: p.room || "", duration: p.duration?.toString() || "" }); }}
                               >
-                                {p.scheduledAt ? "แก้ไข" : "กำหนดตาราง"}
+                                {p.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
                               </Button>
                             )}
                           </td>
@@ -360,13 +362,13 @@ export default function OralPresentationPage() {
                           <tr className="bg-brand-50/40">
                             <td colSpan={7} className="px-5 py-4">
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
-                                <Field label="วัน-เวลา">
+                                <Field label={t("presentations.dateTime")}>
                                   <Input type="datetime-local" value={editForm.scheduledAt} onChange={(e) => setEditForm({ ...editForm, scheduledAt: e.target.value })} />
                                 </Field>
-                                <Field label="ห้อง">
-                                  <Input value={editForm.room} onChange={(e) => setEditForm({ ...editForm, room: e.target.value })} placeholder="เช่น A101" />
+                                <Field label={t("presentations.room")}>
+                                  <Input value={editForm.room} onChange={(e) => setEditForm({ ...editForm, room: e.target.value })} placeholder={t("presentations.roomPlaceholder")} />
                                 </Field>
-                                <Field label="ระยะเวลา (นาที)">
+                                <Field label={t("presentations.durationMinutes")}>
                                   <Input type="number" value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: e.target.value })} placeholder="15" />
                                 </Field>
                               </div>
@@ -390,9 +392,9 @@ export default function OralPresentationPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-ink">เกณฑ์การประเมิน ({criteria.length} เกณฑ์)</h3>
+              <h3 className="text-sm font-semibold text-ink">{t("presentations.criteriaCount", { n: criteria.length })}</h3>
               <Button size="sm" onClick={() => setShowAddCriteria(!showAddCriteria)}>
-                <Plus className="h-3.5 w-3.5" />{showAddCriteria ? "ซ่อน" : "เพิ่มเกณฑ์"}
+                <Plus className="h-3.5 w-3.5" />{showAddCriteria ? t("presentations.hide") : t("presentations.addCriteria")}
               </Button>
             </div>
           </CardHeader>
@@ -400,38 +402,38 @@ export default function OralPresentationPage() {
             {showAddCriteria && (
               <div className="rounded-xl border border-brand-200/60 bg-brand-50/30 p-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="ชื่อเกณฑ์" required>
-                    <Input value={criteriaForm.name} onChange={(e) => setCriteriaForm({ ...criteriaForm, name: e.target.value })} placeholder="เช่น ความชัดเจนในการนำเสนอ" />
+                  <Field label={t("presentations.criteriaName")} required>
+                    <Input value={criteriaForm.name} onChange={(e) => setCriteriaForm({ ...criteriaForm, name: e.target.value })} placeholder={t("presentations.criteriaNamePlaceholder")} />
                   </Field>
-                  <Field label="คำอธิบาย">
-                    <Input value={criteriaForm.description} onChange={(e) => setCriteriaForm({ ...criteriaForm, description: e.target.value })} placeholder="รายละเอียดเพิ่มเติม" />
+                  <Field label={t("presentations.criteriaDesc")}>
+                    <Input value={criteriaForm.description} onChange={(e) => setCriteriaForm({ ...criteriaForm, description: e.target.value })} placeholder={t("presentations.criteriaDescPlaceholder")} />
                   </Field>
-                  <Field label="คะแนนเต็ม" hint="ค่าเริ่มต้น 10">
+                  <Field label={t("presentations.maxScore")} hint={t("presentations.defaultMaxScore")}>
                     <Input type="number" value={criteriaForm.maxScore} onChange={(e) => setCriteriaForm({ ...criteriaForm, maxScore: e.target.value })} />
                   </Field>
-                  <Field label="น้ำหนัก (Weight)" hint="สัดส่วนความสำคัญ">
+                  <Field label={t("presentations.weight")} hint={t("presentations.weightDesc")}>
                     <Input type="number" value={criteriaForm.weight} onChange={(e) => setCriteriaForm({ ...criteriaForm, weight: e.target.value })} />
                   </Field>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => setShowAddCriteria(false)}>ยกเลิก</Button>
-                  <Button size="sm" onClick={handleAddCriteria} loading={addingCriteria} disabled={!criteriaForm.name.trim()}>บันทึกเกณฑ์</Button>
+                  <Button variant="secondary" size="sm" onClick={() => setShowAddCriteria(false)}>{t("common.cancel")}</Button>
+                  <Button size="sm" onClick={handleAddCriteria} loading={addingCriteria} disabled={!criteriaForm.name.trim()}>{t("presentations.saveCriteria")}</Button>
                 </div>
               </div>
             )}
 
             {criteria.length === 0 ? (
-              <EmptyState icon={<ClipboardList className="h-10 w-10" />} title="ยังไม่มีเกณฑ์ประเมิน" body="เพิ่มเกณฑ์การประเมินสำหรับ Committee" />
+              <EmptyState icon={<ClipboardList className="h-10 w-10" />} title={t("presentations.noCriteria")} body={t("presentations.noCriteriaDesc")} />
             ) : (
               <div className="overflow-x-auto rounded-lg border border-border/60">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-alt/80">
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">ลำดับ</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">ชื่อเกณฑ์</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">คำอธิบาย</th>
-                      <th className="text-center px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">คะแนนเต็ม</th>
-                      <th className="text-center px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">น้ำหนัก</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("presentations.order")}</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("presentations.criteriaName")}</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("presentations.criteriaDesc")}</th>
+                      <th className="text-center px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("presentations.maxScore")}</th>
+                      <th className="text-center px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("presentations.weight")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -457,7 +459,7 @@ export default function OralPresentationPage() {
          ══════════════════════════════════════════════════════════════ */}
       {activeTab === "committee" && (
         filteredPresentations.length === 0 ? (
-          <EmptyState icon={<Users className="h-12 w-12" />} title="ยังไม่มี Oral Presentation" />
+          <EmptyState icon={<Users className="h-12 w-12" />} title={t("presentations.noPresentations")} />
         ) : (
           <Card>
             <CardBody className="p-0">
@@ -465,7 +467,7 @@ export default function OralPresentationPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-alt/80 border-b border-border/60">
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-[50%]">บทความ</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-[50%]">{t("presentations.paper")}</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Track</th>
                       <th className="text-right px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider" />
                     </tr>
@@ -491,7 +493,7 @@ export default function OralPresentationPage() {
                               }}
                             >
                               <UserPlus className="h-3.5 w-3.5" />
-                              {assignPresId === p.id ? "ยกเลิก" : "กำหนด Committee"}
+                              {assignPresId === p.id ? t("common.cancel") : t("presentations.committee")}
                             </Button>
                           </td>
                         </tr>
@@ -499,10 +501,10 @@ export default function OralPresentationPage() {
                           <tr className="bg-blue-50/40">
                             <td colSpan={3} className="px-5 py-4">
                               {committeeUsers.length === 0 ? (
-                                <p className="text-xs text-danger">ไม่พบผู้ใช้ที่มี role COMMITTEE — กรุณาเพิ่มในจัดการผู้ใช้</p>
+                                <p className="text-xs text-danger">{t("presentations.noCommittee")}</p>
                               ) : (
                                 <div className="space-y-3">
-                                  <p className="text-xs font-medium text-ink-light">เลือก Committee (เลือกได้หลายคน):</p>
+                                  <p className="text-xs font-medium text-ink-light">{t("presentations.selectCommittee")}</p>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
                                     {committeeUsers.map((u) => {
                                       const isSelected = selectedJudges.includes(u.id);
@@ -534,9 +536,9 @@ export default function OralPresentationPage() {
                                   </div>
                                   {selectedJudges.length > 0 && (
                                     <div className="flex items-center justify-between pt-2 border-t border-blue-200/60">
-                                      <p className="text-xs text-ink-muted">เลือกแล้ว {selectedJudges.length} คน</p>
+                                      <p className="text-xs text-ink-muted">{t("presentations.selectedCount", { n: selectedJudges.length })}</p>
                                       <Button size="sm" onClick={() => handleAssignCommittee(p.id)} loading={assigningSaving}>
-                                        <Check className="h-3.5 w-3.5" />แต่งตั้ง
+                                        <Check className="h-3.5 w-3.5" />{t("presentations.appoint")}
                                       </Button>
                                     </div>
                                   )}
@@ -559,12 +561,12 @@ export default function OralPresentationPage() {
          ══════════════════════════════════════════════════════════════ */}
       {activeTab === "scoring" && (
         filteredScoring.length === 0 ? (
-          <EmptyState icon={<BarChart3 className="h-12 w-12" />} title="ยังไม่มีข้อมูลคะแนน" body="ยังไม่มี Committee ส่งผลการประเมิน" />
+          <EmptyState icon={<BarChart3 className="h-12 w-12" />} title={t("presentations.noScoringData")} body={t("presentations.noScoringDataDesc")} />
         ) : (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-ink">ผลคะแนนประเมิน ({filteredScoring.length} รายการ)</h3>
+                <h3 className="text-sm font-semibold text-ink">{t("presentations.scoringResults", { n: filteredScoring.length })}</h3>
                 <a href="/api/exports/proceedings?format=csv" download>
                   <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />Export CSV</Button>
                 </a>
@@ -575,11 +577,11 @@ export default function OralPresentationPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-alt/80 border-b border-border/60">
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-[35%]">บทความ</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-[35%]">{t("presentations.paper")}</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Author</th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Track</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Committee</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">คะแนนเฉลี่ย</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("presentations.avgScore")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -592,7 +594,7 @@ export default function OralPresentationPage() {
                           <td className="px-4 py-3.5">
                             {p.submission.track ? <Badge tone="info">{p.submission.track.name}</Badge> : <span className="text-ink-muted">—</span>}
                           </td>
-                          <td className="px-4 py-3.5 text-center"><Badge>{p.evaluations.length} คน</Badge></td>
+                          <td className="px-4 py-3.5 text-center"><Badge>{p.evaluations.length}</Badge></td>
                           <td className="px-4 py-3.5 text-center">
                             {avg ? (
                               <span className={`font-bold ${Number(avg) >= 7 ? "text-green-600" : Number(avg) >= 5 ? "text-yellow-600" : "text-red-600"}`}>{avg}</span>

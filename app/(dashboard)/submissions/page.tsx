@@ -8,7 +8,8 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TrackFilter } from "@/components/track-filter";
-import { SUBMISSION_STATUS_LABELS, SUBMISSION_STATUS_COLORS } from "@/lib/labels";
+import { getSubmissionStatusLabels, SUBMISSION_STATUS_COLORS } from "@/lib/labels";
+import { useI18n } from "@/lib/i18n";
 import { formatDate, truncate } from "@/lib/utils";
 import {
   Plus, FileText, Download, ChevronUp, ChevronDown, ArrowUpDown,
@@ -34,6 +35,8 @@ interface SubmissionData {
 type SortKey = "title" | "author" | "track" | "status" | "createdAt" | "reviews";
 
 export default function SubmissionsPage() {
+  const { t, locale } = useI18n();
+  const statusLabels = getSubmissionStatusLabels(t);
   const { data: session, isPending: sessionPending } = useSession();
   const role = (session?.user as Record<string, unknown>)?.role as string || "AUTHOR";
   const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(role);
@@ -84,7 +87,7 @@ export default function SubmissionsPage() {
           s.author.name.toLowerCase().includes(q) ||
           s.author.email.toLowerCase().includes(q) ||
           s.track?.name.toLowerCase().includes(q) ||
-          (SUBMISSION_STATUS_LABELS[s.status] || s.status).toLowerCase().includes(q);
+          (statusLabels[s.status] || s.status).toLowerCase().includes(q);
       }
       return true;
     })
@@ -118,18 +121,18 @@ export default function SubmissionsPage() {
     return (
       <div className="space-y-5">
         <SectionTitle
-          title="My Submissions"
+          title={t("submissions.mySubmissions")}
           subtitle={`${filtered.length} submissions`}
-          action={<Link href="/submissions/new"><Button size="sm"><Plus className="h-3.5 w-3.5" />New Submission</Button></Link>}
+          action={<Link href="/submissions/new"><Button size="sm"><Plus className="h-3.5 w-3.5" />{t("submissions.newSubmission")}</Button></Link>}
         />
         <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
         {filtered.length === 0 ? (
-          <EmptyState icon={<FileText className="h-12 w-12" />} title="No submissions yet" body="Start by submitting your first paper"
-            action={<Link href="/submissions/new"><Button>New Submission</Button></Link>} />
+          <EmptyState icon={<FileText className="h-12 w-12" />} title={t("submissions.noSubmissions")} body={t("submissions.startSubmitting")}
+            action={<Link href="/submissions/new"><Button>{t("submissions.newSubmission")}</Button></Link>} />
         ) : (
           <div className="space-y-4">
             {filtered.map((sub) => {
-              const action = getNextAction(sub.status, true);
+              const action = getNextAction(sub.status, true, t);
               return (
                 <Link key={sub.id} href={`/submissions/${sub.id}`}>
                   <Card hover className="mb-0">
@@ -140,12 +143,12 @@ export default function SubmissionsPage() {
                           {sub.abstract && <p className="text-xs text-ink-muted mt-1 line-clamp-1">{truncate(sub.abstract, 120)}</p>}
                           <div className="flex items-center gap-2.5 mt-2 text-xs text-ink-muted flex-wrap">
                             {sub.track && <Badge tone="info">{sub.track.name}</Badge>}
-                            <span>{formatDate(sub.createdAt)}</span>
+                            <span>{formatDate(sub.createdAt, locale)}</span>
                             {action && <Badge tone={action.urgency === "urgent" ? "danger" : action.urgency === "warning" ? "warning" : "neutral"}>{action.label}</Badge>}
                           </div>
                           <div className="mt-2.5"><SubmissionPipeline status={sub.status} compact /></div>
                         </div>
-                        <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"}>{SUBMISSION_STATUS_LABELS[sub.status] || sub.status}</Badge>
+                        <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"}>{statusLabels[sub.status] || sub.status}</Badge>
                       </div>
                     </CardBody>
                   </Card>
@@ -163,13 +166,13 @@ export default function SubmissionsPage() {
   // ══════════════════════════════════════════════════════════════
 
   const statusTabs = [
-    { key: "ALL", label: "All", count: totalFiltered },
+    { key: "ALL", label: t("common.all"), count: totalFiltered },
     ...Object.entries(statusCounts)
       .sort(([a], [b]) => {
         const order = ["DRAFT", "ADVISOR_APPROVAL_PENDING", "SUBMITTED", "UNDER_REVIEW", "REVISION_REQUIRED", "REBUTTAL", "ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED", "REJECTED", "DESK_REJECTED", "WITHDRAWN"];
         return order.indexOf(a) - order.indexOf(b);
       })
-      .map(([key, count]) => ({ key, label: SUBMISSION_STATUS_LABELS[key] || key, count })),
+      .map(([key, count]) => ({ key, label: statusLabels[key] || key, count })),
   ];
 
   // Key summary numbers
@@ -181,22 +184,22 @@ export default function SubmissionsPage() {
   return (
     <div className="space-y-6">
       <SectionTitle
-        title="Submissions"
-        subtitle={`${totalFiltered} total submissions`}
+        title={t("submissions.submissions")}
+        subtitle={`${totalFiltered} ${t("submissions.submissions").toLowerCase()}`}
         action={
           <a href="/api/exports/proceedings?format=csv" download>
-            <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />Export CSV</Button>
+            <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />{t("common.exportCSV")}</Button>
           </a>
         }
       />
 
       {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <SummaryCard label="Total" value={totalFiltered} icon={<FileText className="h-5 w-5" />} color="blue" />
-        <SummaryCard label="In Review" value={submitted} icon={<Eye className="h-5 w-5" />} color="indigo" />
-        <SummaryCard label="Accepted" value={accepted} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
-        <SummaryCard label="Rejected" value={rejected} icon={<XCircle className="h-5 w-5" />} color="red" />
-        <SummaryCard label="Pending" value={pending} icon={<Clock className="h-5 w-5" />} color="gray" />
+        <SummaryCard label={t("common.total")} value={totalFiltered} icon={<FileText className="h-5 w-5" />} color="blue" />
+        <SummaryCard label={t("submissions.inReview")} value={submitted} icon={<Eye className="h-5 w-5" />} color="indigo" />
+        <SummaryCard label={t("dashboard.accepted")} value={accepted} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
+        <SummaryCard label={t("submissions.rejected")} value={rejected} icon={<XCircle className="h-5 w-5" />} color="red" />
+        <SummaryCard label={t("dashboard.pending")} value={pending} icon={<Clock className="h-5 w-5" />} color="gray" />
       </div>
 
       <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
@@ -207,7 +210,7 @@ export default function SubmissionsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted pointer-events-none" />
           <input
             type="text"
-            placeholder="Search title, author, track..."
+            placeholder={t("submissions.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-8 py-2 text-sm border border-border/60 rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all"
@@ -242,7 +245,7 @@ export default function SubmissionsPage() {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<FileText className="h-12 w-12" />}
-          title={searchQuery ? `No results for "${searchQuery}"` : statusFilter !== "ALL" ? `No ${SUBMISSION_STATUS_LABELS[statusFilter] || statusFilter} submissions` : "No submissions yet"}
+          title={searchQuery ? `No results for "${searchQuery}"` : statusFilter !== "ALL" ? `No ${statusLabels[statusFilter] || statusFilter} submissions` : t("submissions.noSubmissions")}
         />
       ) : (
         <Card>
@@ -252,12 +255,12 @@ export default function SubmissionsPage() {
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-border/60">
                     <th className="w-12 px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">#</th>
-                    <SortTh label="Title" sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%]" />
-                    <SortTh label="Author" sortKey_="author" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortTh label="Track" sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortTh label="Reviews" sortKey_="reviews" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
-                    <SortTh label="Submitted" sortKey_="createdAt" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortTh label="Status" sortKey_="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                    <SortTh label={t("submissions.title")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%]" />
+                    <SortTh label={t("submissions.author")} sortKey_="author" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label={t("submissions.track")} sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label={t("submissions.reviewsCol")} sortKey_="reviews" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                    <SortTh label={t("submissions.submitted")} sortKey_="createdAt" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label={t("submissions.status")} sortKey_="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                     <th className="w-10" />
                   </tr>
                 </thead>
@@ -301,10 +304,10 @@ export default function SubmissionsPage() {
                             <span className="text-ink-muted text-xs">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-ink-muted whitespace-nowrap">{formatDate(sub.createdAt)}</td>
+                        <td className="px-4 py-3.5 text-xs text-ink-muted whitespace-nowrap">{formatDate(sub.createdAt, locale)}</td>
                         <td className="px-4 py-3.5 text-center">
                           <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"} dot>
-                            {SUBMISSION_STATUS_LABELS[sub.status] || sub.status}
+                            {statusLabels[sub.status] || sub.status}
                           </Badge>
                         </td>
                         <td className="pr-4 py-3.5">

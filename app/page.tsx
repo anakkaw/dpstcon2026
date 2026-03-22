@@ -1,9 +1,14 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Footer } from "@/components/ui/footer";
+import { useI18n } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export default function HomePage() {
+  const { t } = useI18n();
   return (
     <div className="min-h-screen bg-landing-hero text-white overflow-hidden">
       {/* ── Decorative background elements ── */}
@@ -35,13 +40,16 @@ export default function HomePage() {
             DPSTCon 2026
           </span>
         </div>
-        <Link
-          href="/login"
-          className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 text-sm font-medium text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 transition-all duration-300"
-        >
-          เข้าสู่ระบบ
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+        <div className="flex items-center gap-3">
+          <LanguageToggle />
+          <Link
+            href="/login"
+            className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 text-sm font-medium text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 transition-all duration-300"
+          >
+            {t("common.signIn")}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </nav>
 
       {/* ── Hero Section ── */}
@@ -69,12 +77,10 @@ export default function HomePage() {
             </h1>
 
             <p className="text-lg sm:text-xl text-slate-300 max-w-lg mx-auto lg:mx-0 mb-3 leading-relaxed">
-              ระบบบริหารการพิจารณาบทความสำหรับ
-              <br className="hidden sm:block" />
-              งานประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท.
+              {t("landing.subtitle")}
             </p>
             <p className="text-sm text-slate-500 mb-8 lg:mb-10">
-              DPST Conference on Science and Technology
+              {t("landing.title")}
             </p>
 
             {/* CTA buttons */}
@@ -83,7 +89,7 @@ export default function HomePage() {
                 href="/login"
                 className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-brand-500 to-brand-600 text-white font-bold text-base hover:from-brand-600 hover:to-brand-700 transition-all duration-300 shadow-xl shadow-brand-500/30 hover:shadow-2xl hover:shadow-brand-500/40 hover:-translate-y-1 active:translate-y-0"
               >
-                เข้าสู่ระบบ
+                {t("common.signIn")}
                 <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>

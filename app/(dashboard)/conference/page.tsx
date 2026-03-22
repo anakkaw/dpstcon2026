@@ -12,7 +12,8 @@ import { Alert } from "@/components/ui/alert";
 import { Collapsible } from "@/components/ui/collapsible";
 import { Divider } from "@/components/ui/divider";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PHASE_TYPE_LABELS } from "@/lib/labels";
+import { getPhaseTypeLabels } from "@/lib/labels";
+import { useI18n } from "@/lib/i18n";
 import { formatDate } from "@/lib/utils";
 import { Plus, Settings } from "lucide-react";
 
@@ -30,6 +31,8 @@ interface EventData {
 }
 
 export default function ConferencePage() {
+  const { t, locale } = useI18n();
+  const phaseLabels = getPhaseTypeLabels(t);
   const [event, setEvent] = useState<EventData | null>(null);
   const [loading, setLoading] = useState(true);
   const [trackName, setTrackName] = useState("");
@@ -59,7 +62,7 @@ export default function ConferencePage() {
         setEvent({ ...event, tracks: [...event.tracks, data.track] });
         setTrackName("");
         setTrackDesc("");
-        setMessage("เพิ่ม track สำเร็จ");
+        setMessage(t("conference.trackAdded"));
       }
     } catch {}
     setSaving(false);
@@ -76,11 +79,11 @@ export default function ConferencePage() {
   if (!event) {
     return (
       <div className="space-y-6">
-        <SectionTitle title="ตั้งค่า Conference" />
+        <SectionTitle title={t("conference.settings")} />
         <EmptyState
           icon={<Settings className="h-12 w-12" />}
-          title="ยังไม่มี Conference ที่ active"
-          body="สร้าง Conference ใหม่เพื่อเริ่มต้น"
+          title={t("conference.noActive")}
+          body={t("conference.createNew")}
         />
       </div>
     );
@@ -89,7 +92,7 @@ export default function ConferencePage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <SectionTitle
-        title="ตั้งค่า Conference"
+        title={t("conference.settings")}
         subtitle={`${event.name} ${event.year}`}
       />
 
@@ -98,38 +101,38 @@ export default function ConferencePage() {
       {/* Conference Info */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-semibold text-ink">ข้อมูลทั่วไป</h3>
+          <h3 className="text-sm font-semibold text-ink">{t("conference.generalInfo")}</h3>
         </CardHeader>
         <CardBody className="space-y-3">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">ชื่อ</p>
+              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.name")}</p>
               <p className="text-sm font-medium text-ink">{event.name}</p>
             </div>
             <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">ปี</p>
+              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.year")}</p>
               <p className="text-sm font-medium text-ink">{event.year}</p>
             </div>
           </div>
           {event.description && (
             <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">คำอธิบาย</p>
+              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.description")}</p>
               <p className="text-sm text-ink">{event.description}</p>
             </div>
           )}
           <Divider />
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">กำหนดส่งบทความ</p>
-              <p className="text-sm text-ink">{formatDate(event.submissionDeadline)}</p>
+              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("dashboard.submissionDeadline")}</p>
+              <p className="text-sm text-ink">{formatDate(event.submissionDeadline, locale)}</p>
             </div>
             <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">กำหนดส่งรีวิว</p>
-              <p className="text-sm text-ink">{formatDate(event.reviewDeadline)}</p>
+              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("dashboard.reviewDeadline")}</p>
+              <p className="text-sm text-ink">{formatDate(event.reviewDeadline, locale)}</p>
             </div>
             <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">กำหนดส่งฉบับสมบูรณ์</p>
-              <p className="text-sm text-ink">{formatDate(event.cameraReadyDeadline)}</p>
+              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("dashboard.cameraReadyDeadline")}</p>
+              <p className="text-sm text-ink">{formatDate(event.cameraReadyDeadline, locale)}</p>
             </div>
           </div>
         </CardBody>
@@ -139,13 +142,13 @@ export default function ConferencePage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink">สาขา (Tracks)</h3>
-            <Badge>{event.tracks.length} สาขา</Badge>
+            <h3 className="text-sm font-semibold text-ink">{t("conference.tracks")}</h3>
+            <Badge>{t("conference.tracksCount", { n: event.tracks.length })}</Badge>
           </div>
         </CardHeader>
         <CardBody className="space-y-3">
           {event.tracks.length === 0 ? (
-            <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">ยังไม่มี track</p>
+            <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.noTracks")}</p>
           ) : (
             <div className="space-y-2">
               {event.tracks.map((track) => (
@@ -164,29 +167,29 @@ export default function ConferencePage() {
             </div>
           )}
 
-          <Divider label="เพิ่ม Track ใหม่" />
+          <Divider label={t("conference.addTrack")} />
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="ชื่อ Track" htmlFor="trackName">
+            <Field label={t("conference.trackName")} htmlFor="trackName">
               <Input
                 id="trackName"
                 value={trackName}
                 onChange={(e) => setTrackName(e.target.value)}
-                placeholder="เช่น Computer Science"
+                placeholder={t("conference.trackNamePlaceholder")}
               />
             </Field>
-            <Field label="คำอธิบาย" htmlFor="trackDesc">
+            <Field label={t("conference.trackDesc")} htmlFor="trackDesc">
               <Input
                 id="trackDesc"
                 value={trackDesc}
                 onChange={(e) => setTrackDesc(e.target.value)}
-                placeholder="คำอธิบายสาขา"
+                placeholder={t("conference.trackDescPlaceholder")}
               />
             </Field>
           </div>
           <Button size="sm" onClick={addTrack} loading={saving} disabled={!trackName.trim()}>
             <Plus className="h-4 w-4" />
-            เพิ่ม Track
+            {t("conference.addTrackBtn")}
           </Button>
         </CardBody>
       </Card>
@@ -194,11 +197,11 @@ export default function ConferencePage() {
       {/* Phases */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-semibold text-ink">ระยะเวลา (Phases)</h3>
+          <h3 className="text-sm font-semibold text-ink">{t("conference.phases")}</h3>
         </CardHeader>
         <CardBody>
           {event.phases.length === 0 ? (
-            <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">ยังไม่มี phase</p>
+            <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.noPhases")}</p>
           ) : (
             <div className="space-y-2">
               {event.phases.map((phase) => (
@@ -208,14 +211,14 @@ export default function ConferencePage() {
                 >
                   <div>
                     <p className="text-sm font-medium text-ink">
-                      {PHASE_TYPE_LABELS[phase.type] || phase.name}
+                      {phaseLabels[phase.type] || phase.name}
                     </p>
                     <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">
-                      {formatDate(phase.startDate)} — {formatDate(phase.endDate)}
+                      {formatDate(phase.startDate, locale)} — {formatDate(phase.endDate, locale)}
                     </p>
                   </div>
                   <Badge tone={phase.isActive ? "success" : "neutral"} dot={phase.isActive}>
-                    {phase.isActive ? "กำลังดำเนินการ" : "ยังไม่เปิด"}
+                    {phase.isActive ? t("conference.inProgress") : t("conference.notOpen")}
                   </Badge>
                 </div>
               ))}

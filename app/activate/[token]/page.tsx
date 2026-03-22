@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Alert } from "@/components/ui/alert";
+import { useI18n } from "@/lib/i18n";
 
 export default function ActivatePage({ params }: { params: Promise<{ token: string }> }) {
+  const { t } = useI18n();
   const { token } = use(params);
   const router = useRouter();
 
@@ -29,12 +31,12 @@ export default function ActivatePage({ params }: { params: Promise<{ token: stri
           setEmail(data.email);
           setStatus("valid");
         } else {
-          setErrorMsg(data.error || "ลิงก์ไม่ถูกต้อง");
+          setErrorMsg(data.error || t("activate.invalidLink"));
           setStatus("error");
         }
       })
       .catch(() => {
-        setErrorMsg("เกิดข้อผิดพลาดในการตรวจสอบลิงก์");
+        setErrorMsg(t("activate.linkCheckError"));
         setStatus("error");
       });
   }, [token]);
@@ -44,11 +46,11 @@ export default function ActivatePage({ params }: { params: Promise<{ token: stri
     setErrorMsg("");
 
     if (password.length < 8) {
-      setErrorMsg("รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร");
+      setErrorMsg(t("activate.passwordMinLength"));
       return;
     }
     if (password !== confirmPassword) {
-      setErrorMsg("รหัสผ่านไม่ตรงกัน");
+      setErrorMsg(t("activate.passwordMismatch"));
       return;
     }
 
@@ -64,10 +66,10 @@ export default function ActivatePage({ params }: { params: Promise<{ token: stri
         setStatus("success");
         setTimeout(() => router.push("/login"), 2000);
       } else {
-        setErrorMsg(data.error || "เกิดข้อผิดพลาด");
+        setErrorMsg(data.error || t("login.genericError"));
       }
     } catch {
-      setErrorMsg("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+      setErrorMsg(t("activate.connectionError"));
     }
     setSubmitting(false);
   }
@@ -81,14 +83,14 @@ export default function ActivatePage({ params }: { params: Promise<{ token: stri
             <span className="text-white font-bold text-2xl">D</span>
           </div>
           <h1 className="text-2xl font-bold text-ink">DPSTCon2026</h1>
-          <p className="text-sm text-ink-muted mt-1">เปิดใช้งานบัญชี</p>
+          <p className="text-sm text-ink-muted mt-1">{t("activate.title")}</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-border shadow-lg p-6">
           {status === "loading" && (
             <div className="flex items-center justify-center py-12">
               <div className="h-6 w-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-              <span className="ml-3 text-ink-muted">กำลังตรวจสอบลิงก์...</span>
+              <span className="ml-3 text-ink-muted">{t("activate.checking")}</span>
             </div>
           )}
 
@@ -96,52 +98,52 @@ export default function ActivatePage({ params }: { params: Promise<{ token: stri
             <div className="text-center py-8">
               <Alert tone="danger">{errorMsg}</Alert>
               <p className="mt-4 text-sm text-ink-muted">
-                กรุณาติดต่อ Admin เพื่อขอลิงก์เชิญใหม่
+                {t("activate.contactAdmin")}
               </p>
               <Button variant="outline" size="sm" className="mt-4" onClick={() => router.push("/login")}>
-                กลับหน้าเข้าสู่ระบบ
+                {t("activate.backToLogin")}
               </Button>
             </div>
           )}
 
           {status === "success" && (
             <div className="text-center py-8">
-              <Alert tone="success">เปิดใช้งานบัญชีสำเร็จ! กำลังไปหน้าเข้าสู่ระบบ...</Alert>
+              <Alert tone="success">{t("activate.success")}</Alert>
             </div>
           )}
 
           {status === "valid" && (
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="bg-surface-alt rounded-xl p-4 text-sm">
-                <p className="text-ink-muted">ชื่อ</p>
+                <p className="text-ink-muted">{t("activate.name")}</p>
                 <p className="font-medium text-ink">{userName}</p>
-                <p className="text-ink-muted mt-2">อีเมล</p>
+                <p className="text-ink-muted mt-2">{t("activate.email")}</p>
                 <p className="font-medium text-ink">{email}</p>
               </div>
 
               {errorMsg && <Alert tone="danger">{errorMsg}</Alert>}
 
-              <Field label="ตั้งรหัสผ่าน" required hint="อย่างน้อย 8 ตัวอักษร">
+              <Field label={t("activate.setPassword")} required hint={t("activate.minChars")}>
                 <Input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="กรอกรหัสผ่าน"
+                  placeholder={t("activate.enterPassword")}
                   autoFocus
                 />
               </Field>
 
-              <Field label="ยืนยันรหัสผ่าน" required>
+              <Field label={t("activate.confirmPassword")} required>
                 <Input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="กรอกรหัสผ่านอีกครั้ง"
+                  placeholder={t("activate.reenterPassword")}
                 />
               </Field>
 
               <Button type="submit" className="w-full" loading={submitting} disabled={!password || !confirmPassword}>
-                เปิดใช้งานบัญชี
+                {t("activate.activateBtn")}
               </Button>
             </form>
           )}

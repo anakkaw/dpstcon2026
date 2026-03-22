@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 interface Notification {
   id: string;
@@ -31,6 +32,7 @@ function isSafeUrl(url: string): boolean {
 
 export function NotificationBell() {
   const router = useRouter();
+  const { t } = useI18n();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -119,7 +121,7 @@ export function NotificationBell() {
       {/* H14: Accessible button with aria-label and aria-expanded */}
       <button
         onClick={() => setOpen(!open)}
-        aria-label={`การแจ้งเตือน${unreadCount > 0 ? ` (${unreadCount} รายการยังไม่ได้อ่าน)` : ""}`}
+        aria-label={`${t("notifications.title")}${unreadCount > 0 ? ` (${unreadCount})` : ""}`}
         aria-expanded={open}
         aria-haspopup="true"
         className={cn(
@@ -139,21 +141,21 @@ export function NotificationBell() {
       {open && (
         <div
           role="menu"
-          aria-label="รายการแจ้งเตือน"
+          aria-label={t("notifications.list")}
           className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl border border-gray-200 shadow-xl z-50 overflow-hidden animate-slide-down"
         >
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-gray-50">
-            <h3 className="text-sm font-bold text-ink">การแจ้งเตือน</h3>
+            <h3 className="text-sm font-bold text-ink">{t("notifications.title")}</h3>
             {unreadCount > 0 && (
               <button onClick={markAllRead} className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-                อ่านทั้งหมด
+                {t("notifications.markAllRead")}
               </button>
             )}
           </div>
 
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-gray-400">ไม่มีการแจ้งเตือน</p>
+              <p className="px-5 py-10 text-center text-sm text-gray-400">{t("notifications.empty")}</p>
             ) : (
               notifications.slice(0, 20).map((n) => (
                 <button

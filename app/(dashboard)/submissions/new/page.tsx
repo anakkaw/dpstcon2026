@@ -12,6 +12,7 @@ import { Card, CardBody, CardHeader, CardFooter } from "@/components/ui/card";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Alert } from "@/components/ui/alert";
+import { useI18n } from "@/lib/i18n";
 
 interface Track {
   id: string;
@@ -20,6 +21,7 @@ interface Track {
 }
 
 export default function NewSubmissionPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -42,17 +44,17 @@ export default function NewSubmissionPage() {
     const advisorEmail = formData.get("advisorEmail") as string;
 
     if (!title?.trim()) {
-      setError("กรุณากรอกชื่อบทความ");
+      setError(t("submissions.new.requiredTitle"));
       setLoading(false);
       return;
     }
     if (!trackId) {
-      setError("กรุณาเลือกสาขาวิชา");
+      setError(t("submissions.new.requiredTrack"));
       setLoading(false);
       return;
     }
     if (!advisorName?.trim() || !advisorEmail?.trim()) {
-      setError("กรุณาระบุชื่อและอีเมล Advisor");
+      setError(t("submissions.new.requiredAdvisor"));
       setLoading(false);
       return;
     }
@@ -63,7 +65,7 @@ export default function NewSubmissionPage() {
         router.push(`/submissions/${result.id}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      setError(err instanceof Error ? err.message : t("login.genericError"));
     } finally {
       setLoading(false);
     }
@@ -73,14 +75,14 @@ export default function NewSubmissionPage() {
     <div className="space-y-6 max-w-3xl">
       <Breadcrumb
         items={[
-          { label: "บทความ", href: "/submissions" },
-          { label: "ส่งบทความใหม่" },
+          { label: t("nav.papers"), href: "/submissions" },
+          { label: t("submissions.new.title") },
         ]}
       />
 
       <SectionTitle
-        title="ส่งบทความใหม่"
-        subtitle="กรอกข้อมูลบทความวิจัยของคุณ"
+        title={t("submissions.new.title")}
+        subtitle={t("submissions.new.subtitle")}
       />
 
       {error && <Alert tone="danger">{error}</Alert>}
@@ -88,26 +90,26 @@ export default function NewSubmissionPage() {
       <form action={handleSubmit}>
         <Card className="mb-4">
           <CardHeader>
-            <h3 className="text-sm font-semibold text-ink">ข้อมูลบทความ</h3>
+            <h3 className="text-sm font-semibold text-ink">{t("submissions.new.title")}</h3>
           </CardHeader>
           <CardBody className="space-y-4">
-            <Field label="ชื่อบทความ" htmlFor="title" required>
+            <Field label={t("submissions.new.paperTitle")} htmlFor="title" required>
               <Input
                 id="title"
                 name="title"
-                placeholder="กรอกชื่อบทความวิจัย"
+                placeholder={t("submissions.new.paperTitlePlaceholder")}
                 required
               />
             </Field>
 
             <Field
-              label="สาขาวิชา"
+              label={t("submissions.new.track")}
               htmlFor="trackId"
               required
-              hint="เลือกสาขาวิชาที่ตรงกับเนื้อหาบทความ"
+              hint={t("submissions.new.trackDesc")}
             >
               <Select id="trackId" name="trackId" required>
-                <option value="">— เลือกสาขาวิชา —</option>
+                <option value="">{t("submissions.new.trackPlaceholder")}</option>
                 {tracks.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -118,29 +120,29 @@ export default function NewSubmissionPage() {
             </Field>
 
             <Field
-              label="บทคัดย่อ (Abstract)"
+              label={t("submissions.new.abstract")}
               htmlFor="abstract"
               required
-              hint="อธิบายเนื้อหาโดยย่อ"
+              hint={t("submissions.new.abstractDesc")}
             >
               <Textarea
                 id="abstract"
                 name="abstract"
-                placeholder="กรอกบทคัดย่อ..."
+                placeholder={t("submissions.new.abstractPlaceholder")}
                 rows={6}
                 required
               />
             </Field>
 
             <Field
-              label="คำสำคัญ (Keywords)"
+              label={t("submissions.new.keywords")}
               htmlFor="keywords"
-              hint="คั่นด้วยเครื่องหมายจุลภาค"
+              hint={t("submissions.new.keywordsDesc")}
             >
               <Input
                 id="keywords"
                 name="keywords"
-                placeholder="เช่น machine learning, deep learning, NLP"
+                placeholder={t("submissions.new.keywordsPlaceholder")}
               />
             </Field>
           </CardBody>
@@ -148,32 +150,32 @@ export default function NewSubmissionPage() {
 
         <Card className="mb-4">
           <CardHeader>
-            <h3 className="text-sm font-semibold text-ink">Advisor</h3>
+            <h3 className="text-sm font-semibold text-ink">{t("submissions.new.advisor")}</h3>
             <p className="text-xs text-ink-muted mt-0.5">
-              ระบบจะส่งอีเมลแจ้ง Advisor เพื่อรับรองบทความก่อนเข้าสู่กระบวนการพิจารณา
+              {t("submissions.new.advisorDesc")}
             </p>
           </CardHeader>
           <CardBody>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="ชื่อ Advisor" htmlFor="advisorName" required>
+              <Field label={t("submissions.new.advisorName")} htmlFor="advisorName" required>
                 <Input
                   id="advisorName"
                   name="advisorName"
-                  placeholder="ชื่อ-นามสกุล"
+                  placeholder={t("submissions.new.advisorNamePlaceholder")}
                   required
                 />
               </Field>
               <Field
-                label="อีเมล Advisor"
+                label={t("submissions.new.advisorEmail")}
                 htmlFor="advisorEmail"
                 required
-                hint="ใช้สำหรับส่งอีเมลขอรับรอง"
+                hint={t("submissions.new.advisorEmailDesc")}
               >
                 <Input
                   id="advisorEmail"
                   name="advisorEmail"
                   type="email"
-                  placeholder="advisor@university.ac.th"
+                  placeholder={t("submissions.new.advisorEmailPlaceholder")}
                   required
                 />
               </Field>
@@ -187,10 +189,10 @@ export default function NewSubmissionPage() {
             variant="secondary"
             onClick={() => router.back()}
           >
-            ยกเลิก
+            {t("common.cancel")}
           </Button>
           <Button type="submit" loading={loading}>
-            บันทึกแบบร่าง
+            {t("submissions.new.saveDraft")}
           </Button>
         </div>
       </form>

@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { getPipelineSteps, type PipelineStepState } from "@/lib/author-utils";
+import { useI18n } from "@/lib/i18n";
 import { Check } from "lucide-react";
 
 interface SubmissionPipelineProps {
@@ -28,7 +29,8 @@ const stateStyles: Record<PipelineStepState, { dot: string; line: string; text: 
 };
 
 export function SubmissionPipeline({ status, compact = false }: SubmissionPipelineProps) {
-  const steps = getPipelineSteps(status);
+  const { t } = useI18n();
+  const steps = getPipelineSteps(status, t);
 
   if (compact) {
     return (

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Prompt, Sarabun } from "next/font/google";
+import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,7 +36,9 @@ export default function RootLayout({
   return (
     <html lang="th" className={`${geistSans.variable} ${prompt.variable} ${sarabun.variable} h-full`}>
       <body className="min-h-full flex flex-col antialiased">
+        <I18nProvider>
         {children}
+        </I18nProvider>
         <script
           dangerouslySetInnerHTML={{
             __html: `

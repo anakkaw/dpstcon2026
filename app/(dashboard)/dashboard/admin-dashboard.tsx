@@ -4,22 +4,15 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  SUBMISSION_STATUS_LABELS,
+  getSubmissionStatusLabels,
   SUBMISSION_STATUS_COLORS,
 } from "@/lib/labels";
+import { useI18n } from "@/lib/i18n";
 import {
   FileText, ClipboardCheck, Users, BarChart3,
   UserPlus, Settings, Download,
 } from "lucide-react";
 import Link from "next/link";
-
-/* Full static class strings — Tailwind v4 scanner finds these */
-const quickActions = [
-  { href: "/admin/users", icon: <UserPlus className="h-5 w-5" />, label: "จัดการผู้ใช้", sub: "เพิ่ม/แก้ไข/import", cardBg: "bg-action-blue", iconBg: "bg-blue-500", iconShadow: "shadow-blue-glow" },
-  { href: "/submissions", icon: <FileText className="h-5 w-5" />, label: "จัดการบทความ", sub: "ดู/มอบหมาย/ตัดสิน", cardBg: "bg-action-orange", iconBg: "bg-brand-500", iconShadow: "shadow-brand-glow" },
-  { href: "/deadlines", icon: <Settings className="h-5 w-5" />, label: "กำหนดการ", sub: "ตั้งค่าวันสำคัญ", cardBg: "bg-action-green", iconBg: "bg-emerald-500", iconShadow: "shadow-emerald-glow" },
-  { href: "/api/exports/proceedings?format=csv", icon: <Download className="h-5 w-5" />, label: "Export ข้อมูล", sub: "ดาวน์โหลด CSV", cardBg: "bg-action-violet", iconBg: "bg-violet-500", iconShadow: "shadow-violet-glow", isExternal: true },
-];
 
 const barClasses = [
   "bg-bar-brand",
@@ -31,6 +24,17 @@ const barClasses = [
 ];
 
 export default function AdminDashboard({ stats }: { stats: Record<string, unknown> }) {
+  const { t } = useI18n();
+  const statusLabels = getSubmissionStatusLabels(t);
+
+  /* Full static class strings — Tailwind v4 scanner finds these */
+  const quickActions = [
+    { href: "/admin/users", icon: <UserPlus className="h-5 w-5" />, label: t("dashboard.manageUsers"), sub: t("dashboard.manageUsersDesc"), cardBg: "bg-action-blue", iconBg: "bg-blue-500", iconShadow: "shadow-blue-glow" },
+    { href: "/submissions", icon: <FileText className="h-5 w-5" />, label: t("dashboard.managePapers"), sub: t("dashboard.managePapersDesc"), cardBg: "bg-action-orange", iconBg: "bg-brand-500", iconShadow: "shadow-brand-glow" },
+    { href: "/deadlines", icon: <Settings className="h-5 w-5" />, label: t("dashboard.scheduleSetting"), sub: t("dashboard.scheduleSettingDesc"), cardBg: "bg-action-green", iconBg: "bg-emerald-500", iconShadow: "shadow-emerald-glow" },
+    { href: "/api/exports/proceedings?format=csv", icon: <Download className="h-5 w-5" />, label: t("dashboard.exportData"), sub: t("dashboard.exportDataDesc"), cardBg: "bg-action-violet", iconBg: "bg-violet-500", iconShadow: "shadow-violet-glow", isExternal: true },
+  ];
+
   const byStatus = (stats.submissionsByStatus || {}) as Record<string, number>;
   const byTrack = (stats.submissionsByTrack || []) as { name: string; count: number }[];
   const totalSubs = (stats.totalSubmissions as number) || 0;
@@ -38,15 +42,15 @@ export default function AdminDashboard({ stats }: { stats: Record<string, unknow
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard label="บทความทั้งหมด" value={(stats.totalSubmissions as number) || 0} icon={<FileText className="h-5 w-5" />} accent="brand" />
-        <StatCard label="Reviewers" value={(stats.totalReviewers as number) || 0} icon={<Users className="h-5 w-5" />} accent="info" />
-        <StatCard label="รีวิวทั้งหมด" value={(stats.totalReviews as number) || 0} icon={<ClipboardCheck className="h-5 w-5" />} accent="warning" />
-        <StatCard label="ตอบรับ" value={byStatus.ACCEPTED || 0} icon={<BarChart3 className="h-5 w-5" />} accent="success" />
+        <StatCard label={t("dashboard.totalPapers")} value={(stats.totalSubmissions as number) || 0} icon={<FileText className="h-5 w-5" />} accent="brand" />
+        <StatCard label={t("dashboard.reviewers")} value={(stats.totalReviewers as number) || 0} icon={<Users className="h-5 w-5" />} accent="info" />
+        <StatCard label={t("dashboard.totalReviews")} value={(stats.totalReviews as number) || 0} icon={<ClipboardCheck className="h-5 w-5" />} accent="warning" />
+        <StatCard label={t("dashboard.accepted")} value={byStatus.ACCEPTED || 0} icon={<BarChart3 className="h-5 w-5" />} accent="success" />
       </div>
 
       {/* Quick Actions */}
       <div>
-        <h3 className="text-base font-semibold text-ink mb-4">การดำเนินการด่วน</h3>
+        <h3 className="text-base font-semibold text-ink mb-4">{t("dashboard.quickActions")}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {quickActions.map((item) => {
             const Wrapper = item.isExternal ? "a" : Link;
@@ -70,12 +74,12 @@ export default function AdminDashboard({ stats }: { stats: Record<string, unknow
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {Object.keys(byStatus).length > 0 && (
           <Card>
-            <CardHeader><h3 className="text-base font-semibold text-ink">สรุปตามสถานะ</h3></CardHeader>
+            <CardHeader><h3 className="text-base font-semibold text-ink">{t("dashboard.summaryByStatus")}</h3></CardHeader>
             <CardBody>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(byStatus).map(([status, count]) => (
                   <Badge key={status} tone={SUBMISSION_STATUS_COLORS[status] || "neutral"}>
-                    {SUBMISSION_STATUS_LABELS[status] || status}: {count}
+                    {statusLabels[status] || status}: {count}
                   </Badge>
                 ))}
               </div>
@@ -85,16 +89,16 @@ export default function AdminDashboard({ stats }: { stats: Record<string, unknow
 
         {byTrack.length > 0 && (
           <Card>
-            <CardHeader><h3 className="text-base font-semibold text-ink">สรุปตามสาขาวิชา</h3></CardHeader>
+            <CardHeader><h3 className="text-base font-semibold text-ink">{t("dashboard.summaryByTrack")}</h3></CardHeader>
             <CardBody>
               <div className="space-y-4">
-                {byTrack.map((t, i) => {
-                  const pct = Math.round((t.count / Math.max(totalSubs, 1)) * 100);
+                {byTrack.map((tr, i) => {
+                  const pct = Math.round((tr.count / Math.max(totalSubs, 1)) * 100);
                   return (
                     <div key={i}>
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-sm font-medium text-ink">{t.name}</span>
-                        <span className="text-sm font-bold text-ink">{t.count}</span>
+                        <span className="text-sm font-medium text-ink">{tr.name}</span>
+                        <span className="text-sm font-bold text-ink">{tr.count}</span>
                       </div>
                       <div className="w-full h-2.5 rounded-full bg-gray-100 overflow-hidden">
                         <div

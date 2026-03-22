@@ -10,7 +10,8 @@ import { Field } from "@/components/ui/field";
 import { SectionTitle } from "@/components/ui/section-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
-import { ROLE_LABELS } from "@/lib/labels";
+import { getRoleLabels } from "@/lib/labels";
+import { useI18n } from "@/lib/i18n";
 import { Users, UserPlus, Trash2, ShieldCheck, ClipboardCheck } from "lucide-react";
 
 interface TrackData {
@@ -39,6 +40,7 @@ interface AvailableUser {
 }
 
 export default function TrackTeamPage() {
+  const { t } = useI18n();
   const { data: session } = useSession();
   const role = (session?.user as Record<string, unknown>)?.role as string;
   const isChair = role === "PROGRAM_CHAIR";
@@ -112,24 +114,24 @@ export default function TrackTeamPage() {
         body: JSON.stringify({ userId: addUserId, role: addRole }),
       });
       if (res.ok) {
-        setMessage("เพิ่มสมาชิกสำเร็จ");
+        setMessage(t("trackTeam.memberAdded"));
         setAddUserId("");
         await loadTrackData(selectedTrack);
       } else {
         const data = await res.json();
-        setMessage(data.error || "เกิดข้อผิดพลาด");
+        setMessage(data.error || t("login.genericError"));
       }
     } catch {
-      setMessage("เกิดข้อผิดพลาด");
+      setMessage(t("login.genericError"));
     }
     setAdding(false);
   }
 
   async function handleRemove(memberId: string) {
-    if (!confirm("ยืนยันการลบสมาชิกออกจากสาขา?")) return;
+    if (!confirm(t("trackTeam.confirmRemove"))) return;
     const res = await fetch(`/api/track-members/${selectedTrack}/${memberId}`, { method: "DELETE" });
     if (res.ok) {
-      setMessage("ลบสมาชิกสำเร็จ");
+      setMessage(t("trackTeam.memberRemoved"));
       await loadTrackData(selectedTrack);
     }
   }
@@ -143,14 +145,14 @@ export default function TrackTeamPage() {
   }
 
   if (!isChair && !isAdmin) {
-    return <EmptyState icon={<Users className="h-12 w-12" />} title="ไม่มีสิทธิ์เข้าถึง" body="หน้านี้สำหรับประธานสาขาวิชาเท่านั้น" />;
+    return <EmptyState icon={<Users className="h-12 w-12" />} title={t("trackTeam.noAccess")} body={t("trackTeam.chairOnly")} />;
   }
 
   if (tracks.length === 0) {
     return (
       <div className="space-y-6">
-        <SectionTitle title="ทีมสาขาวิชา" subtitle="จัดการ Reviewer และ Committee ในสาขาวิชาของคุณ" />
-        <EmptyState icon={<Users className="h-12 w-12" />} title="ไม่มีสาขาวิชา" body="คุณยังไม่ได้รับมอบหมายเป็น Program Chair สาขาวิชาใดๆ" />
+        <SectionTitle title={t("trackTeam.title")} subtitle={t("trackTeam.subtitle")} />
+        <EmptyState icon={<Users className="h-12 w-12" />} title={t("trackTeam.noTracks")} body={t("trackTeam.notAssigned")} />
       </div>
     );
   }
@@ -162,15 +164,15 @@ export default function TrackTeamPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <SectionTitle
-        title="ทีมสาขาวิชา"
-        subtitle="จัดการ Reviewer และ Committee ในสาขาวิชาของคุณ"
+        title={t("trackTeam.title")}
+        subtitle={t("trackTeam.subtitle")}
       />
 
       {message && <Alert tone="info">{message}</Alert>}
 
       {/* Track selector */}
       {tracks.length > 1 && (
-        <Field label="เลือกสาขาวิชา">
+        <Field label={t("trackTeam.selectTrack")}>
           <Select value={selectedTrack} onChange={(e) => setSelectedTrack(e.target.value)}>
             {tracks.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
@@ -188,14 +190,14 @@ export default function TrackTeamPage() {
         <CardHeader>
           <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
             <UserPlus className="h-4 w-4" />
-            เพิ่มสมาชิก
+            {t("trackTeam.addMember")}
           </h3>
         </CardHeader>
         <CardBody>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
               <Select value={addUserId} onChange={(e) => setAddUserId(e.target.value)}>
-                <option value="">-- เลือกผู้ใช้ --</option>
+                <option value="">{t("trackTeam.selectUser")}</option>
                 {available.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name} ({u.email}){u.affiliation ? ` - ${u.affiliation}` : ""}
@@ -210,7 +212,7 @@ export default function TrackTeamPage() {
               </Select>
             </div>
             <Button onClick={handleAdd} loading={adding} disabled={!addUserId} size="sm" className="self-end">
-              เพิ่ม
+              {t("common.add")}
             </Button>
           </div>
         </CardBody>
@@ -221,12 +223,12 @@ export default function TrackTeamPage() {
         <CardHeader>
           <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
             <ClipboardCheck className="h-4 w-4" />
-            Reviewers ({reviewers.length})
+            {t("trackTeam.reviewers", { n: reviewers.length })}
           </h3>
         </CardHeader>
         <CardBody>
           {reviewers.length === 0 ? (
-            <p className="text-sm text-ink-muted">ยังไม่มี Reviewer ในสาขานี้</p>
+            <p className="text-sm text-ink-muted">{t("trackTeam.noReviewers")}</p>
           ) : (
             <div className="space-y-2">
               {reviewers.map((m) => (
@@ -256,12 +258,12 @@ export default function TrackTeamPage() {
         <CardHeader>
           <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
             <ShieldCheck className="h-4 w-4" />
-            Committee ({committees.length})
+            {t("trackTeam.committees", { n: committees.length })}
           </h3>
         </CardHeader>
         <CardBody>
           {committees.length === 0 ? (
-            <p className="text-sm text-ink-muted">ยังไม่มี Committee ในสาขานี้</p>
+            <p className="text-sm text-ink-muted">{t("trackTeam.noCommittees")}</p>
           ) : (
             <div className="space-y-2">
               {committees.map((m) => (

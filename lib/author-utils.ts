@@ -1,25 +1,34 @@
+import type { TranslationKey } from "@/lib/i18n";
+import thDict from "@/lib/i18n/translations/th";
+
+type TFn = (key: TranslationKey) => string;
+
+// Backward-compatible Thai fallback (will be removed after full migration)
+const _defaultT: TFn = (key) => thDict[key] || key;
+
 // ─── Pipeline Steps ─────────────────────────────────────
 
 export const PIPELINE_STEPS = [
-  { key: "draft", label: "แบบร่าง", statuses: ["DRAFT"] },
-  { key: "advisor", label: "รอ Advisor", statuses: ["ADVISOR_APPROVAL_PENDING"] },
-  { key: "submitted", label: "ส่งแล้ว", statuses: ["SUBMITTED"] },
-  { key: "review", label: "รีวิว", statuses: ["UNDER_REVIEW", "REBUTTAL"] },
-  { key: "decision", label: "ผลตัดสิน", statuses: ["ACCEPTED", "REJECTED", "DESK_REJECTED", "REVISION_REQUIRED"] },
-  { key: "final", label: "ฉบับสมบูรณ์", statuses: ["CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"] },
+  { key: "draft", labelKey: "pipeline.draft" as TranslationKey, statuses: ["DRAFT"] },
+  { key: "advisor", labelKey: "pipeline.advisor" as TranslationKey, statuses: ["ADVISOR_APPROVAL_PENDING"] },
+  { key: "submitted", labelKey: "pipeline.submitted" as TranslationKey, statuses: ["SUBMITTED"] },
+  { key: "review", labelKey: "pipeline.review" as TranslationKey, statuses: ["UNDER_REVIEW", "REBUTTAL"] },
+  { key: "decision", labelKey: "pipeline.decision" as TranslationKey, statuses: ["ACCEPTED", "REJECTED", "DESK_REJECTED", "REVISION_REQUIRED"] },
+  { key: "final", labelKey: "pipeline.final" as TranslationKey, statuses: ["CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"] },
 ] as const;
 
 export type PipelineStepState = "completed" | "current" | "future";
 
-export function getPipelineSteps(status: string): { key: string; label: string; state: PipelineStepState }[] {
+export function getPipelineSteps(status: string, t: TFn = _defaultT): { key: string; label: string; state: PipelineStepState }[] {
   let foundCurrent = false;
   return PIPELINE_STEPS.map((step) => {
-    if (foundCurrent) return { ...step, state: "future" as const };
+    const label = t(step.labelKey);
+    if (foundCurrent) return { key: step.key, label, state: "future" as const };
     if (step.statuses.includes(status as never)) {
       foundCurrent = true;
-      return { ...step, state: "current" as const };
+      return { key: step.key, label, state: "current" as const };
     }
-    return { ...step, state: "completed" as const };
+    return { key: step.key, label, state: "completed" as const };
   });
 }
 
@@ -36,18 +45,18 @@ export interface NextAction {
   urgency: "normal" | "warning" | "urgent";
 }
 
-export function getNextAction(status: string, hasFile: boolean): NextAction | null {
+export function getNextAction(status: string, hasFile: boolean, t: TFn = _defaultT): NextAction | null {
   switch (status) {
     case "DRAFT":
       return hasFile
-        ? { label: "ส่งบทความเพื่อขออนุมัติ", description: "บทความพร้อมส่งแล้ว กดปุ่มส่งบทความ", urgency: "normal" }
-        : { label: "อัปโหลดและส่งบทความ", description: "แนบไฟล์ต้นฉบับบทความก่อนส่ง", urgency: "normal" };
+        ? { label: t("action.submitForApproval"), description: t("action.submitForApprovalDesc"), urgency: "normal" }
+        : { label: t("action.uploadAndSubmit"), description: t("action.uploadAndSubmitDesc"), urgency: "normal" };
     case "REVISION_REQUIRED":
-      return { label: "แก้ไขและส่งบทความใหม่", description: "ตรวจสอบ feedback จาก reviewer และแก้ไขบทความ", urgency: "warning" };
+      return { label: t("action.reviseAndResubmit"), description: t("action.reviseAndResubmitDesc"), urgency: "warning" };
     case "REBUTTAL":
-      return { label: "เขียนคำชี้แจง", description: "ส่งคำชี้แจง (rebuttal) ตอบกลับ reviewer", urgency: "warning" };
+      return { label: t("action.writeRebuttal"), description: t("action.writeRebuttalDesc"), urgency: "warning" };
     case "CAMERA_READY_PENDING":
-      return { label: "อัปโหลดฉบับสมบูรณ์", description: "อัปโหลดไฟล์ Camera-Ready สำหรับตีพิมพ์", urgency: "urgent" };
+      return { label: t("action.uploadCameraReady"), description: t("action.uploadCameraReadyDesc"), urgency: "urgent" };
     default:
       return null;
   }

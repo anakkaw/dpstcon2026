@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ROLE_LABELS } from "@/lib/labels";
+import { getRoleLabels } from "@/lib/labels";
+import { useI18n } from "@/lib/i18n";
 import { formatDate } from "@/lib/utils";
 import {
   UserPlus, Upload, Search, Pencil, KeyRound, Trash2, X, Send, RefreshCw,
@@ -46,6 +47,8 @@ function getInviteStatus(u: UserData): { label: string; tone: "success" | "warni
 }
 
 export default function AdminUsersPage() {
+  const { t, locale } = useI18n();
+  const roleLabels = getRoleLabels(t);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -265,10 +268,10 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <SectionTitle title="User Management" subtitle={`${users.length} users in the system`}
+      <SectionTitle title={t("users.title")} subtitle={t("users.usersInSystem", { n: users.length })}
         action={<div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => { setShowBulk(!showBulk); setShowCreate(false); }}><Upload className="h-4 w-4" />Bulk Import</Button>
-          <Button size="sm" onClick={() => { setShowCreate(!showCreate); setShowBulk(false); }}><UserPlus className="h-4 w-4" />Invite User</Button>
+          <Button size="sm" variant="outline" onClick={() => { setShowBulk(!showBulk); setShowCreate(false); }}><Upload className="h-4 w-4" />{t("users.bulkImport")}</Button>
+          <Button size="sm" onClick={() => { setShowCreate(!showCreate); setShowBulk(false); }}><UserPlus className="h-4 w-4" />{t("users.inviteUser")}</Button>
         </div>}
       />
 
@@ -298,7 +301,7 @@ export default function AdminUsersPage() {
               className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-all ${isActive ? `${c.active} ring-2 ring-offset-1 ring-current/20 shadow-sm` : c.inactive}`}
             >
               {iconMap[role]}
-              {ROLE_LABELS[role]}
+              {roleLabels[role]}
               <span className={`ml-0.5 text-xs font-bold ${isActive ? "" : "opacity-60"}`}>{count}</span>
             </button>
           );
@@ -327,20 +330,20 @@ export default function AdminUsersPage() {
       {/* Create user (invite) */}
       {showCreate && (
         <Card accent="brand">
-          <CardHeader><h3 className="text-sm font-semibold text-ink">Invite New User</h3></CardHeader>
+          <CardHeader><h3 className="text-sm font-semibold text-ink">{t("users.inviteNewUser")}</h3></CardHeader>
           <CardBody className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label="Full Name (Thai)" required>
+              <Field label={t("users.fullNameTh")} required>
                 <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Name Surname" />
               </Field>
-              <Field label="Email" required>
+              <Field label={t("users.email")} required>
                 <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder="user@dpstcon.org" />
               </Field>
-              <Field label="Affiliation">
-                <Input value={newUser.affiliation} onChange={(e) => setNewUser({ ...newUser, affiliation: e.target.value })} placeholder="University / Organization" />
+              <Field label={t("users.affiliation")}>
+                <Input value={newUser.affiliation} onChange={(e) => setNewUser({ ...newUser, affiliation: e.target.value })} placeholder={t("users.affiliationPlaceholder")} />
               </Field>
             </div>
-            <Field label="Roles (select multiple)">
+            <Field label={t("users.roles")}>
               <div className="flex flex-wrap gap-2">
                 {ALL_ROLES.map((r) => (
                   <button
@@ -353,17 +356,17 @@ export default function AdminUsersPage() {
                         : "bg-white border-border text-ink-muted hover:border-brand-200"
                     }`}
                   >
-                    {ROLE_LABELS[r]}
+                    {roleLabels[r]}
                   </button>
                 ))}
               </div>
             </Field>
-            <p className="text-xs text-ink-muted">An invitation email with a password setup link will be sent (expires in 72 hours).</p>
+            <p className="text-xs text-ink-muted">{t("users.inviteEmailNote")}</p>
           </CardBody>
           <CardFooter className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="secondary" size="sm" onClick={() => setShowCreate(false)}>{t("common.cancel")}</Button>
             <Button size="sm" onClick={createUser} loading={creating} disabled={!newUser.name || !newUser.email}>
-              <Send className="h-4 w-4" />Send Invitation
+              <Send className="h-4 w-4" />{t("users.sendInvitation")}
             </Button>
           </CardFooter>
         </Card>
@@ -372,26 +375,26 @@ export default function AdminUsersPage() {
       {/* Bulk import */}
       {showBulk && (
         <Card accent="info">
-          <CardHeader><h3 className="text-sm font-semibold text-ink">Bulk Import Users</h3></CardHeader>
+          <CardHeader><h3 className="text-sm font-semibold text-ink">{t("users.bulkImportTitle")}</h3></CardHeader>
           <CardBody className="space-y-3">
-            <Field label="User Data (CSV)" hint="Format: Name, Email, Roles (separated by |), Affiliation — one per line">
+            <Field label={t("users.csvData")} hint={t("users.csvFormat")}>
               <Textarea value={bulkData} onChange={(e) => setBulkData(e.target.value)} rows={6}
                 placeholder={"Somchai Jaidee,somchai@dpstcon.org,REVIEWER,Mahidol University\nSomying Rakrian,somying@dpstcon.org,AUTHOR|REVIEWER,Chulalongkorn University"} />
             </Field>
             {bulkResults.length > 0 && (
               <div className="bg-surface-alt rounded-lg p-3 text-sm">
-                <p className="font-medium mb-2">Import Results:</p>
+                <p className="font-medium mb-2">{t("users.importResults")}</p>
                 {bulkResults.map((r, i) => (
                   <p key={i} className={r.status === "invited" ? "text-green-700" : r.status === "updated_roles" ? "text-blue-600" : "text-red-600"}>
-                    {r.email}: {r.status === "invited" ? "Invited" : r.status === "updated_roles" ? "Roles Updated" : "Failed"}
+                    {r.email}: {r.status === "invited" ? t("users.invited") : r.status === "updated_roles" ? t("users.rolesUpdated") : t("users.failed")}
                   </p>
                 ))}
               </div>
             )}
           </CardBody>
           <CardFooter className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setShowBulk(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleBulkImport} loading={importing} disabled={!bulkData.trim()}>Import & Send Invitations</Button>
+            <Button variant="secondary" size="sm" onClick={() => setShowBulk(false)}>{t("common.cancel")}</Button>
+            <Button size="sm" onClick={handleBulkImport} loading={importing} disabled={!bulkData.trim()}>{t("users.importAndSend")}</Button>
           </CardFooter>
         </Card>
       )}
@@ -405,21 +408,21 @@ export default function AdminUsersPage() {
                 <tr className="border-b border-border/60 bg-surface-alt/80">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     <button onClick={() => toggleSort("name")} className="flex items-center gap-1 hover:text-ink transition-colors">
-                      Name <SortIcon col="name" />
+                      {t("users.name")} <SortIcon col="name" />
                     </button>
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     <button onClick={() => toggleSort("email")} className="flex items-center gap-1 hover:text-ink transition-colors">
-                      Email <SortIcon col="email" />
+                      {t("users.email")} <SortIcon col="email" />
                     </button>
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     <button onClick={() => toggleSort("affiliation")} className="flex items-center gap-1 hover:text-ink transition-colors">
-                      Affiliation <SortIcon col="affiliation" />
+                      {t("users.affiliation")} <SortIcon col="affiliation" />
                     </button>
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Roles</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-32">Actions</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.roles")}</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-32">{t("users.actionsCol")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -439,7 +442,7 @@ export default function AdminUsersPage() {
                         <div className="flex flex-wrap gap-1">
                           {userRoles.map((r) => (
                             <Badge key={r} tone={ROLE_COLORS[r] || "neutral"} className="text-xs">
-                              {ROLE_LABELS[r] || r}
+                              {roleLabels[r] || r}
                             </Badge>
                           ))}
                         </div>
@@ -471,7 +474,7 @@ export default function AdminUsersPage() {
         </CardBody>
         {filtered.length > 0 && (
           <CardFooter className="text-xs text-ink-muted">
-            Showing {filtered.length} of {users.length} users
+            {t("users.showingUsers", { n: filtered.length, total: users.length })}
           </CardFooter>
         )}
       </Card>
@@ -479,8 +482,8 @@ export default function AdminUsersPage() {
       {filtered.length === 0 && (
         <EmptyState
           icon={<Search className="h-14 w-14" />}
-          title="No users found"
-          body="Try adjusting your search or filters."
+          title={t("users.noUsersFound")}
+          body={t("users.adjustSearch")}
         />
       )}
 
@@ -505,7 +508,7 @@ export default function AdminUsersPage() {
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border">
                   <div>
                     <h3 id="modal-title" className="text-base font-semibold text-ink flex items-center gap-2">
-                      <Pencil className="h-4 w-4 text-brand-500" />Edit User
+                      <Pencil className="h-4 w-4 text-brand-500" />{t("users.editUser")}
                     </h3>
                     <p className="text-sm text-ink-muted mt-0.5">{selectedUser.email}</p>
                   </div>
@@ -513,7 +516,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Full Name (Thai)" required>
+                    <Field label={t("users.fullNameTh")} required>
                       <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
                     </Field>
                     <Field label="Full Name (English)">
@@ -523,7 +526,7 @@ export default function AdminUsersPage() {
                   <Field label="Affiliation">
                     <Input value={editForm.affiliation} onChange={(e) => setEditForm({ ...editForm, affiliation: e.target.value })} placeholder="University or Organization" />
                   </Field>
-                  <Field label="Roles (select multiple)">
+                  <Field label={t("users.roles")}>
                     <div className="flex flex-wrap gap-2">
                       {ALL_ROLES.map((r) => (
                         <button
@@ -536,7 +539,7 @@ export default function AdminUsersPage() {
                               : "bg-white border-border text-ink-muted hover:border-brand-200"
                           }`}
                         >
-                          {ROLE_LABELS[r]}
+                          {roleLabels[r]}
                         </button>
                       ))}
                     </div>
@@ -546,7 +549,7 @@ export default function AdminUsersPage() {
                   </Field>
                 </div>
                 <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
-                  <Button variant="secondary" size="sm" onClick={closeModal}>Cancel</Button>
+                  <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
                   <Button size="sm" onClick={saveEdit} loading={saving}>Save Changes</Button>
                 </div>
               </>
@@ -578,7 +581,7 @@ export default function AdminUsersPage() {
                   )}
                 </div>
                 <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
-                  <Button variant="secondary" size="sm" onClick={closeModal}>Cancel</Button>
+                  <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
                   <Button size="sm" onClick={resetPassword} loading={saving} disabled={!resetPw || resetPw.length < 8}>Reset Password</Button>
                 </div>
               </>
@@ -606,7 +609,7 @@ export default function AdminUsersPage() {
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
-                  <Button variant="secondary" size="sm" onClick={closeModal}>Cancel</Button>
+                  <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
                   <Button variant="danger" size="sm" onClick={deleteUser} loading={saving}>Confirm Delete</Button>
                 </div>
               </>

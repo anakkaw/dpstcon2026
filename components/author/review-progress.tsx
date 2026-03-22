@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 interface ReviewProgressProps {
   completed: number;
@@ -9,6 +10,7 @@ interface ReviewProgressProps {
 }
 
 export function ReviewProgress({ completed, total, compact = false }: ReviewProgressProps) {
+  const { t } = useI18n();
   if (total === 0) return null;
 
   const pct = Math.round((completed / total) * 100);
@@ -31,7 +33,7 @@ export function ReviewProgress({ completed, total, compact = false }: ReviewProg
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-ink-muted">
-          {completed === total ? "รีวิวครบแล้ว" : `รีวิว ${completed}/${total} เสร็จ`}
+          {completed === total ? t("reviewProgress.complete") : t("reviewProgress.progress", { completed, total })}
         </span>
         <span className="text-xs text-ink-muted">{pct}%</span>
       </div>

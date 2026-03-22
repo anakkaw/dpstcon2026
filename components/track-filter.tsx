@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 interface Track {
   id: string;
@@ -60,6 +61,7 @@ function getColorForIndex(index: number) {
 }
 
 export function TrackFilter({ value, onChange, tracks: propTracks, counts }: TrackFilterProps) {
+  const { t } = useI18n();
   const [tracks, setTracks] = useState<Track[]>(propTracks || []);
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export function TrackFilter({ value, onChange, tracks: propTracks, counts }: Tra
           <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center">
             <Filter className="h-4 w-4 text-gray-500" />
           </div>
-          <span className="text-sm font-semibold text-gray-500">สาขา</span>
+          <span className="text-sm font-semibold text-gray-500">{t("trackFilter.label")}</span>
         </div>
 
         <div className="w-px h-6 bg-gray-200 shrink-0" />
@@ -99,7 +101,7 @@ export function TrackFilter({ value, onChange, tracks: propTracks, counts }: Tra
                 : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:text-gray-700"
             )}
           >
-            ทั้งหมด
+            {t("trackFilter.all")}
             {totalCount !== undefined && (
               <span className={cn(
                 "text-xs font-bold px-1.5 py-0.5 rounded-lg min-w-[1.25rem] text-center",

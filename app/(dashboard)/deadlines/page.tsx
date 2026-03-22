@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
 import { formatDate } from "@/lib/utils";
 import { getDaysUntil } from "@/lib/author-utils";
+import { useI18n } from "@/lib/i18n";
 import {
   Calendar, FileText, Download, Save, Plus, Trash2, Pencil, X,
   Clock, CheckCircle2, AlertTriangle, ChevronRight,
@@ -45,6 +46,7 @@ const DEADLINE_DEFAULTS = [
 ];
 
 export default function DeadlinesPage() {
+  const { t, locale } = useI18n();
   const { data: session } = useSession();
   const role = (session?.user as Record<string, unknown>)?.role as string;
   const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(role);
@@ -159,12 +161,12 @@ export default function DeadlinesPage() {
   return (
     <div className="space-y-6">
       <SectionTitle
-        title="Schedule & Documents"
-        subtitle="DPSTCon 2026"
+        title={t("deadlines.title")}
+        subtitle={t("deadlines.subtitle")}
         action={
           isAdmin && !editing ? (
             <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-              <Pencil className="h-4 w-4" />Edit Schedule
+              <Pencil className="h-4 w-4" />{t("deadlines.editSchedule")}
             </Button>
           ) : null
         }
@@ -177,7 +179,7 @@ export default function DeadlinesPage() {
         <Card accent="brand">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-ink">Edit Schedule</h3>
+              <h3 className="text-sm font-semibold text-ink">{t("deadlines.editSchedule")}</h3>
               <button onClick={() => { setEditing(false); setEditForm(settings); }} className="text-ink-muted hover:text-ink">
                 <X className="h-4 w-4" />
               </button>
@@ -187,10 +189,10 @@ export default function DeadlinesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {DEADLINE_DEFAULTS.map((d) => (
                 <div key={d.key} className="space-y-2">
-                  <Field label="Label">
+                  <Field label={t("deadlines.label")}>
                     <Input value={editForm[d.labelKey] || d.defaultLabel} onChange={(e) => setEditForm({ ...editForm, [d.labelKey]: e.target.value })} placeholder={d.defaultLabel} />
                   </Field>
-                  <Field label="Date">
+                  <Field label={t("deadlines.date")}>
                     <Input type="date" value={editForm[d.key] || ""} onChange={(e) => setEditForm({ ...editForm, [d.key]: e.target.value })} />
                   </Field>
                 </div>
@@ -198,8 +200,8 @@ export default function DeadlinesPage() {
             </div>
           </CardBody>
           <CardFooter className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => { setEditing(false); setEditForm(settings); }}>Cancel</Button>
-            <Button size="sm" onClick={handleSaveDeadlines} loading={saving}><Save className="h-4 w-4" />Save</Button>
+            <Button variant="secondary" size="sm" onClick={() => { setEditing(false); setEditForm(settings); }}>{t("common.cancel")}</Button>
+            <Button size="sm" onClick={handleSaveDeadlines} loading={saving}><Save className="h-4 w-4" />{t("common.save")}</Button>
           </CardFooter>
         </Card>
       )}
@@ -242,11 +244,11 @@ export default function DeadlinesPage() {
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-ink-muted uppercase tracking-wide">Step {d.step}</p>
+                  <p className="text-xs font-medium text-ink-muted uppercase tracking-wide">{t("deadlines.step", { n: d.step })}</p>
                   <p className="text-sm font-semibold text-ink mt-0.5">{settings[d.labelKey] || d.defaultLabel}</p>
-                  <p className="text-sm text-ink-light mt-1">{formatDate(date)}</p>
+                  <p className="text-sm text-ink-light mt-1">{formatDate(date, locale)}</p>
                   <Badge tone={badgeTone} className="mt-2 text-xs">
-                    {isPast ? "Completed" : `${daysLeft} days left`}
+                    {isPast ? t("deadlines.completed") : t("deadlines.daysLeft", { n: daysLeft })}
                   </Badge>
                 </div>
               </div>
@@ -260,13 +262,13 @@ export default function DeadlinesPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <FileText className="h-4 w-4" />Document Templates
+              <FileText className="h-4 w-4" />{t("deadlines.documentTemplates")}
               <Badge tone="neutral" className="text-xs">{templates.length}</Badge>
             </h3>
             {isAdmin && (
               <Button size="sm" variant="outline" onClick={() => setShowAddTemplate(!showAddTemplate)}>
                 {showAddTemplate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                {showAddTemplate ? "Cancel" : "Add Template"}
+                {showAddTemplate ? t("common.cancel") : t("deadlines.addTemplate")}
               </Button>
             )}
           </div>
@@ -291,7 +293,7 @@ export default function DeadlinesPage() {
                 />
               </div>
               <Button size="sm" onClick={createTemplate} loading={addingTemplate} disabled={!templateForm.name.trim()}>
-                <Plus className="h-4 w-4" />Add
+                <Plus className="h-4 w-4" />{t("common.add")}
               </Button>
             </div>
           </div>
@@ -302,8 +304,8 @@ export default function DeadlinesPage() {
             <div className="py-12">
               <EmptyState
                 icon={<FileText className="h-12 w-12" />}
-                title="No templates yet"
-                body={isAdmin ? "Add document templates for participants to download." : "Templates will be available soon."}
+                title={t("deadlines.noTemplates")}
+                body={isAdmin ? t("deadlines.noTemplatesDesc") : ""}
               />
             </div>
           ) : (
@@ -320,7 +322,7 @@ export default function DeadlinesPage() {
                   <div className="flex items-center gap-1.5 shrink-0">
                     <a href={`/api/templates/${tmpl.id}/download`}>
                       <Button variant="outline" size="sm">
-                        <Download className="h-3.5 w-3.5" />Download
+                        <Download className="h-3.5 w-3.5" />{t("common.download")}
                       </Button>
                     </a>
                     {isAdmin && (

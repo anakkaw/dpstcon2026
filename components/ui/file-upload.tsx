@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
 interface FileUploadProps {
@@ -22,11 +23,13 @@ export function FileUpload({
   kind,
   accept = ".pdf,.doc,.docx",
   maxSizeMB = 50,
-  label = "แนบไฟล์",
+  label,
   hint,
   onUploadComplete,
   disabled = false,
 }: FileUploadProps) {
+  const { t } = useI18n();
+  const resolvedLabel = label ?? t("fileUpload.attachFile");
   const [state, setState] = useState<UploadState>("idle");
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -40,7 +43,7 @@ export function FileUpload({
 
       // Validate size
       if (file.size > maxSizeMB * 1024 * 1024) {
-        setError(`ไฟล์มีขนาดเกิน ${maxSizeMB} MB`);
+        setError(t("fileUpload.fileTooLarge", { n: maxSizeMB }));
         setState("error");
         return;
       }
@@ -49,7 +52,7 @@ export function FileUpload({
       const allowedTypes = accept.split(",").map((t) => t.trim().toLowerCase());
       const fileExt = `.${file.name.split(".").pop()?.toLowerCase()}`;
       if (allowedTypes.length > 0 && !allowedTypes.includes(fileExt)) {
-        setError(`ประเภทไฟล์ไม่รองรับ (รองรับ: ${accept})`);
+        setError(t("fileUpload.unsupportedType", { types: accept }));
         setState("error");
         return;
       }
@@ -72,7 +75,7 @@ export function FileUpload({
 
         if (!urlRes.ok) {
           const data = await urlRes.json();
-          throw new Error(data.error || "ไม่สามารถขอ URL สำหรับอัปโหลดได้");
+          throw new Error(data.error || t("fileUpload.uploadUrlError"));
         }
 
         const { uploadUrl, fileKey } = await urlRes.json();
@@ -97,12 +100,12 @@ export function FileUpload({
             if (xhr.status >= 200 && xhr.status < 300) {
               resolve();
             } else {
-              reject(new Error("อัปโหลดไฟล์ไม่สำเร็จ"));
+              reject(new Error(t("fileUpload.uploadFailed")));
             }
           };
 
-          xhr.onerror = () => reject(new Error("เครือข่ายมีปัญหา กรุณาลองใหม่"));
-          xhr.ontimeout = () => reject(new Error("อัปโหลดหมดเวลา กรุณาลองใหม่"));
+          xhr.onerror = () => reject(new Error(t("fileUpload.networkError")));
+          xhr.ontimeout = () => reject(new Error(t("fileUpload.timeout")));
           xhr.timeout = 5 * 60 * 1000; // 5 minutes timeout
 
           xhr.send(file);
@@ -124,7 +127,7 @@ export function FileUpload({
         });
 
         if (!confirmRes.ok) {
-          throw new Error("ยืนยันการอัปโหลดไม่สำเร็จ");
+          throw new Error(t("fileUpload.confirmFailed"));
         }
 
         const { file: savedFile } = await confirmRes.json();
@@ -132,11 +135,11 @@ export function FileUpload({
         setState("success");
         onUploadComplete?.(savedFile);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+        setError(err instanceof Error ? err.message : t("fileUpload.genericError"));
         setState("error");
       }
     },
-    [submissionId, kind, accept, maxSizeMB, onUploadComplete]
+    [submissionId, kind, accept, maxSizeMB, onUploadComplete, t]
   );
 
   const handleDrop = useCallback(
@@ -171,9 +174,9 @@ export function FileUpload({
 
   return (
     <div>
-      {label && (
+      {resolvedLabel && (
         <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">
-          {label}
+          {resolvedLabel}
         </p>
       )}
 
@@ -207,11 +210,11 @@ export function FileUpload({
           <div className="space-y-2">
             <Upload className="h-8 w-8 mx-auto text-ink-muted" />
             <p className="text-sm text-ink">
-              คลิกเพื่อเลือกไฟล์
+              {t("fileUpload.clickToSelect")}
             </p>
             {hint && <p className="text-xs text-ink-muted">{hint}</p>}
             <p className="text-xs text-ink-muted">
-              รองรับ {accept.replace(/\./g, "").toUpperCase()} (สูงสุด {maxSizeMB} MB)
+              {t("fileUpload.supported", { types: accept.replace(/\./g, "").toUpperCase(), n: maxSizeMB })}
             </p>
           </div>
         )}
@@ -219,7 +222,7 @@ export function FileUpload({
         {state === "uploading" && (
           <div className="space-y-3">
             <Loader2 className="h-8 w-8 mx-auto text-brand-500 animate-spin" />
-            <p className="text-sm text-ink">กำลังอัปโหลด {fileName}...</p>
+            <p className="text-sm text-ink">{t("fileUpload.uploading", { name: fileName })}</p>
             <div className="w-full bg-gray-200 rounded-full h-2 max-w-xs mx-auto">
               <div
                 className="bg-brand-500 h-2 rounded-full transition-all duration-300"
@@ -237,7 +240,7 @@ export function FileUpload({
               <FileText className="h-4 w-4 text-emerald-600" />
               <p className="text-sm text-emerald-700 font-medium">{fileName}</p>
             </div>
-            <p className="text-xs text-emerald-600">อัปโหลดสำเร็จ</p>
+            <p className="text-xs text-emerald-600">{t("fileUpload.success")}</p>
             <button
               type="button"
               onClick={(e) => {
@@ -246,7 +249,7 @@ export function FileUpload({
               }}
               className="text-xs text-ink-muted hover:text-ink underline"
             >
-              อัปโหลดไฟล์ใหม่
+              {t("fileUpload.uploadNew")}
             </button>
           </div>
         )}
@@ -263,7 +266,7 @@ export function FileUpload({
               }}
               className="text-xs text-ink-muted hover:text-ink underline"
             >
-              ลองอีกครั้ง
+              {t("common.retry")}
             </button>
           </div>
         )}

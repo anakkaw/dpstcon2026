@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ROLE_LABELS } from "@/lib/labels";
+import { getRoleLabels } from "@/lib/labels";
+import { useI18n } from "@/lib/i18n";
 import { Sparkles } from "lucide-react";
 
 const AuthorDashboard = dynamic(() => import("./author-dashboard"));
@@ -16,6 +17,8 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ role, userName, stats }: DashboardClientProps) {
+  const { t } = useI18n();
+  const roleLabels = getRoleLabels(t);
   const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(role);
 
   return (
@@ -29,10 +32,10 @@ export function DashboardClient({ role, userName, stats }: DashboardClientProps)
         <div className="relative">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="h-4 w-4 text-amber-400" />
-            <p className="text-amber-300 text-sm font-medium">{ROLE_LABELS[role] || role} — DPSTCon 2026</p>
+            <p className="text-amber-300 text-sm font-medium">{roleLabels[role] || role} — DPSTCon 2026</p>
           </div>
-          <h1 className="text-3xl font-bold">สวัสดี, {userName}</h1>
-          <p className="text-slate-400 text-sm mt-2">ยินดีต้อนรับสู่ระบบจัดการบทความวิชาการ</p>
+          <h1 className="text-3xl font-bold">{t("dashboard.welcome", { name: userName })}</h1>
+          <p className="text-slate-400 text-sm mt-2">{t("dashboard.welcomeSubtitle")}</p>
         </div>
       </div>
 

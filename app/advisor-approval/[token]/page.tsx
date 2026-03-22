@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/lib/i18n";
 
 interface FileData {
   id: string;
@@ -29,6 +30,7 @@ interface SubmissionData {
 }
 
 export default function AdvisorApprovalPage() {
+  const { t } = useI18n();
   const params = useParams();
   const token = params.token as string;
 
@@ -56,7 +58,7 @@ export default function AdvisorApprovalPage() {
           if (data.message) setResponseMessage(data.message);
         }
       })
-      .catch(() => setError("ไม่สามารถโหลดข้อมูลได้"))
+      .catch(() => setError(t("advisor.loadError")))
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -75,7 +77,7 @@ export default function AdvisorApprovalPage() {
         setResult({ decision: data.decision });
       }
     } catch {
-      setError("เกิดข้อผิดพลาด");
+      setError(t("login.genericError"));
     } finally {
       setSubmitting(false);
     }
@@ -108,12 +110,12 @@ export default function AdvisorApprovalPage() {
               <span className="text-3xl">{result.decision === "APPROVED" ? "✓" : "✗"}</span>
             </div>
             <h2 className="text-xl font-bold text-ink tracking-tight mb-2">
-              {result.decision === "APPROVED" ? "รับรองบทความแล้ว" : "ปฏิเสธการรับรอง"}
+              {result.decision === "APPROVED" ? t("advisor.approved") : t("advisor.rejected")}
             </h2>
             <p className="text-sm text-ink-muted">
               {result.decision === "APPROVED"
-                ? "บทความจะถูกส่งเข้าระบบพิจารณาต่อไป"
-                : "บทความจะถูกส่งกลับให้นักศึกษาแก้ไข"}
+                ? t("advisor.approvedDesc")
+                : t("advisor.rejectedDesc")}
             </p>
           </CardBody>
         </Card>
@@ -138,34 +140,34 @@ export default function AdvisorApprovalPage() {
           <div className="inline-flex h-14 w-14 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 items-center justify-center mb-4 shadow-2xl shadow-brand-500/40">
             <span className="text-white font-bold text-2xl">D</span>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">ขอรับรองบทความ</h1>
-          <p className="text-xs text-slate-400 mt-1">DPSTCon Conference Management System</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">{t("advisor.title")}</h1>
+          <p className="text-xs text-slate-400 mt-1">{t("advisor.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <h2 className="text-sm font-semibold text-ink">ข้อมูลบทความ</h2>
+            <h2 className="text-sm font-semibold text-ink">{t("advisor.paperInfo")}</h2>
           </CardHeader>
           <CardBody className="space-y-4">
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">ชื่อบทความ</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.paperTitle")}</p>
               <p className="text-sm font-semibold text-ink mt-0.5">{submission?.title}</p>
             </div>
             {submission?.abstract && (
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">บทคัดย่อ</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.abstract")}</p>
                 <p className="text-sm text-ink whitespace-pre-wrap mt-0.5 leading-relaxed">{submission.abstract}</p>
               </div>
             )}
             {submission?.keywords && (
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">คำสำคัญ</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.keywords")}</p>
                 <p className="text-sm text-ink mt-0.5">{submission.keywords}</p>
               </div>
             )}
             <div className="flex gap-8">
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Author</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.author")}</p>
                 <p className="text-sm text-ink mt-0.5">{submission?.author.name}</p>
                 {submission?.author.affiliation && (
                   <p className="text-xs text-gray-500">{submission.author.affiliation}</p>
@@ -173,13 +175,13 @@ export default function AdvisorApprovalPage() {
               </div>
               {submission?.event && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">งานประชุม</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.conference")}</p>
                   <p className="text-sm text-ink mt-0.5">{submission.event.name} {submission.event.year}</p>
                 </div>
               )}
               {submission?.track && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">สาขา</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.track")}</p>
                   <Badge className="mt-0.5">{submission.track.name}</Badge>
                 </div>
               )}
@@ -190,7 +192,7 @@ export default function AdvisorApprovalPage() {
         {files.length > 0 && (
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-ink">ไฟล์บทความ</h2>
+              <h2 className="text-sm font-semibold text-ink">{t("advisor.paperFiles")}</h2>
             </CardHeader>
             <CardBody>
               <div className="space-y-2">
@@ -224,7 +226,7 @@ export default function AdvisorApprovalPage() {
                       }}
                       className="text-xs font-medium text-brand-600 hover:text-brand-700 px-3 py-1.5 rounded-md hover:bg-brand-50 transition-colors shrink-0"
                     >
-                      {downloading === file.id ? "กำลังโหลด..." : "ดาวน์โหลด"}
+                      {downloading === file.id ? t("common.loading") : t("common.download")}
                     </button>
                   </div>
                 ))}
@@ -235,25 +237,25 @@ export default function AdvisorApprovalPage() {
 
         <Card accent="brand">
           <CardHeader>
-            <h2 className="text-sm font-semibold text-ink">ดำเนินการรับรอง</h2>
+            <h2 className="text-sm font-semibold text-ink">{t("advisor.actionTitle")}</h2>
           </CardHeader>
           <CardBody>
-            <Field label="ความคิดเห็น (ไม่บังคับ)" htmlFor="comments">
+            <Field label={t("advisor.comments")} htmlFor="comments">
               <Textarea
                 id="comments"
                 value={comments}
                 onChange={(e) => setComments(e.target.value)}
-                placeholder="หมายเหตุหรือความคิดเห็นเพิ่มเติม..."
+                placeholder={t("advisor.commentsPlaceholder")}
                 rows={3}
               />
             </Field>
           </CardBody>
           <CardFooter className="flex justify-end gap-3">
             <Button variant="danger" onClick={() => handleDecision("REJECTED")} loading={submitting}>
-              ปฏิเสธการรับรอง
+              {t("advisor.reject")}
             </Button>
             <Button onClick={() => handleDecision("APPROVED")} loading={submitting}>
-              รับรองบทความ
+              {t("advisor.approve")}
             </Button>
           </CardFooter>
         </Card>

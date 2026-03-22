@@ -12,7 +12,8 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
 import { TrackFilter } from "@/components/track-filter";
-import { ASSIGNMENT_STATUS_LABELS } from "@/lib/labels";
+import { getAssignmentStatusLabels } from "@/lib/labels";
+import { useI18n } from "@/lib/i18n";
 import { formatDate } from "@/lib/utils";
 import {
   ClipboardCheck, ChevronUp, ChevronDown, ChevronRight,
@@ -65,6 +66,8 @@ interface GroupedSubmission {
 type SortKey = "title" | "author" | "track" | "reviewers" | "progress";
 
 export default function ReviewsPage() {
+  const { t, locale } = useI18n();
+  const assignmentLabels = getAssignmentStatusLabels(t);
   const { data: session, isPending: sessionPending } = useSession();
   const role = (session?.user as Record<string, unknown>)?.role as string || "REVIEWER";
   const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(role);
@@ -234,10 +237,10 @@ export default function ReviewsPage() {
     const myFiltered = assignments.filter((a) => !trackFilter || a.submission.track?.id === trackFilter);
     return (
       <div className="space-y-5">
-        <SectionTitle title="My Review Tasks" subtitle={`${myFiltered.length} items`} />
+        <SectionTitle title={t("reviews.myReviewTasks")} subtitle={`${myFiltered.length} items`} />
         <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
         {myFiltered.length === 0 ? (
-          <EmptyState icon={<ClipboardCheck className="h-12 w-12" />} title="No review tasks" body="You haven't been assigned any reviews yet" />
+          <EmptyState icon={<ClipboardCheck className="h-12 w-12" />} title={t("reviews.noReviewTasks")} body={t("reviews.noReviewTasksDesc")} />
         ) : (
           <div className="space-y-3">
             {myFiltered.map((a) => (
@@ -249,15 +252,15 @@ export default function ReviewsPage() {
                         <h3 className="text-sm font-semibold text-ink truncate">{a.submission.title}</h3>
                         <div className="flex items-center gap-2.5 mt-2 text-xs text-ink-muted flex-wrap">
                           {a.submission.track && <Badge tone="info">{a.submission.track.name}</Badge>}
-                          <span>Author: {a.submission.author.name}</span>
+                          <span>{t("reviews.author")}: {a.submission.author.name}</span>
                           {a.dueDate && (
                             <span className={isOverdue(a.dueDate) ? "text-danger font-medium" : isDueSoon(a.dueDate) ? "text-amber-600 font-medium" : ""}>
-                              Due {formatDate(a.dueDate)}
+                              {t("reviews.due")} {formatDate(a.dueDate, locale)}
                             </span>
                           )}
                         </div>
                       </div>
-                      <Badge tone={STATUS_COLORS[a.status] || "neutral"}>{ASSIGNMENT_STATUS_LABELS[a.status] || a.status}</Badge>
+                      <Badge tone={STATUS_COLORS[a.status] || "neutral"}>{assignmentLabels[a.status] || a.status}</Badge>
                     </div>
                   </CardBody>
                 </Card>
@@ -274,13 +277,13 @@ export default function ReviewsPage() {
   // ══════════════════════════════════════════════════════════════
 
   const statusTabs = [
-    { key: "ALL", label: "All", count: totalAssignments },
-    { key: "PENDING", label: "Pending", count: statusCounts.PENDING || 0 },
-    { key: "ACCEPTED", label: "In Review", count: statusCounts.ACCEPTED || 0 },
-    { key: "COMPLETED", label: "Completed", count: statusCounts.COMPLETED || 0 },
-    { key: "OVERDUE", label: "Overdue", count: statusCounts.OVERDUE || 0 },
-    { key: "DECLINED", label: "Declined", count: statusCounts.DECLINED || 0 },
-  ].filter((t) => t.key === "ALL" || t.count > 0);
+    { key: "ALL", label: t("common.all"), count: totalAssignments },
+    { key: "PENDING", label: t("reviews.pending"), count: statusCounts.PENDING || 0 },
+    { key: "ACCEPTED", label: t("reviews.inReview"), count: statusCounts.ACCEPTED || 0 },
+    { key: "COMPLETED", label: t("reviews.completed"), count: statusCounts.COMPLETED || 0 },
+    { key: "OVERDUE", label: t("reviews.overdue"), count: statusCounts.OVERDUE || 0 },
+    { key: "DECLINED", label: t("reviews.declined"), count: statusCounts.DECLINED || 0 },
+  ].filter((tab) => tab.key === "ALL" || tab.count > 0);
 
   // Reviewers already assigned to the currently-assigning submission
   const assignedReviewerIds = assigningSubId
@@ -290,17 +293,17 @@ export default function ReviewsPage() {
   return (
     <div className="space-y-6">
       <SectionTitle
-        title="Review Management"
-        subtitle={`${groups.length} submissions · ${totalAssignments} review tasks`}
+        title={t("reviews.management")}
+        subtitle={`${groups.length} ${t("reviews.submissions").toLowerCase()} · ${totalAssignments} review tasks`}
       />
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <SummaryCard label="Submissions" value={groups.length} icon={<ClipboardCheck className="h-5 w-5" />} color="blue" />
-        <SummaryCard label="Total Reviews" value={totalAssignments} icon={<Users className="h-5 w-5" />} color="indigo" />
-        <SummaryCard label="In Progress" value={statusCounts.ACCEPTED || 0} icon={<CircleDot className="h-5 w-5" />} color="violet" />
-        <SummaryCard label="Completed" value={statusCounts.COMPLETED || 0} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
-        <SummaryCard label="Overdue" value={statusCounts.OVERDUE || 0} icon={<AlertTriangle className="h-5 w-5" />} color="red" />
+        <SummaryCard label={t("reviews.submissions")} value={groups.length} icon={<ClipboardCheck className="h-5 w-5" />} color="blue" />
+        <SummaryCard label={t("reviews.totalReviews")} value={totalAssignments} icon={<Users className="h-5 w-5" />} color="indigo" />
+        <SummaryCard label={t("reviews.inProgress")} value={statusCounts.ACCEPTED || 0} icon={<CircleDot className="h-5 w-5" />} color="violet" />
+        <SummaryCard label={t("reviews.completed")} value={statusCounts.COMPLETED || 0} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
+        <SummaryCard label={t("reviews.overdue")} value={statusCounts.OVERDUE || 0} icon={<AlertTriangle className="h-5 w-5" />} color="red" />
       </div>
 
       <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
@@ -318,7 +321,7 @@ export default function ReviewsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted pointer-events-none" />
           <input
             type="text"
-            placeholder="Search submissions, authors, reviewers..."
+            placeholder={t("reviews.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-8 py-2 text-sm border border-border/60 rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all"
@@ -353,7 +356,7 @@ export default function ReviewsPage() {
       {groups.length === 0 ? (
         <EmptyState
           icon={<ClipboardCheck className="h-12 w-12" />}
-          title={searchQuery ? `No results for "${searchQuery}"` : statusFilter !== "ALL" ? `No ${statusTabs.find(t => t.key === statusFilter)?.label || statusFilter} reviews` : "No review assignments yet"}
+          title={searchQuery ? t("reviews.noResults") : statusFilter !== "ALL" ? `No ${statusTabs.find(tab => tab.key === statusFilter)?.label || statusFilter} reviews` : t("reviews.noReviewsYet")}
         />
       ) : (
         <Card>
@@ -363,12 +366,12 @@ export default function ReviewsPage() {
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-border/60">
                     <th className="w-10" />
-                    <SortTh label="Submission" sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%] pl-1" />
-                    <SortTh label="Author" sortKey_="author" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortTh label="Track" sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortTh label="Reviewers" sortKey_="reviewers" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
-                    <SortTh label="Progress" sortKey_="progress" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[160px]" />
-                    <th className="w-20 px-3 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-center">Actions</th>
+                    <SortTh label={t("reviews.submission")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%] pl-1" />
+                    <SortTh label={t("reviews.author")} sortKey_="author" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label={t("reviews.track")} sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label={t("reviews.reviewers")} sortKey_="reviewers" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                    <SortTh label={t("reviews.progress")} sortKey_="progress" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[160px]" />
+                    <th className="w-20 px-3 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-center">{t("reviews.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -403,7 +406,7 @@ export default function ReviewsPage() {
                                 {g.assignments.slice(0, 3).map((a) => {
                                   const StatusIcon = STATUS_ICONS[a.status] || CircleDot;
                                   return (
-                                    <div key={a.id} className="relative" title={`${a.reviewer?.name || "?"} - ${ASSIGNMENT_STATUS_LABELS[a.status] || a.status}`}>
+                                    <div key={a.id} className="relative" title={`${a.reviewer?.name || "?"} - ${assignmentLabels[a.status] || a.status}`}>
                                       <div className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold ${
                                         a.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" :
                                         a.status === "OVERDUE" ? "bg-red-100 text-red-700" :
@@ -479,13 +482,13 @@ export default function ReviewsPage() {
                                       </div>
                                       <div className="min-w-0 flex-1">
                                         <p className="text-sm font-medium text-ink">{a.reviewer?.name || "—"}</p>
-                                        <p className="text-[11px] text-ink-muted">Assigned {formatDate(a.assignedAt)}</p>
+                                        <p className="text-[11px] text-ink-muted">{t("reviews.assigned")} {formatDate(a.assignedAt, locale)}</p>
                                       </div>
                                     </div>
                                   </td>
                                   <td className="px-4 py-2.5">
                                     <Badge tone={STATUS_COLORS[a.status] || "neutral"} dot>
-                                      {ASSIGNMENT_STATUS_LABELS[a.status] || a.status}
+                                      {assignmentLabels[a.status] || a.status}
                                     </Badge>
                                   </td>
                                   <td className="px-4 py-2.5 text-center">
@@ -493,9 +496,9 @@ export default function ReviewsPage() {
                                       <span className={`inline-flex items-center gap-1 text-xs ${overdue ? "text-red-600 font-medium" : dueSoon ? "text-amber-600 font-medium" : "text-ink-muted"}`}>
                                         {overdue && <AlertTriangle className="h-3 w-3" />}
                                         {dueSoon && <Clock className="h-3 w-3" />}
-                                        {formatDate(a.dueDate)}
+                                        {formatDate(a.dueDate, locale)}
                                       </span>
-                                    ) : <span className="text-ink-muted text-xs">No deadline</span>}
+                                    ) : <span className="text-ink-muted text-xs">{t("reviews.noDeadline")}</span>}
                                   </td>
                                   <td />
                                   <td className="px-3 py-2.5 text-center">
@@ -520,9 +523,9 @@ export default function ReviewsPage() {
                                 <td />
                                 <td colSpan={6} className="px-6 py-3">
                                   <div className="flex items-end gap-3 max-w-2xl">
-                                    <Field label="Reviewer" className="flex-1">
+                                    <Field label={t("reviews.reviewers")} className="flex-1">
                                       <Select value={selectedReviewerId} onChange={(e) => setSelectedReviewerId(e.target.value)}>
-                                        <option value="">-- Select Reviewer --</option>
+                                        <option value="">{t("reviews.selectReviewer")}</option>
                                         {reviewerUsers
                                           .filter((u) => !assignedReviewerIds.has(u.id))
                                           .map((u) => (
@@ -530,12 +533,12 @@ export default function ReviewsPage() {
                                           ))}
                                       </Select>
                                     </Field>
-                                    <Field label="Due Date" className="w-44">
+                                    <Field label={t("reviews.dueDate")} className="w-44">
                                       <Input type="date" value={assignDueDate} onChange={(e) => setAssignDueDate(e.target.value)} />
                                     </Field>
                                     <div className="flex gap-1.5 pb-0.5">
-                                      <Button size="sm" onClick={() => handleAssign(g.submissionId)} loading={assignSaving} disabled={!selectedReviewerId}>Assign</Button>
-                                      <Button size="sm" variant="ghost" onClick={() => setAssigningSubId(null)}>Cancel</Button>
+                                      <Button size="sm" onClick={() => handleAssign(g.submissionId)} loading={assignSaving} disabled={!selectedReviewerId}>{t("reviews.assign")}</Button>
+                                      <Button size="sm" variant="ghost" onClick={() => setAssigningSubId(null)}>{t("common.cancel")}</Button>
                                     </div>
                                   </div>
                                 </td>

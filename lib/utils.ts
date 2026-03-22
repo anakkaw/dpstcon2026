@@ -5,20 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
-export function formatDate(date: Date | string | null | undefined): string {
+export function formatDate(date: Date | string | null | undefined, locale?: string): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("th-TH", {
+  const loc = locale === "en" ? "en-US" : "th-TH";
+  return d.toLocaleDateString(loc, {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 }
 
-export function formatDateTime(date: Date | string | null | undefined): string {
+export function formatDateTime(date: Date | string | null | undefined, locale?: string): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("th-TH", {
+  const loc = locale === "en" ? "en-US" : "th-TH";
+  return d.toLocaleDateString(loc, {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -27,7 +29,7 @@ export function formatDateTime(date: Date | string | null | undefined): string {
   });
 }
 
-export function formatRelativeTime(date: Date | string): string {
+export function formatRelativeTime(date: Date | string, locale?: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
@@ -35,11 +37,12 @@ export function formatRelativeTime(date: Date | string): string {
   const diffHr = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHr / 24);
 
-  if (diffMin < 1) return "เมื่อสักครู่";
-  if (diffMin < 60) return `${diffMin} นาทีที่แล้ว`;
-  if (diffHr < 24) return `${diffHr} ชั่วโมงที่แล้ว`;
-  if (diffDay < 7) return `${diffDay} วันที่แล้ว`;
-  return formatDate(d);
+  const isEn = locale === "en";
+  if (diffMin < 1) return isEn ? "Just now" : "เมื่อสักครู่";
+  if (diffMin < 60) return isEn ? `${diffMin} minutes ago` : `${diffMin} นาทีที่แล้ว`;
+  if (diffHr < 24) return isEn ? `${diffHr} hours ago` : `${diffHr} ชั่วโมงที่แล้ว`;
+  if (diffDay < 7) return isEn ? `${diffDay} days ago` : `${diffDay} วันที่แล้ว`;
+  return formatDate(d, locale);
 }
 
 export function truncate(str: string, len: number): string {
