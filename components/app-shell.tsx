@@ -7,6 +7,7 @@ import { getNavItemsForRoles } from "@/lib/constants";
 import { ROLE_LABELS } from "@/lib/labels";
 import { useSession, signOut } from "@/lib/auth-client";
 import { NotificationBell } from "@/components/notification-bell";
+import { Footer } from "@/components/ui/footer";
 import {
   LayoutDashboard,
   FileText,
@@ -172,7 +173,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+          {children}
+          <Footer className="mt-8 -mx-6 lg:-mx-8 -mb-6 lg:-mb-8" />
+        </main>
       </div>
     </div>
   );

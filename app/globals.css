@@ -171,3 +171,38 @@ input[type="checkbox"] {
 .animate-fade-in { animation: fadeIn 0.3s ease-out both; }
 .animate-scale-in { animation: scaleIn 0.25s ease-out both; }
 .animate-slide-down { animation: slideDown 0.25s ease-out both; }
+
+/* Landing page hero animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes staggerUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-float { animation: float 4s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulseGlow 3s ease-in-out infinite; }
+.animate-slide-in-left { animation: slideInLeft 0.7s ease-out both; }
+.animate-slide-in-right { animation: slideInRight 0.7s ease-out both; }
+.animate-stagger-up { animation: staggerUp 0.5s ease-out both; }
+
+/* Landing hero background */
+.bg-landing-hero {
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59, 130, 246, 0.15), transparent),
+              radial-gradient(ellipse 60% 40% at 80% 50%, rgba(249, 115, 22, 0.1), transparent),
+              linear-gradient(180deg, #020617 0%, #0f172a 40%, #1e293b 100%);
+}

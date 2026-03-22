@@ -1,5 +1,6 @@
 export const APP_NAME = "DPSTCon";
 export const APP_DESCRIPTION = "ระบบบริหารการพิจารณาบทความสำหรับการประชุมวิชาการ";
+export const APP_VERSION = "1.0.1";
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export const ALLOWED_FILE_TYPES = [

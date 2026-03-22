@@ -13,3 +13,4 @@ export { Collapsible } from "./collapsible";
 export { EmptyState } from "./empty-state";
 export { Divider } from "./divider";
 export { ScoreSlider } from "./score-slider";
+export { Footer } from "./footer";
