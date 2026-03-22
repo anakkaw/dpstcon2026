@@ -1,26 +1,173 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* Brand Colors — DPSTCon Orange */
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #fdba74;
+  --color-brand-400: #fb923c;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Ink / Text */
+  --color-ink: #0f172a;
+  --color-ink-light: #475569;
+  --color-ink-muted: #94a3b8;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Surface */
+  --color-surface: #ffffff;
+  --color-surface-alt: #f8fafc;
+  --color-surface-hover: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+
+  /* Status Colors */
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Sidebar */
+  --color-side: #0f172a;
+  --color-side-light: #1e293b;
+  --color-side-text: #cbd5e1;
+  --color-side-muted: #94a3b8;
+  --color-side-hover: rgba(255, 255, 255, 0.08);
+  --color-side-divider: rgba(255, 255, 255, 0.08);
+
+  /* Typography */
+  --font-sans: var(--font-sarabun), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-prompt), var(--font-geist-sans), system-ui, sans-serif;
+  --font-body: var(--font-sarabun), var(--font-geist-sans), system-ui, sans-serif;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-card-hover: 0 8px 25px -5px rgb(0 0 0 / 0.1), 0 4px 10px -5px rgb(0 0 0 / 0.08);
+  --shadow-brand-glow: 0 8px 16px -4px rgba(249, 115, 22, 0.4);
+  --shadow-brand-active: 0 4px 12px -2px rgba(249, 115, 22, 0.45);
+  --shadow-blue-glow: 0 8px 16px -4px rgba(59, 130, 246, 0.35);
+  --shadow-emerald-glow: 0 8px 16px -4px rgba(16, 185, 129, 0.35);
+  --shadow-amber-glow: 0 8px 16px -4px rgba(245, 158, 11, 0.35);
+  --shadow-red-glow: 0 8px 16px -4px rgba(239, 68, 68, 0.35);
+  --shadow-violet-glow: 0 8px 16px -4px rgba(139, 92, 246, 0.35);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  -webkit-font-smoothing: antialiased;
 }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+/* ── Gradients (can't express multi-stop gradients as single Tailwind class) ── */
+.bg-sidebar-gradient {
+  background: linear-gradient(180deg, var(--color-side) 0%, var(--color-side-light) 100%);
+}
+.bg-brand-gradient {
+  background: linear-gradient(135deg, var(--color-brand-400), var(--color-brand-600));
+}
+.bg-brand-gradient-btn {
+  background: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-600));
+}
+.bg-danger-gradient-btn {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+.bg-welcome-gradient {
+  background: linear-gradient(135deg, #1e293b, #0f172a 50%, #1e293b);
+}
+.bg-orb-brand {
+  background: radial-gradient(circle, var(--color-brand-500), transparent 70%);
+}
+
+/* Quick action card backgrounds */
+.bg-action-blue   { background-color: #dbeafe; }
+.bg-action-orange { background-color: #fed7aa; }
+.bg-action-green  { background-color: #a7f3d0; }
+.bg-action-violet { background-color: #ddd6fe; }
+
+/* Progress bar gradients */
+.bg-bar-brand   { background: linear-gradient(90deg, #f97316, #fb923c); }
+.bg-bar-blue    { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.bg-bar-green   { background: linear-gradient(90deg, #10b981, #34d399); }
+.bg-bar-violet  { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.bg-bar-pink    { background: linear-gradient(90deg, #ec4899, #f472b6); }
+.bg-bar-amber   { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+
+/* Stat card backgrounds */
+.bg-stat-brand   { background: linear-gradient(135deg, #fff7ed, #fffbeb); }
+.bg-stat-info    { background: linear-gradient(135deg, #eff6ff, #eef2ff); }
+.bg-stat-success { background: linear-gradient(135deg, #ecfdf5, #f0fdf4); }
+.bg-stat-warning { background: linear-gradient(135deg, #fffbeb, #fefce8); }
+.bg-stat-danger  { background: linear-gradient(135deg, #fef2f2, #fff1f2); }
+
+/* Landing page feature icon gradients */
+.bg-feat-orange  { background: linear-gradient(135deg, #f97316, #f59e0b); }
+.bg-feat-blue    { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+.bg-feat-green   { background: linear-gradient(135deg, #10b981, #14b8a6); }
+.bg-feat-violet  { background: linear-gradient(135deg, #8b5cf6, #a855f7); }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── Form elements ── */
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-brand-500);
+  cursor: pointer;
+  border: 3px solid white;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+}
+input[type="checkbox"] {
+  accent-color: var(--color-brand-500);
+}
+::selection {
+  background: #fed7aa;
+}
+
+/* ── Animations ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-up { animation: fadeInUp 0.4s ease-out both; }
+.animate-fade-in { animation: fadeIn 0.3s ease-out both; }
+.animate-scale-in { animation: scaleIn 0.25s ease-out both; }
+.animate-slide-down { animation: slideDown 0.25s ease-out both; }

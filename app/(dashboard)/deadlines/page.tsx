@@ -1,0 +1,340 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useSession } from "@/lib/auth-client";
+import { Card, CardBody, CardHeader, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
+import { SectionTitle } from "@/components/ui/section-title";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Alert } from "@/components/ui/alert";
+import { formatDate } from "@/lib/utils";
+import { getDaysUntil } from "@/lib/author-utils";
+import {
+  Calendar, FileText, Download, Save, Plus, Trash2, Pencil, X,
+  Clock, CheckCircle2, AlertTriangle, ChevronRight,
+} from "lucide-react";
+
+interface TemplateData {
+  id: string;
+  name: string;
+  description: string | null;
+  fileKey?: string;
+  mimeType?: string | null;
+  createdAt?: string;
+}
+
+interface DeadlineSettings {
+  submissionDeadline?: string;
+  reviewDeadline?: string;
+  cameraReadyDeadline?: string;
+  notificationDate?: string;
+  submissionDeadlineLabel?: string;
+  reviewDeadlineLabel?: string;
+  cameraReadyDeadlineLabel?: string;
+  notificationDateLabel?: string;
+}
+
+const DEADLINE_DEFAULTS = [
+  { defaultLabel: "Paper Submission", key: "submissionDeadline" as const, labelKey: "submissionDeadlineLabel" as const, icon: FileText, step: 1 },
+  { defaultLabel: "Review Deadline", key: "reviewDeadline" as const, labelKey: "reviewDeadlineLabel" as const, icon: Clock, step: 2 },
+  { defaultLabel: "Notification", key: "notificationDate" as const, labelKey: "notificationDateLabel" as const, icon: AlertTriangle, step: 3 },
+  { defaultLabel: "Camera-Ready", key: "cameraReadyDeadline" as const, labelKey: "cameraReadyDeadlineLabel" as const, icon: CheckCircle2, step: 4 },
+];
+
+export default function DeadlinesPage() {
+  const { data: session } = useSession();
+  const role = (session?.user as Record<string, unknown>)?.role as string;
+  const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(role);
+
+  const [templates, setTemplates] = useState<TemplateData[]>([]);
+  const [settings, setSettings] = useState<DeadlineSettings>({});
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<DeadlineSettings>({});
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "danger">("success");
+  const [loading, setLoading] = useState(true);
+
+  // Template management (admin)
+  const [showAddTemplate, setShowAddTemplate] = useState(false);
+  const [templateForm, setTemplateForm] = useState({ name: "", description: "" });
+  const [addingTemplate, setAddingTemplate] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/templates").then((r) => r.json()).catch(() => ({ templates: [] })),
+      fetch("/api/submissions/tracks").then((r) => r.json()).catch(() => ({})),
+    ])
+      .then(([tmplData]) => {
+        setTemplates(tmplData.templates || []);
+        const fallback: DeadlineSettings = {
+          submissionDeadline: "2026-06-30",
+          reviewDeadline: "2026-08-15",
+          cameraReadyDeadline: "2026-09-30",
+          notificationDate: "2026-08-31",
+        };
+        setSettings(fallback);
+        setEditForm(fallback);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSaveDeadlines() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/settings/deadlines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      if (res.ok) {
+        setSettings(editForm);
+        setEditing(false);
+        showMsg("Deadlines saved successfully");
+      } else {
+        showMsg("Failed to save", "danger");
+      }
+    } catch {
+      setSettings(editForm);
+      setEditing(false);
+      showMsg("Saved locally (this session only)");
+    }
+    setSaving(false);
+  }
+
+  function showMsg(text: string, type: "success" | "danger" = "success") {
+    setMessage(text);
+    setMessageType(type);
+    setTimeout(() => setMessage(""), 5000);
+  }
+
+  async function loadTemplates() {
+    const res = await fetch("/api/templates");
+    const data = await res.json();
+    setTemplates(data.templates || []);
+  }
+
+  async function createTemplate() {
+    if (!templateForm.name.trim()) return;
+    setAddingTemplate(true);
+    try {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateForm.name,
+          description: templateForm.description || undefined,
+          fileName: "template.docx",
+          mimeType: "application/octet-stream",
+        }),
+      });
+      if (res.ok) {
+        setTemplateForm({ name: "", description: "" });
+        setShowAddTemplate(false);
+        showMsg("Template added");
+        loadTemplates();
+      }
+    } catch {}
+    setAddingTemplate(false);
+  }
+
+  async function deleteTemplate(id: string) {
+    if (!confirm("Are you sure you want to delete this template?")) return;
+    await fetch(`/api/templates/${id}`, { method: "DELETE" });
+    showMsg("Template deleted");
+    loadTemplates();
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="h-6 w-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        title="Schedule & Documents"
+        subtitle="DPSTCon 2026"
+        action={
+          isAdmin && !editing ? (
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Pencil className="h-4 w-4" />Edit Schedule
+            </Button>
+          ) : null
+        }
+      />
+
+      {message && <Alert tone={messageType}>{message}</Alert>}
+
+      {/* Admin: Edit deadlines inline */}
+      {isAdmin && editing && (
+        <Card accent="brand">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-ink">Edit Schedule</h3>
+              <button onClick={() => { setEditing(false); setEditForm(settings); }} className="text-ink-muted hover:text-ink">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {DEADLINE_DEFAULTS.map((d) => (
+                <div key={d.key} className="space-y-2">
+                  <Field label="Label">
+                    <Input value={editForm[d.labelKey] || d.defaultLabel} onChange={(e) => setEditForm({ ...editForm, [d.labelKey]: e.target.value })} placeholder={d.defaultLabel} />
+                  </Field>
+                  <Field label="Date">
+                    <Input type="date" value={editForm[d.key] || ""} onChange={(e) => setEditForm({ ...editForm, [d.key]: e.target.value })} />
+                  </Field>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+          <CardFooter className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => { setEditing(false); setEditForm(settings); }}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveDeadlines} loading={saving}><Save className="h-4 w-4" />Save</Button>
+          </CardFooter>
+        </Card>
+      )}
+
+      {/* ─── Timeline Cards ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {DEADLINE_DEFAULTS.map((d) => {
+          const date = settings[d.key];
+          if (!date) return null;
+          const isPast = new Date(date) <= new Date();
+          const daysLeft = getDaysUntil(date);
+          const Icon = d.icon;
+
+          let borderColor = "border-blue-200";
+          let bgColor = "bg-blue-50/50";
+          let iconBg = "bg-blue-100 text-blue-600";
+          let badgeTone: "success" | "warning" | "danger" | "info" | "neutral" = "info";
+
+          if (isPast) {
+            borderColor = "border-emerald-200";
+            bgColor = "bg-emerald-50/50";
+            iconBg = "bg-emerald-100 text-emerald-600";
+            badgeTone = "success";
+          } else if (daysLeft <= 7) {
+            borderColor = "border-red-200";
+            bgColor = "bg-red-50/50";
+            iconBg = "bg-red-100 text-red-600";
+            badgeTone = "danger";
+          } else if (daysLeft <= 30) {
+            borderColor = "border-amber-200";
+            bgColor = "bg-amber-50/50";
+            iconBg = "bg-amber-100 text-amber-600";
+            badgeTone = "warning";
+          }
+
+          return (
+            <div key={d.key} className={`rounded-xl border-2 ${borderColor} ${bgColor} p-4 transition-all hover:shadow-md`}>
+              <div className="flex items-start gap-3">
+                <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-ink-muted uppercase tracking-wide">Step {d.step}</p>
+                  <p className="text-sm font-semibold text-ink mt-0.5">{settings[d.labelKey] || d.defaultLabel}</p>
+                  <p className="text-sm text-ink-light mt-1">{formatDate(date)}</p>
+                  <Badge tone={badgeTone} className="mt-2 text-xs">
+                    {isPast ? "Completed" : `${daysLeft} days left`}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ─── Document Templates ─── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+              <FileText className="h-4 w-4" />Document Templates
+              <Badge tone="neutral" className="text-xs">{templates.length}</Badge>
+            </h3>
+            {isAdmin && (
+              <Button size="sm" variant="outline" onClick={() => setShowAddTemplate(!showAddTemplate)}>
+                {showAddTemplate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {showAddTemplate ? "Cancel" : "Add Template"}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+
+        {/* Admin: Add template form */}
+        {isAdmin && showAddTemplate && (
+          <div className="px-5 pb-4 border-b border-border">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <Input
+                  value={templateForm.name}
+                  onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                  placeholder="Template name (e.g. Full Paper Template)"
+                />
+              </div>
+              <div className="flex-1">
+                <Input
+                  value={templateForm.description}
+                  onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+                  placeholder="Description (optional)"
+                />
+              </div>
+              <Button size="sm" onClick={createTemplate} loading={addingTemplate} disabled={!templateForm.name.trim()}>
+                <Plus className="h-4 w-4" />Add
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <CardBody className="p-0">
+          {templates.length === 0 ? (
+            <div className="py-12">
+              <EmptyState
+                icon={<FileText className="h-12 w-12" />}
+                title="No templates yet"
+                body={isAdmin ? "Add document templates for participants to download." : "Templates will be available soon."}
+              />
+            </div>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {templates.map((tmpl) => (
+                <div key={tmpl.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-surface-hover/50 transition-colors group">
+                  <div className="h-9 w-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+                    <FileText className="h-4.5 w-4.5 text-brand-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-ink truncate">{tmpl.name}</p>
+                    {tmpl.description && <p className="text-xs text-ink-muted truncate">{tmpl.description}</p>}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <a href={`/api/templates/${tmpl.id}/download`}>
+                      <Button variant="outline" size="sm">
+                        <Download className="h-3.5 w-3.5" />Download
+                      </Button>
+                    </a>
+                    {isAdmin && (
+                      <button onClick={() => deleteTemplate(tmpl.id)} className="p-1.5 rounded-lg text-ink-muted hover:text-danger hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100" title="Delete">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
