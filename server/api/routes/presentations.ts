@@ -8,9 +8,10 @@ import {
 } from "@/server/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { authMiddleware, requireRole } from "../middleware/auth";
+import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
@@ -135,7 +136,7 @@ app.patch("/:id/committee", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => 
 // H5: Verify user is an assigned committee judge before allowing evaluation
 app.post("/:id/evaluations", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as { id: string; role: string; roles: string[] };
+  const currentUser = c.get("user");
   const body = await c.req.json();
 
   const schema = z.object({ scores: z.record(z.string(), z.number()), comments: z.string().optional() });

@@ -3,12 +3,12 @@ import { db } from "@/server/db";
 import { submissions, coAuthors, tracks, reviewAssignments, storedFiles } from "@/server/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
-import type { SessionUser } from "../middleware/auth";
+import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getUploadUrl, getDownloadUrl, generateFileKey } from "@/server/r2";
 import { hasRole } from "@/lib/permissions";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
@@ -20,7 +20,7 @@ app.get("/tracks", async (c) => {
 
 // GET /api/submissions — multi-role aware listing
 app.get("/", async (c) => {
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   // ADMIN sees everything
   if (hasRole(currentUser, "ADMIN")) {
@@ -95,7 +95,7 @@ app.get("/", async (c) => {
 // GET /api/submissions/:id
 app.get("/:id", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, id),
@@ -182,7 +182,7 @@ const createSchema = z.object({
 });
 
 app.post("/", async (c) => {
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error", details: parsed.error.flatten().fieldErrors }, 400);
@@ -221,7 +221,7 @@ app.post("/", async (c) => {
 // PATCH /api/submissions/:id
 app.patch("/:id", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
 
   // Validate allowed fields to prevent mass assignment
@@ -265,7 +265,7 @@ app.patch("/:id", async (c) => {
 // POST /api/submissions/:id/submit
 app.post("/:id/submit", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
@@ -310,7 +310,7 @@ app.post("/:id/submit", async (c) => {
 // POST /api/submissions/:id/resubmit
 app.post("/:id/resubmit", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
@@ -339,7 +339,7 @@ app.post("/:id/resubmit", async (c) => {
 // POST /api/submissions/:id/withdraw
 app.post("/:id/withdraw", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
@@ -358,7 +358,7 @@ app.post("/:id/withdraw", async (c) => {
 // POST /api/submissions/:id/rebuttal — M5: validate rebuttal text
 app.post("/:id/rebuttal", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
 
   const rebuttalSchema = z.object({
@@ -385,7 +385,7 @@ app.post("/:id/rebuttal", async (c) => {
 // POST /api/submissions/:id/camera-ready
 app.post("/:id/camera-ready", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const { cameraReadyUrl } = await c.req.json();
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
@@ -403,16 +403,31 @@ app.post("/:id/camera-ready", async (c) => {
 });
 
 // POST /api/submissions/:id/upload-url
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/zip",
+  "application/x-zip-compressed",
+  "image/png",
+  "image/jpeg",
+] as const;
+
 const uploadSchema = z.object({
   fileName: z.string().min(1),
-  mimeType: z.string().min(1),
+  mimeType: z.string().min(1).refine(
+    (v) => (ALLOWED_MIME_TYPES as readonly string[]).includes(v),
+    { message: "ไฟล์ประเภทนี้ไม่ได้รับอนุญาต (อนุญาต: PDF, DOCX, XLSX, ZIP, PNG, JPEG)" }
+  ),
   fileSize: z.number().positive().max(50 * 1024 * 1024),
   kind: z.enum(["MANUSCRIPT", "SUPPLEMENTARY", "CAMERA_READY"]),
 });
 
 app.post("/:id/upload-url", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
   const parsed = uploadSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error", details: parsed.error.flatten().fieldErrors }, 400);
@@ -423,7 +438,7 @@ app.post("/:id/upload-url", async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  const { fileName, mimeType, fileSize, kind } = parsed.data;
+  const { fileName, mimeType, kind } = parsed.data;
   const kindMap = { MANUSCRIPT: "manuscript", SUPPLEMENTARY: "supplementary", CAMERA_READY: "camera-ready" } as const;
   const fileKey = generateFileKey(id, fileName, kindMap[kind]);
 
@@ -446,7 +461,7 @@ const confirmUploadSchema = z.object({
 
 app.post("/:id/confirm-upload", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
   const parsed = confirmUploadSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
@@ -487,7 +502,7 @@ app.post("/:id/confirm-upload", async (c) => {
 // GET /api/submissions/:id/files
 app.get("/:id/files", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
@@ -502,7 +517,7 @@ app.get("/:id/files", async (c) => {
 // GET /api/submissions/:id/file-url
 app.get("/:id/file-url", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, id),
@@ -526,7 +541,7 @@ app.get("/:id/file-url", async (c) => {
 // GET /api/submissions/:id/download/:fileId
 app.get("/:id/download/:fileId", async (c) => {
   const { id, fileId } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
@@ -550,7 +565,7 @@ app.get("/:id/download/:fileId", async (c) => {
 // POST /api/submissions/:id/conflicts — M7: require REVIEWER+ role and validate
 app.post("/:id/conflicts", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   if (!hasRole(currentUser, "REVIEWER", "ADMIN", "PROGRAM_CHAIR")) {
     return c.json({ error: "Forbidden — only reviewers can declare conflicts" }, 403);
@@ -572,7 +587,7 @@ app.post("/:id/conflicts", async (c) => {
 // POST /api/submissions/:id/bids
 app.post("/:id/bids", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   // Only reviewers can bid
   if (!hasRole(currentUser, "REVIEWER", "ADMIN", "PROGRAM_CHAIR")) {
@@ -601,7 +616,7 @@ app.post("/:id/bids", async (c) => {
 // POST /api/submissions/:id/discussion — M4: validate visibility enum
 app.post("/:id/discussion", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
 
   const discussionSchema = z.object({

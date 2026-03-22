@@ -13,7 +13,7 @@ export type SessionUser = {
   roles: string[]; // all roles from user_roles table
 };
 
-type AuthEnv = {
+export type AuthEnv = {
   Variables: {
     user: SessionUser;
     session: { id: string };

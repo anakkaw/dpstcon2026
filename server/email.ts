@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { db } from "@/server/db";
 import { outgoingEmails } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "@/server/logger";
 
 // ─── Email Provider (Resend) ─────────────────────────────
 
@@ -34,7 +35,7 @@ export async function sendEmail(opts: {
     throw new Error(`Resend API error: ${error.message}`);
   }
 
-  console.log("[Email] Sent via Resend:", opts.subject, "→", opts.to);
+  logger.info("Email sent", { to: opts.to, subject: opts.subject });
   return data;
 }
 
@@ -73,7 +74,11 @@ export async function queueEmail(opts: {
       })
       .where(eq(outgoingEmails.id, record.id));
 
-    console.error("[Email] Failed to send:", opts.subject, "→", opts.to, err);
+    logger.error("Email send failed", {
+      to: opts.to,
+      subject: opts.subject,
+      error: err instanceof Error ? err.message : "Unknown error",
+    });
   }
 
   return record;
@@ -92,10 +97,10 @@ export function advisorApprovalEmail(data: {
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #f97316;">DPSTCon — ขอรับรองบทความ</h2>
-        <p>เรียน ${data.advisorName},</p>
-        <p>นักศึกษา <strong>${data.studentName}</strong> ขอความอนุเคราะห์ท่านรับรองบทความ:</p>
+        <p>เรียน ${escapeHtml(data.advisorName)},</p>
+        <p>นักศึกษา <strong>${escapeHtml(data.studentName)}</strong> ขอความอนุเคราะห์ท่านรับรองบทความ:</p>
         <p style="background: #f8fafc; padding: 12px; border-radius: 8px; border-left: 4px solid #f97316;">
-          <strong>${data.paperTitle}</strong>
+          <strong>${escapeHtml(data.paperTitle)}</strong>
         </p>
         <p>กรุณาคลิกลิงก์ด้านล่างเพื่อดำเนินการ:</p>
         <a href="${data.approvalUrl}" style="display: inline-block; background: #f97316; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">
@@ -180,15 +185,15 @@ export function decisionEmail(data: {
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #f97316;">DPSTCon — ผลการพิจารณาบทความ</h2>
-        <p>เรียน ${data.authorName},</p>
-        <p>ขอแจ้งผลการพิจารณาบทความ <strong>${data.paperTitle}</strong>:</p>
+        <p>เรียน ${escapeHtml(data.authorName)},</p>
+        <p>ขอแจ้งผลการพิจารณาบทความ <strong>${escapeHtml(data.paperTitle)}</strong>:</p>
         <p style="background: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid ${info.color}; font-size: 16px;">
           <strong style="color: ${info.color};">${info.text}</strong>
         </p>
         ${data.comments ? `
         <div style="margin-top: 16px;">
           <p style="font-weight: bold; margin-bottom: 4px;">ความคิดเห็นจาก Committee:</p>
-          <p style="background: #f8fafc; padding: 12px; border-radius: 8px; white-space: pre-wrap;">${data.comments}</p>
+          <p style="background: #f8fafc; padding: 12px; border-radius: 8px; white-space: pre-wrap;">${escapeHtml(data.comments)}</p>
         </div>
         ` : ""}
         ${data.submissionUrl ? `
@@ -254,10 +259,10 @@ export function reviewAssignmentEmail(data: {
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #f97316;">DPSTCon — มอบหมายรีวิวบทความ</h2>
-        <p>เรียน ${data.reviewerName},</p>
+        <p>เรียน ${escapeHtml(data.reviewerName)},</p>
         <p>คุณได้รับมอบหมายให้รีวิวบทความ:</p>
         <p style="background: #f8fafc; padding: 12px; border-radius: 8px; border-left: 4px solid #3b82f6;">
-          <strong>${data.paperTitle}</strong>
+          <strong>${escapeHtml(data.paperTitle)}</strong>
         </p>
         ${data.dueDate ? `<p>กรุณาส่งผลรีวิวภายในวันที่ <strong>${data.dueDate}</strong></p>` : ""}
         <a href="${data.loginUrl}" style="display: inline-block; background: #f97316; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">

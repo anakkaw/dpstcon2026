@@ -4,8 +4,12 @@ import { submissions, storedFiles } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { getDownloadUrl } from "@/server/r2";
+import { rateLimit } from "../middleware/rate-limit";
 
 const app = new OpenAPIHono();
+
+// Rate limit: 15 requests per 15 minutes per IP
+app.use("/*", rateLimit(15, 15 * 60 * 1000));
 
 // No auth required — public token-based access
 // M3: Advisor tokens expire after 7 days from submission

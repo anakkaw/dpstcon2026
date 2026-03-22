@@ -4,8 +4,12 @@ import { user, account } from "@/server/db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { auth } from "@/server/auth";
 import { z } from "zod";
+import { rateLimit } from "../middleware/rate-limit";
 
 const app = new OpenAPIHono();
+
+// Rate limit: 10 requests per 15 minutes per IP
+app.use("/*", rateLimit(10, 15 * 60 * 1000));
 
 // GET /api/activate/:token — validate invite token (no auth required)
 app.get("/:token", async (c) => {

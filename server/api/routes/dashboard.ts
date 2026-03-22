@@ -3,15 +3,15 @@ import { db } from "@/server/db";
 import { submissions, reviews, reviewAssignments, userRoles } from "@/server/db/schema";
 import { eq, count } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
-import type { SessionUser } from "../middleware/auth";
+import type { AuthEnv } from "../middleware/auth";
 import { hasRole } from "@/lib/permissions";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
 app.get("/", async (c) => {
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   // Build combined stats based on all user roles
   const stats: Record<string, unknown> = {};

@@ -11,13 +11,14 @@ import {
 } from "@/server/db/schema";
 import { eq, and, ilike, or, desc, inArray } from "drizzle-orm";
 import { authMiddleware, requireRole } from "../middleware/auth";
+import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { queueEmail, inviteEmail } from "@/server/email";
 import { getPrimaryRole } from "@/lib/permissions";
 
 const INVITE_EXPIRY_HOURS = 72;
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
@@ -76,7 +77,7 @@ app.get("/", requireRole("ADMIN"), async (c) => {
 
 // GET /api/users/me/roles — get current user's roles (any authenticated user)
 app.get("/me/roles", async (c) => {
-  const currentUser = c.get("user" as never) as { id: string; roles: string[] };
+  const currentUser = c.get("user");
   return c.json({ roles: currentUser.roles });
 });
 
@@ -496,7 +497,7 @@ app.post("/:id/reset-password", requireRole("ADMIN"), async (c) => {
 // DELETE /api/users/:id — delete user (ADMIN)
 app.delete("/:id", requireRole("ADMIN"), async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as { id: string };
+  const currentUser = c.get("user");
 
   if (id === currentUser.id) {
     return c.json({ error: "ไม่สามารถลบตัวเองได้" }, 400);

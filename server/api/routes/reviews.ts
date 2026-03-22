@@ -8,17 +8,17 @@ import {
 } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { authMiddleware, requireRole } from "../middleware/auth";
-import type { SessionUser } from "../middleware/auth";
+import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { hasRole } from "@/lib/permissions";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
 // GET /api/reviews/assignments
 app.get("/assignments", async (c) => {
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const isAdmin = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
 
   const whereClause = isAdmin ? undefined : eq(reviewAssignments.reviewerId, currentUser.id);
@@ -42,7 +42,7 @@ app.get("/assignments", async (c) => {
 
 // POST /api/reviews/assignments/manual
 app.post("/assignments/manual", async (c) => {
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
   const schema = z.object({
     submissionId: z.string().uuid(),
@@ -151,7 +151,7 @@ app.delete("/assignments/:id", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) 
 
 // POST /api/reviews/reviews — submit review (must have assignment)
 app.post("/reviews", async (c) => {
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
 
   const schema = z.object({
@@ -208,7 +208,7 @@ app.post("/reviews", async (c) => {
 
 // POST /api/reviews/decisions — make decision (ADMIN/PROGRAM_CHAIR only)
 app.post("/decisions", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
   const body = await c.req.json();
 
   const schema = z.object({

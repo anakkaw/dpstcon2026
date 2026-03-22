@@ -3,14 +3,15 @@ import { db } from "@/server/db";
 import { notifications } from "@/server/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
+import type { AuthEnv } from "../middleware/auth";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
 // GET /api/notifications — list notifications
 app.get("/", async (c) => {
-  const currentUser = c.get("user" as never) as { id: string };
+  const currentUser = c.get("user");
 
   const items = await db
     .select()
@@ -25,7 +26,7 @@ app.get("/", async (c) => {
 // PATCH /api/notifications/:id/read — mark as read
 app.patch("/:id/read", async (c) => {
   const { id } = c.req.param();
-  const currentUser = c.get("user" as never) as { id: string };
+  const currentUser = c.get("user");
 
   await db
     .update(notifications)
@@ -39,7 +40,7 @@ app.patch("/:id/read", async (c) => {
 
 // PATCH /api/notifications/read-all — mark all as read
 app.patch("/read-all", async (c) => {
-  const currentUser = c.get("user" as never) as { id: string };
+  const currentUser = c.get("user");
 
   await db
     .update(notifications)

@@ -9,6 +9,7 @@ import {
   boolean,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -281,10 +282,10 @@ export const reviewAssignments = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     submissionId: uuid("submission_id")
-      .references(() => submissions.id)
+      .references(() => submissions.id, { onDelete: "cascade" })
       .notNull(),
     reviewerId: text("reviewer_id")
-      .references(() => user.id)
+      .references(() => user.id, { onDelete: "cascade" })
       .notNull(),
     status: assignmentStatusEnum("status").default("PENDING").notNull(),
     assignedAt: timestamp("assigned_at").defaultNow().notNull(),
@@ -305,12 +306,12 @@ export const reviews = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     submissionId: uuid("submission_id")
-      .references(() => submissions.id)
+      .references(() => submissions.id, { onDelete: "cascade" })
       .notNull(),
     reviewerId: text("reviewer_id")
-      .references(() => user.id)
+      .references(() => user.id, { onDelete: "cascade" })
       .notNull(),
-    assignmentId: uuid("assignment_id").references(() => reviewAssignments.id),
+    assignmentId: uuid("assignment_id").references(() => reviewAssignments.id, { onDelete: "set null" }),
     commentsToAuthor: text("comments_to_author"),
     commentsToChair: text("comments_to_chair"),
     recommendation: reviewRecommendationEnum("recommendation"),
@@ -329,10 +330,10 @@ export const decisions = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     submissionId: uuid("submission_id")
-      .references(() => submissions.id)
+      .references(() => submissions.id, { onDelete: "cascade" })
       .notNull(),
     decidedBy: text("decided_by")
-      .references(() => user.id)
+      .references(() => user.id, { onDelete: "cascade" })
       .notNull(),
     outcome: decisionOutcomeEnum("outcome").notNull(),
     comments: text("comments"),
@@ -342,39 +343,55 @@ export const decisions = pgTable(
   (table) => [index("decisions_submission_idx").on(table.submissionId)]
 );
 
-export const conflicts = pgTable("conflicts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  submissionId: uuid("submission_id")
-    .references(() => submissions.id)
-    .notNull(),
-  userId: text("user_id")
-    .references(() => user.id)
-    .notNull(),
-  reason: text("reason"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const conflicts = pgTable(
+  "conflicts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .references(() => submissions.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: text("user_id")
+      .references(() => user.id, { onDelete: "cascade" })
+      .notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("conflicts_submission_idx").on(table.submissionId),
+    index("conflicts_user_idx").on(table.userId),
+    uniqueIndex("conflicts_submission_user_unique").on(table.submissionId, table.userId),
+  ]
+);
 
-export const bids = pgTable("bids", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  submissionId: uuid("submission_id")
-    .references(() => submissions.id)
-    .notNull(),
-  reviewerId: text("reviewer_id")
-    .references(() => user.id)
-    .notNull(),
-  preference: bidPreferenceEnum("preference").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const bids = pgTable(
+  "bids",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .references(() => submissions.id, { onDelete: "cascade" })
+      .notNull(),
+    reviewerId: text("reviewer_id")
+      .references(() => user.id, { onDelete: "cascade" })
+      .notNull(),
+    preference: bidPreferenceEnum("preference").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("bids_submission_idx").on(table.submissionId),
+    index("bids_reviewer_idx").on(table.reviewerId),
+    uniqueIndex("bids_submission_reviewer_unique").on(table.submissionId, table.reviewerId),
+  ]
+);
 
 export const discussions = pgTable(
   "discussions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     submissionId: uuid("submission_id")
-      .references(() => submissions.id)
+      .references(() => submissions.id, { onDelete: "cascade" })
       .notNull(),
     authorId: text("author_id")
-      .references(() => user.id)
+      .references(() => user.id, { onDelete: "cascade" })
       .notNull(),
     message: text("message").notNull(),
     visibility: discussionVisibilityEnum("visibility")
@@ -435,7 +452,7 @@ export const presentationAssignments = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     submissionId: uuid("submission_id")
-      .references(() => submissions.id)
+      .references(() => submissions.id, { onDelete: "cascade" })
       .notNull(),
     type: presentationTypeEnum("type").notNull(),
     status: presentationAssignmentStatusEnum("status")
@@ -445,7 +462,10 @@ export const presentationAssignments = pgTable(
     room: varchar("room", { length: 100 }),
     duration: integer("duration"),
   },
-  (table) => [index("presentation_status_idx").on(table.status)]
+  (table) => [
+    index("presentation_status_idx").on(table.status),
+    index("presentation_submission_idx").on(table.submissionId),
+  ]
 );
 
 export const presentationCommitteeAssignments = pgTable(
@@ -453,10 +473,10 @@ export const presentationCommitteeAssignments = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     presentationId: uuid("presentation_id")
-      .references(() => presentationAssignments.id)
+      .references(() => presentationAssignments.id, { onDelete: "cascade" })
       .notNull(),
     judgeId: text("judge_id")
-      .references(() => user.id)
+      .references(() => user.id, { onDelete: "cascade" })
       .notNull(),
   },
   (table) => [index("pres_committee_judge_idx").on(table.judgeId)]
@@ -475,10 +495,10 @@ export const presentationEvaluations = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     presentationId: uuid("presentation_id")
-      .references(() => presentationAssignments.id)
+      .references(() => presentationAssignments.id, { onDelete: "cascade" })
       .notNull(),
     judgeId: text("judge_id")
-      .references(() => user.id)
+      .references(() => user.id, { onDelete: "cascade" })
       .notNull(),
     scores: jsonb("scores"),
     comments: text("comments"),
@@ -504,6 +524,7 @@ export const auditLogs = pgTable(
   (table) => [
     index("audit_entity_idx").on(table.entityType, table.entityId),
     index("audit_actor_idx").on(table.actorId),
+    index("audit_created_at_idx").on(table.createdAt),
   ]
 );
 

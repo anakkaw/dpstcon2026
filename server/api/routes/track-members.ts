@@ -3,11 +3,11 @@ import { db } from "@/server/db";
 import { trackMembers, tracks, user, userRoles } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
-import type { SessionUser } from "../middleware/auth";
+import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { hasRole, getPrimaryRole } from "@/lib/permissions";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
@@ -22,7 +22,7 @@ async function isTrackHead(userId: string, trackId: string): Promise<boolean> {
 // GET /api/track-members/:trackId
 app.get("/:trackId", async (c) => {
   const { trackId } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   if (!hasRole(currentUser, "ADMIN") && !(await isTrackHead(currentUser.id, trackId))) {
     return c.json({ error: "Forbidden" }, 403);
@@ -46,7 +46,7 @@ const addSchema = z.object({
 
 app.post("/:trackId", async (c) => {
   const { trackId } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   if (!hasRole(currentUser, "ADMIN") && !(await isTrackHead(currentUser.id, trackId))) {
     return c.json({ error: "Forbidden" }, 403);
@@ -107,7 +107,7 @@ app.post("/:trackId", async (c) => {
 // DELETE /api/track-members/:trackId/:memberId
 app.delete("/:trackId/:memberId", async (c) => {
   const { trackId, memberId } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   if (!hasRole(currentUser, "ADMIN") && !(await isTrackHead(currentUser.id, trackId))) {
     return c.json({ error: "Forbidden" }, 403);
@@ -125,7 +125,7 @@ app.delete("/:trackId/:memberId", async (c) => {
 // GET /api/track-members/:trackId/available
 app.get("/:trackId/available", async (c) => {
   const { trackId } = c.req.param();
-  const currentUser = c.get("user" as never) as SessionUser;
+  const currentUser = c.get("user");
 
   if (!hasRole(currentUser, "ADMIN") && !(await isTrackHead(currentUser.id, trackId))) {
     return c.json({ error: "Forbidden" }, 403);
