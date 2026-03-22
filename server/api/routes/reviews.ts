@@ -124,7 +124,7 @@ app.post("/assignments/manual", async (c) => {
 
   if (reviewer && submission) {
     const { queueEmail, reviewAssignmentEmail } = await import("@/server/email");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const emailContent = reviewAssignmentEmail({
       reviewerName: reviewer.name,
       paperTitle: submission.title,
@@ -267,7 +267,7 @@ app.post("/decisions", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
 
   if (submission) {
     const { queueEmail, decisionEmail } = await import("@/server/email");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const emailContent = decisionEmail({
       authorName: submission.author.name,
       paperTitle: submission.title,

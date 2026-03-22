@@ -291,7 +291,7 @@ app.post("/:id/submit", async (c) => {
     .returning();
 
   const { queueEmail, advisorApprovalEmail } = await import("@/server/email");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const emailContent = advisorApprovalEmail({
     advisorName: submission.advisorName || "Advisor",
     studentName: currentUser.name,

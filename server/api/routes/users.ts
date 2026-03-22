@@ -245,7 +245,7 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   );
 
   // Send invite email
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const activationUrl = `${appUrl}/activate/${inviteToken}`;
   const emailContent = inviteEmail({
     userName: parsed.data.name,
@@ -293,7 +293,7 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
 
   const results: { email: string; status: string }[] = [];
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   // Pre-fetch all existing users by email in a single query to avoid N+1
   const importEmails = parsed.data.users.map((u) => u.email);
@@ -443,7 +443,7 @@ app.post("/:id/resend-invite", requireRole("ADMIN"), async (c) => {
     .set({ inviteToken, inviteExpiresAt, updatedAt: new Date() })
     .where(eq(user.id, id));
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const activationUrl = `${appUrl}/activate/${inviteToken}`;
   const emailContent = inviteEmail({
     userName: found.name,

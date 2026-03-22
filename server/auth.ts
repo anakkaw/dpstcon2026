@@ -17,7 +17,7 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24, // refresh daily
     cookieCache: { enabled: true, maxAge: 60 * 5 }, // 5 min cache
   },
-  trustedOrigins: [process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"],
+  trustedOrigins: [process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"],
   user: {
     additionalFields: {
       role: {
