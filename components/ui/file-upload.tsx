@@ -45,7 +45,7 @@ export function FileUpload({
         return;
       }
 
-      // M22: Validate file type client-side
+      // Validate file type client-side
       const allowedTypes = accept.split(",").map((t) => t.trim().toLowerCase());
       const fileExt = `.${file.name.split(".").pop()?.toLowerCase()}`;
       if (allowedTypes.length > 0 && !allowedTypes.includes(fileExt)) {
@@ -79,17 +79,36 @@ export function FileUpload({
         setProgress(30);
 
         // Step 2: Upload file to R2 via presigned URL
-        const uploadRes = await fetch(uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-          body: file,
+        // Use XMLHttpRequest for real progress tracking (important on mobile)
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", uploadUrl);
+          xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              // Map upload progress to 30-90% range
+              const pct = 30 + Math.round((e.loaded / e.total) * 60);
+              setProgress(pct);
+            }
+          };
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+            } else {
+              reject(new Error("อัปโหลดไฟล์ไม่สำเร็จ"));
+            }
+          };
+
+          xhr.onerror = () => reject(new Error("เครือข่ายมีปัญหา กรุณาลองใหม่"));
+          xhr.ontimeout = () => reject(new Error("อัปโหลดหมดเวลา กรุณาลองใหม่"));
+          xhr.timeout = 5 * 60 * 1000; // 5 minutes timeout
+
+          xhr.send(file);
         });
 
-        if (!uploadRes.ok) {
-          throw new Error("อัปโหลดไฟล์ไม่สำเร็จ");
-        }
-
-        setProgress(70);
+        setProgress(95);
 
         // Step 3: Confirm upload
         const confirmRes = await fetch(`/api/submissions/${submissionId}/confirm-upload`, {
@@ -117,7 +136,7 @@ export function FileUpload({
         setState("error");
       }
     },
-    [submissionId, kind, maxSizeMB, onUploadComplete]
+    [submissionId, kind, accept, maxSizeMB, onUploadComplete]
   );
 
   const handleDrop = useCallback(
@@ -147,6 +166,9 @@ export function FileUpload({
     setProgress(0);
   };
 
+  // Build accept string with MIME types for better mobile compatibility
+  const fullAccept = buildMobileAccept(accept);
+
   return (
     <div>
       {label && (
@@ -175,7 +197,7 @@ export function FileUpload({
         <input
           ref={inputRef}
           type="file"
-          accept={accept}
+          accept={fullAccept}
           onChange={handleChange}
           className="hidden"
           disabled={disabled || state === "uploading"}
@@ -185,7 +207,7 @@ export function FileUpload({
           <div className="space-y-2">
             <Upload className="h-8 w-8 mx-auto text-ink-muted" />
             <p className="text-sm text-ink">
-              คลิกหรือลากไฟล์มาวางที่นี่
+              คลิกเพื่อเลือกไฟล์
             </p>
             {hint && <p className="text-xs text-ink-muted">{hint}</p>}
             <p className="text-xs text-ink-muted">
@@ -204,6 +226,7 @@ export function FileUpload({
                 style={{ width: `${progress}%` }}
               />
             </div>
+            <p className="text-xs text-ink-muted">{progress}%</p>
           </div>
         )}
 
@@ -247,4 +270,29 @@ export function FileUpload({
       </div>
     </div>
   );
+}
+
+/** Map file extensions to MIME types for mobile browser compatibility */
+function buildMobileAccept(accept: string): string {
+  const mimeMap: Record<string, string> = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".zip": "application/zip",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+  };
+
+  const extensions = accept.split(",").map((t) => t.trim().toLowerCase());
+  const mimeTypes = extensions
+    .map((ext) => mimeMap[ext])
+    .filter(Boolean);
+
+  // Return both extensions AND MIME types for maximum compatibility
+  return [...extensions, ...mimeTypes].join(",");
 }
