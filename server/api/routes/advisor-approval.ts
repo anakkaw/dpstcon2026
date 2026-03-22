@@ -1,8 +1,9 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
-import { submissions } from "@/server/db/schema";
-import { eq } from "drizzle-orm";
+import { submissions, storedFiles } from "@/server/db/schema";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
+import { getDownloadUrl } from "@/server/r2";
 
 const app = new OpenAPIHono();
 
@@ -59,7 +60,53 @@ app.get("/:token", async (c) => {
     });
   }
 
-  return c.json({ submission, alreadyResponded: false });
+  // Fetch manuscript files for advisor to review
+  const files = await db
+    .select({
+      id: storedFiles.id,
+      originalName: storedFiles.originalName,
+      mimeType: storedFiles.mimeType,
+      size: storedFiles.size,
+      kind: storedFiles.kind,
+    })
+    .from(storedFiles)
+    .where(
+      and(
+        eq(storedFiles.submissionId, submission.id),
+        eq(storedFiles.kind, "MANUSCRIPT")
+      )
+    );
+
+  return c.json({ submission, alreadyResponded: false, files });
+});
+
+// GET /api/advisor-approval/:token/download/:fileId — download file (no auth, token-based)
+app.get("/:token/download/:fileId", async (c) => {
+  const { token, fileId } = c.req.param();
+
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.advisorApprovalToken, token),
+    columns: { id: true, advisorApprovalStatus: true, submittedAt: true },
+  });
+
+  if (!submission) return c.json({ error: "Invalid token" }, 404);
+  if (isTokenExpired(submission.submittedAt)) return c.json({ error: "Token expired" }, 410);
+
+  const [file] = await db
+    .select()
+    .from(storedFiles)
+    .where(
+      and(
+        eq(storedFiles.id, fileId),
+        eq(storedFiles.submissionId, submission.id)
+      )
+    )
+    .limit(1);
+
+  if (!file) return c.json({ error: "File not found" }, 404);
+
+  const url = await getDownloadUrl(file.storedKey);
+  return c.json({ url, fileName: file.originalName });
 });
 
 // POST /api/advisor-approval/:token/respond — approve or reject

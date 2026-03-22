@@ -9,6 +9,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 
+interface FileData {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  kind: string;
+}
+
 interface SubmissionData {
   id: string;
   title: string;
@@ -27,11 +35,13 @@ export default function AdvisorApprovalPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submission, setSubmission] = useState<SubmissionData | null>(null);
+  const [files, setFiles] = useState<FileData[]>([]);
   const [alreadyResponded, setAlreadyResponded] = useState(false);
   const [responseMessage, setResponseMessage] = useState("");
   const [comments, setComments] = useState("");
   const [result, setResult] = useState<{ decision: string } | null>(null);
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState("");
 
   useEffect(() => {
     fetch(`/api/advisor-approval/${token}`)
@@ -41,6 +51,7 @@ export default function AdvisorApprovalPage() {
           setError(data.error);
         } else {
           setSubmission(data.submission);
+          setFiles(data.files || []);
           setAlreadyResponded(data.alreadyResponded);
           if (data.message) setResponseMessage(data.message);
         }
@@ -175,6 +186,52 @@ export default function AdvisorApprovalPage() {
             </div>
           </CardBody>
         </Card>
+
+        {files.length > 0 && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-semibold text-ink">ไฟล์บทความ</h2>
+            </CardHeader>
+            <CardBody>
+              <div className="space-y-2">
+                {files.map((file) => (
+                  <div key={file.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-4 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-lg shrink-0">📄</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-ink truncate">{file.originalName}</p>
+                        <p className="text-xs text-ink-muted">
+                          {file.size < 1024 * 1024
+                            ? `${(file.size / 1024).toFixed(0)} KB`
+                            : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={downloading === file.id}
+                      onClick={async () => {
+                        setDownloading(file.id);
+                        try {
+                          const res = await fetch(`/api/advisor-approval/${token}/download/${file.id}`);
+                          const data = await res.json();
+                          if (data.url) {
+                            window.open(data.url, "_blank");
+                          }
+                        } catch {} finally {
+                          setDownloading("");
+                        }
+                      }}
+                      className="text-xs font-medium text-brand-600 hover:text-brand-700 px-3 py-1.5 rounded-md hover:bg-brand-50 transition-colors shrink-0"
+                    >
+                      {downloading === file.id ? "กำลังโหลด..." : "ดาวน์โหลด"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+        )}
 
         <Card accent="brand">
           <CardHeader>
