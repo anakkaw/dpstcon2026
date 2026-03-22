@@ -10,6 +10,7 @@ import { templateRoutes } from "./routes/templates";
 import { exportRoutes } from "./routes/exports";
 import { trackMemberRoutes } from "./routes/track-members";
 import { activateRoutes } from "./routes/activate";
+import { emailLogRoutes } from "./routes/email-logs";
 
 const app = new OpenAPIHono().basePath("/api");
 
@@ -24,6 +25,7 @@ app.route("/templates", templateRoutes);
 app.route("/exports", exportRoutes);
 app.route("/track-members", trackMemberRoutes);
 app.route("/activate", activateRoutes);
+app.route("/email-logs", emailLogRoutes);
 
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
