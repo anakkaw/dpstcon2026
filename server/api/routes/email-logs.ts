@@ -76,4 +76,15 @@ app.post("/:id/retry", requireRole("ADMIN"), async (c) => {
   }
 });
 
+// GET /api/email-logs/debug — check what URL would be used in emails (ADMIN only)
+app.get("/debug", requireRole("ADMIN"), async (c) => {
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return c.json({
+    appUrl,
+    envAppUrl: process.env.APP_URL ?? "(undefined)",
+    envNextPublicAppUrl: process.env.NEXT_PUBLIC_APP_URL ?? "(undefined)",
+    sampleActivationUrl: `${appUrl}/activate/test-token-123`,
+  });
+});
+
 export { app as emailLogRoutes };
