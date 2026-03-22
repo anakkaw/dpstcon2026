@@ -27,7 +27,13 @@ app.route("/track-members", trackMemberRoutes);
 app.route("/activate", activateRoutes);
 app.route("/email-logs", emailLogRoutes);
 
-app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
+app.get("/health", (c) => c.json({
+  status: "ok",
+  timestamp: new Date().toISOString(),
+  appUrl: process.env.APP_URL || "(not set)",
+  nextPublicAppUrl: process.env.NEXT_PUBLIC_APP_URL || "(not set)",
+  resendKey: process.env.RESEND_API_KEY ? "configured" : "(not set)",
+}));
 
 export { app };
 export type AppType = typeof app;
