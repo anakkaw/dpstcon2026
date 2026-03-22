@@ -27,13 +27,19 @@ app.route("/track-members", trackMemberRoutes);
 app.route("/activate", activateRoutes);
 app.route("/email-logs", emailLogRoutes);
 
-app.get("/health", (c) => c.json({
-  status: "ok",
-  timestamp: new Date().toISOString(),
-  appUrl: process.env.APP_URL || "(not set)",
-  nextPublicAppUrl: process.env.NEXT_PUBLIC_APP_URL || "(not set)",
-  resendKey: process.env.RESEND_API_KEY ? "configured" : "(not set)",
-}));
+app.get("/health", (c) => {
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return c.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    resolvedAppUrl: appUrl,
+    envAppUrl: process.env.APP_URL ?? "(undefined)",
+    envNextPublicAppUrl: process.env.NEXT_PUBLIC_APP_URL ?? "(undefined)",
+    sampleActivationUrl: `${appUrl}/activate/test-token`,
+    resendKey: process.env.RESEND_API_KEY ? "configured" : "(not set)",
+    commit: "092ed2b",
+  });
+});
 
 export { app };
 export type AppType = typeof app;
