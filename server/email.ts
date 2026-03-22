@@ -20,8 +20,7 @@ export async function sendEmail(opts: {
 }) {
   const resend = getResend();
   if (!resend) {
-    console.log("[Email] Skipped (no API key):", opts.subject, "→", opts.to);
-    return;
+    throw new Error("RESEND_API_KEY is not configured");
   }
 
   const { data, error } = await resend.emails.send({
