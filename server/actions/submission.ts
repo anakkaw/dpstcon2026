@@ -80,6 +80,7 @@ export async function submitPaper(id: string) {
   if (submission.authorId !== session.user.id) throw new Error("Forbidden");
   if (submission.status !== "DRAFT") throw new Error("Can only submit from DRAFT");
   if (!submission.fileUrl) throw new Error("กรุณาแนบไฟล์บทความก่อนส่ง");
+  if (!submission.advisorEmail) throw new Error("ไม่พบอีเมลอาจารย์ที่ปรึกษา");
 
   const advisorToken = crypto.randomUUID();
 
@@ -95,20 +96,27 @@ export async function submitPaper(id: string) {
     .where(eq(submissions.id, id))
     .returning();
 
-  // Send advisor approval email
-  const { queueEmail, advisorApprovalEmail } = await import("@/server/email");
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const emailContent = advisorApprovalEmail({
-    advisorName: submission.advisorName || "Advisor",
-    studentName: session.user.name,
-    paperTitle: submission.title,
-    approvalUrl: `${appUrl}/advisor-approval/${advisorToken}`,
-  });
-  await queueEmail({
-    to: submission.advisorEmail!,
-    subject: emailContent.subject,
-    html: emailContent.html,
-  });
+  // Send advisor approval email (don't let email failure block submission)
+  try {
+    const { queueEmail, advisorApprovalEmail } = await import("@/server/email");
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    console.log("[submitPaper] Sending advisor email to:", submission.advisorEmail, "appUrl:", appUrl);
+    const emailContent = advisorApprovalEmail({
+      advisorName: submission.advisorName || "Advisor",
+      studentName: session.user.name,
+      paperTitle: submission.title,
+      approvalUrl: `${appUrl}/advisor-approval/${advisorToken}`,
+    });
+    await queueEmail({
+      to: submission.advisorEmail,
+      subject: emailContent.subject,
+      html: emailContent.html,
+    });
+    console.log("[submitPaper] Advisor email queued successfully");
+  } catch (err) {
+    console.error("[submitPaper] Failed to send advisor email:", err);
+    // Don't throw — submission status is already updated
+  }
 
   revalidatePath("/submissions");
   revalidatePath(`/submissions/${id}`);
