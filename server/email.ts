@@ -109,6 +109,57 @@ export function advisorApprovalEmail(data: {
   };
 }
 
+export function advisorResponseEmail(data: {
+  authorName: string;
+  advisorName: string;
+  paperTitle: string;
+  decision: "APPROVED" | "REJECTED";
+  comments?: string;
+  submissionUrl?: string;
+}) {
+  const isApproved = data.decision === "APPROVED";
+  const statusText = isApproved ? "รับรองแล้ว" : "ปฏิเสธการรับรอง";
+  const statusColor = isApproved ? "#22c55e" : "#ef4444";
+
+  return {
+    subject: `[DPSTCon] อาจารย์ที่ปรึกษา${isApproved ? "รับรอง" : "ปฏิเสธ"}บทความ — ${data.paperTitle}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #f97316;">DPSTCon — ผลการรับรองจากอาจารย์ที่ปรึกษา</h2>
+        <p>เรียน ${escapeHtml(data.authorName)},</p>
+        <p>อาจารย์ที่ปรึกษา <strong>${escapeHtml(data.advisorName)}</strong> ได้ดำเนินการรับรองบทความ:</p>
+        <p style="background: #f8fafc; padding: 12px; border-radius: 8px; border-left: 4px solid #f97316;">
+          <strong>${escapeHtml(data.paperTitle)}</strong>
+        </p>
+        <p style="background: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid ${statusColor}; font-size: 16px; margin-top: 12px;">
+          <strong style="color: ${statusColor};">${statusText}</strong>
+        </p>
+        ${data.comments ? `
+        <div style="margin-top: 16px;">
+          <p style="font-weight: bold; margin-bottom: 4px;">ความคิดเห็นจากอาจารย์ที่ปรึกษา:</p>
+          <p style="background: #f8fafc; padding: 12px; border-radius: 8px; white-space: pre-wrap;">${escapeHtml(data.comments)}</p>
+        </div>
+        ` : ""}
+        <p style="margin-top: 16px;">
+          ${isApproved
+            ? "บทความของคุณจะถูกส่งเข้าสู่กระบวนการพิจารณาต่อไป"
+            : "กรุณาแก้ไขบทความตามคำแนะนำของอาจารย์ที่ปรึกษา แล้วส่งใหม่อีกครั้ง"}
+        </p>
+        ${data.submissionUrl ? `
+        <p style="margin-top: 16px;">
+          <a href="${data.submissionUrl}" style="display: inline-block; background: #f97316; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+            ดูรายละเอียดบทความ
+          </a>
+        </p>
+        ` : ""}
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
+          อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System
+        </p>
+      </div>
+    `,
+  };
+}
+
 export function decisionEmail(data: {
   authorName: string;
   paperTitle: string;

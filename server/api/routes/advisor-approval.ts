@@ -144,16 +144,48 @@ app.post("/:token/respond", async (c) => {
   const newStatus =
     parsed.data.decision === "APPROVED" ? "SUBMITTED" : "DRAFT";
 
+  // Update status + clear token (one-time use)
   const [updated] = await db
     .update(submissions)
     .set({
       advisorApprovalStatus: parsed.data.decision,
       advisorApprovalAt: new Date(),
+      advisorApprovalToken: null,
       status: newStatus,
       updatedAt: new Date(),
     })
     .where(eq(submissions.id, submission.id))
     .returning();
+
+  // Send notification email to author
+  try {
+    const { queueEmail, advisorResponseEmail } = await import("@/server/email");
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+    // Fetch author info
+    const author = await db.query.user.findFirst({
+      where: eq(require("@/server/db/schema").user.id, submission.authorId),
+      columns: { name: true, email: true },
+    });
+
+    if (author) {
+      const emailContent = advisorResponseEmail({
+        authorName: author.name,
+        advisorName: submission.advisorName || "Advisor",
+        paperTitle: submission.title,
+        decision: parsed.data.decision,
+        comments: parsed.data.comments,
+        submissionUrl: `${appUrl}/submissions/${submission.id}`,
+      });
+      await queueEmail({
+        to: author.email,
+        subject: emailContent.subject,
+        html: emailContent.html,
+      });
+    }
+  } catch (err) {
+    console.error("[AdvisorApproval] Failed to notify author:", err);
+  }
 
   return c.json({
     success: true,

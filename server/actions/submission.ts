@@ -96,11 +96,11 @@ export async function submitPaper(id: string) {
     .where(eq(submissions.id, id))
     .returning();
 
-  // Send advisor approval email (don't let email failure block submission)
+  // Send advisor approval email
+  let emailSent = false;
   try {
     const { queueEmail, advisorApprovalEmail } = await import("@/server/email");
     const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    console.log("[submitPaper] Sending advisor email to:", submission.advisorEmail, "appUrl:", appUrl);
     const emailContent = advisorApprovalEmail({
       advisorName: submission.advisorName || "Advisor",
       studentName: session.user.name,
@@ -112,14 +112,18 @@ export async function submitPaper(id: string) {
       subject: emailContent.subject,
       html: emailContent.html,
     });
-    console.log("[submitPaper] Advisor email queued successfully");
+    emailSent = true;
   } catch (err) {
     console.error("[submitPaper] Failed to send advisor email:", err);
-    // Don't throw — submission status is already updated
   }
 
   revalidatePath("/submissions");
   revalidatePath(`/submissions/${id}`);
+
+  if (!emailSent) {
+    throw new Error("ส่งบทความสำเร็จ แต่ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้ กรุณาใช้ปุ่ม 'ส่งอีเมลอีกครั้ง' ในหน้ารายละเอียดบทความ");
+  }
+
   return updated;
 }
 

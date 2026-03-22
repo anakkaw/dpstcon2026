@@ -225,6 +225,14 @@ app.post("/decisions", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
 
   const data = parsed.data;
 
+  // Check if decision already exists for this submission
+  const existingDecision = await db.query.decisions.findFirst({
+    where: eq(decisions.submissionId, data.submissionId),
+  });
+  if (existingDecision) {
+    return c.json({ error: "บทความนี้มีการตัดสินแล้ว" }, 409);
+  }
+
   const [decision] = await db
     .insert(decisions)
     .values({
@@ -239,7 +247,7 @@ app.post("/decisions", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
   const statusMap: Record<string, string> = {
     ACCEPT: "CAMERA_READY_PENDING",
     REJECT: "REJECTED",
-    CONDITIONAL_ACCEPT: "ACCEPTED",
+    CONDITIONAL_ACCEPT: "REVISION_REQUIRED",
     DESK_REJECT: "DESK_REJECTED",
   };
 
