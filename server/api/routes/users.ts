@@ -115,6 +115,12 @@ app.patch("/:id", requireRole("ADMIN"), async (c) => {
     nameEn: z.string().optional(),
     affiliation: z.string().optional(),
     bio: z.string().optional(),
+    prefixTh: z.string().optional(),
+    prefixEn: z.string().optional(),
+    firstNameTh: z.string().optional(),
+    lastNameTh: z.string().optional(),
+    firstNameEn: z.string().optional(),
+    lastNameEn: z.string().optional(),
   });
 
   const parsed = schema.safeParse(body);
@@ -186,6 +192,12 @@ app.post("/", requireRole("ADMIN"), async (c) => {
       )
       .default(["AUTHOR"]),
     affiliation: z.string().optional(),
+    prefixTh: z.string().optional(),
+    prefixEn: z.string().optional(),
+    firstNameTh: z.string().optional(),
+    lastNameTh: z.string().optional(),
+    firstNameEn: z.string().optional(),
+    lastNameEn: z.string().optional(),
   });
 
   const parsed = schema.safeParse(body);
@@ -210,17 +222,32 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   );
   const primaryRole = getPrimaryRole(parsed.data.roles);
 
+  // Auto-compose name from prefix + firstName + lastName if available
+  const displayName = parsed.data.prefixTh && parsed.data.firstNameTh && parsed.data.lastNameTh
+    ? `${parsed.data.prefixTh}${parsed.data.firstNameTh} ${parsed.data.lastNameTh}`
+    : parsed.data.name;
+  const displayNameEn = parsed.data.prefixEn && parsed.data.firstNameEn && parsed.data.lastNameEn
+    ? `${parsed.data.prefixEn} ${parsed.data.firstNameEn} ${parsed.data.lastNameEn}`
+    : undefined;
+
   // Create user directly via Drizzle
   const userId = crypto.randomUUID();
   const [created] = await db
     .insert(user)
     .values({
       id: userId,
-      name: parsed.data.name,
+      name: displayName,
       email: parsed.data.email,
       emailVerified: false,
       role: primaryRole as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
       affiliation: parsed.data.affiliation,
+      nameEn: displayNameEn,
+      prefixTh: parsed.data.prefixTh,
+      prefixEn: parsed.data.prefixEn,
+      firstNameTh: parsed.data.firstNameTh,
+      lastNameTh: parsed.data.lastNameTh,
+      firstNameEn: parsed.data.firstNameEn,
+      lastNameEn: parsed.data.lastNameEn,
       inviteToken,
       inviteExpiresAt,
       isActive: false,
@@ -286,6 +313,12 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
           )
           .default(["AUTHOR"]),
         affiliation: z.string().optional(),
+        prefixTh: z.string().optional(),
+        prefixEn: z.string().optional(),
+        firstNameTh: z.string().optional(),
+        lastNameTh: z.string().optional(),
+        firstNameEn: z.string().optional(),
+        lastNameEn: z.string().optional(),
       })
     ),
   });
@@ -355,13 +388,28 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
       const primaryRole = getPrimaryRole(u.roles);
       const userId = crypto.randomUUID();
 
+      // Auto-compose name from prefix + firstName + lastName if available
+      const displayName = u.prefixTh && u.firstNameTh && u.lastNameTh
+        ? `${u.prefixTh}${u.firstNameTh} ${u.lastNameTh}`
+        : u.name;
+      const displayNameEn = u.prefixEn && u.firstNameEn && u.lastNameEn
+        ? `${u.prefixEn} ${u.firstNameEn} ${u.lastNameEn}`
+        : undefined;
+
       newUserInserts.push({
         id: userId,
-        name: u.name,
+        name: displayName,
+        nameEn: displayNameEn,
         email: u.email,
         emailVerified: false,
         role: primaryRole as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
         affiliation: u.affiliation,
+        prefixTh: u.prefixTh,
+        prefixEn: u.prefixEn,
+        firstNameTh: u.firstNameTh,
+        lastNameTh: u.lastNameTh,
+        firstNameEn: u.firstNameEn,
+        lastNameEn: u.lastNameEn,
         inviteToken,
         inviteExpiresAt,
         isActive: false,
@@ -492,6 +540,78 @@ app.post("/:id/reset-password", requireRole("ADMIN"), async (c) => {
   if (!updated) return c.json({ error: "ไม่พบบัญชีของผู้ใช้นี้" }, 404);
 
   return c.json({ ok: true, message: "รีเซ็ตรหัสผ่านสำเร็จ" });
+});
+
+// POST /api/users/bulk-remind — resend invites to all pending/expired users (ADMIN)
+app.post("/bulk-remind", requireRole("ADMIN"), async (c) => {
+  const pendingUsers = await db
+    .select({ id: user.id, name: user.name, email: user.email })
+    .from(user)
+    .where(eq(user.isActive, false));
+
+  if (pendingUsers.length === 0) {
+    return c.json({ ok: true, message: "ไม่มีผู้ใช้ที่รอเปิดใช้งาน", sent: 0 });
+  }
+
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  let sent = 0;
+
+  for (const u of pendingUsers) {
+    try {
+      const newToken = crypto.randomUUID();
+      const newExpiry = new Date(Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000);
+
+      await db
+        .update(user)
+        .set({ inviteToken: newToken, inviteExpiresAt: newExpiry, updatedAt: new Date() })
+        .where(eq(user.id, u.id));
+
+      const activationUrl = `${appUrl}/activate/${newToken}`;
+      const emailContent = inviteEmail({
+        userName: u.name,
+        activationUrl,
+        expiresInHours: INVITE_EXPIRY_HOURS,
+      });
+      await queueEmail({
+        to: u.email,
+        subject: emailContent.subject,
+        html: emailContent.html,
+      });
+      sent++;
+    } catch {
+      // Skip failed individual sends
+    }
+  }
+
+  return c.json({ ok: true, sent, total: pendingUsers.length });
+});
+
+// GET /api/users/registration-stats — registration status summary (ADMIN)
+app.get("/registration-stats", requireRole("ADMIN"), async (c) => {
+  const allUsers = await db
+    .select({
+      id: user.id,
+      isActive: user.isActive,
+      inviteExpiresAt: user.inviteExpiresAt,
+    })
+    .from(user);
+
+  const now = new Date();
+  let active = 0;
+  let pending = 0;
+  let expired = 0;
+
+  for (const u of allUsers) {
+    if (u.isActive) {
+      active++;
+    } else if (u.inviteExpiresAt && new Date(u.inviteExpiresAt) > now) {
+      pending++;
+    } else {
+      expired++;
+    }
+  }
+
+  return c.json({ total: allUsers.length, active, pending, expired });
 });
 
 // DELETE /api/users/:id — delete user (ADMIN)

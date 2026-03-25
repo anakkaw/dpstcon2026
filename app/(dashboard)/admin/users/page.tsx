@@ -16,7 +16,7 @@ import { formatDate } from "@/lib/utils";
 import {
   UserPlus, Upload, Search, Pencil, KeyRound, Trash2, X, Send, RefreshCw,
   Users, ShieldCheck, UserCheck, ChevronDown, ChevronUp,
-  GraduationCap, Eye, EyeOff,
+  GraduationCap, Eye, EyeOff, Bell, Download, CheckCircle, Clock, AlertTriangle,
 } from "lucide-react";
 
 const ROLE_COLORS: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -34,9 +34,22 @@ interface UserData {
   affiliation: string | null;
   nameEn: string | null;
   bio: string | null;
+  prefixTh: string | null;
+  prefixEn: string | null;
+  firstNameTh: string | null;
+  lastNameTh: string | null;
+  firstNameEn: string | null;
+  lastNameEn: string | null;
   isActive: boolean;
   inviteExpiresAt: string | null;
   createdAt: string;
+}
+
+interface RegistrationStats {
+  total: number;
+  active: number;
+  pending: number;
+  expired: number;
 }
 
 type ModalMode = null | "edit" | "password" | "delete";
@@ -59,7 +72,10 @@ export default function AdminUsersPage() {
   // Create
   const [showCreate, setShowCreate] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "", roles: ["AUTHOR"] as string[], affiliation: "" });
+  const [newUser, setNewUser] = useState({
+    name: "", email: "", roles: ["AUTHOR"] as string[], affiliation: "",
+    prefixTh: "", prefixEn: "", firstNameTh: "", lastNameTh: "", firstNameEn: "", lastNameEn: "",
+  });
   const [creating, setCreating] = useState(false);
   const [bulkData, setBulkData] = useState("");
   const [importing, setImporting] = useState(false);
@@ -68,10 +84,17 @@ export default function AdminUsersPage() {
   // Modal
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", nameEn: "", affiliation: "", bio: "", roles: [] as string[] });
+  const [editForm, setEditForm] = useState({
+    name: "", nameEn: "", affiliation: "", bio: "", roles: [] as string[],
+    prefixTh: "", prefixEn: "", firstNameTh: "", lastNameTh: "", firstNameEn: "", lastNameEn: "",
+  });
   const [resetPw, setResetPw] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Registration stats & bulk remind
+  const [regStats, setRegStats] = useState<RegistrationStats | null>(null);
+  const [reminding, setReminding] = useState(false);
 
   // Expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -80,13 +103,38 @@ export default function AdminUsersPage() {
   const [sortBy, setSortBy] = useState<"name" | "email" | "affiliation" | "createdAt">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { loadUsers(); loadRegStats(); }, []);
 
   async function loadUsers() {
     const res = await fetch("/api/users");
     const data = await res.json();
     setUsers(data.users || []);
     setLoading(false);
+  }
+
+  async function loadRegStats() {
+    try {
+      const res = await fetch("/api/users/registration-stats");
+      const data = await res.json();
+      setRegStats(data);
+    } catch { /* ignore */ }
+  }
+
+  async function bulkRemind() {
+    if (!confirm(t("users.bulkRemindConfirm"))) return;
+    setReminding(true);
+    try {
+      const res = await fetch("/api/users/bulk-remind", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        showMsg(t("users.bulkRemindSuccess").replace("{sent}", data.sent).replace("{total}", data.total));
+        loadUsers();
+        loadRegStats();
+      } else {
+        showMsg(data.error || "Failed", "danger");
+      }
+    } catch { showMsg("An error occurred", "danger"); }
+    setReminding(false);
   }
 
   function showMsg(text: string, type: "success" | "danger" = "success") {
@@ -105,6 +153,12 @@ export default function AdminUsersPage() {
         affiliation: user.affiliation || "",
         bio: user.bio || "",
         roles: user.roles || [user.role],
+        prefixTh: user.prefixTh || "",
+        prefixEn: user.prefixEn || "",
+        firstNameTh: user.firstNameTh || "",
+        lastNameTh: user.lastNameTh || "",
+        firstNameEn: user.firstNameEn || "",
+        lastNameEn: user.lastNameEn || "",
       });
     }
     if (mode === "password") { setResetPw(""); setShowPw(false); }
@@ -135,7 +189,10 @@ export default function AdminUsersPage() {
       });
       if (res.ok) {
         showMsg("Invitation sent successfully");
-        setNewUser({ name: "", email: "", roles: ["AUTHOR"], affiliation: "" });
+        setNewUser({
+          name: "", email: "", roles: ["AUTHOR"], affiliation: "",
+          prefixTh: "", prefixEn: "", firstNameTh: "", lastNameTh: "", firstNameEn: "", lastNameEn: "",
+        });
         setShowCreate(false);
         loadUsers();
       } else {
@@ -153,7 +210,12 @@ export default function AdminUsersPage() {
       const res = await fetch(`/api/users/${selectedUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editForm.name, nameEn: editForm.nameEn, affiliation: editForm.affiliation, bio: editForm.bio }),
+        body: JSON.stringify({
+          name: editForm.name, nameEn: editForm.nameEn, affiliation: editForm.affiliation, bio: editForm.bio,
+          prefixTh: editForm.prefixTh, prefixEn: editForm.prefixEn,
+          firstNameTh: editForm.firstNameTh, lastNameTh: editForm.lastNameTh,
+          firstNameEn: editForm.firstNameEn, lastNameEn: editForm.lastNameEn,
+        }),
       });
       const rolesChanged = JSON.stringify(editForm.roles.sort()) !== JSON.stringify((selectedUser.roles || [selectedUser.role]).sort());
       if (rolesChanged) {
@@ -207,7 +269,17 @@ export default function AdminUsersPage() {
     try {
       const lines = bulkData.trim().split("\n").filter((l) => l.trim());
       const usersToImport = lines.map((line) => {
-        const [name, email, rolesStr, affiliation] = line.split(",").map((s) => s.trim());
+        const parts = line.split(",").map((s) => s.trim());
+        // Support both formats:
+        // Extended (9 cols): prefixTh, firstNameTh, lastNameTh, prefixEn, firstNameEn, lastNameEn, email, roles, affiliation
+        // Simple (4 cols):   name, email, roles, affiliation
+        if (parts.length >= 7) {
+          const [prefixTh, firstNameTh, lastNameTh, prefixEn, firstNameEn, lastNameEn, email, rolesStr, affiliation] = parts;
+          const name = `${prefixTh}${firstNameTh} ${lastNameTh}`;
+          const roles = rolesStr ? rolesStr.split("|").map((r) => r.trim()) : ["AUTHOR"];
+          return { name, email, roles, affiliation, prefixTh, prefixEn, firstNameTh, lastNameTh, firstNameEn, lastNameEn };
+        }
+        const [name, email, rolesStr, affiliation] = parts;
         const roles = rolesStr ? rolesStr.split("|").map((r) => r.trim()) : ["AUTHOR"];
         return { name, email, roles, affiliation };
       });
@@ -270,10 +342,38 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <SectionTitle title={t("users.title")} subtitle={t("users.usersInSystem", { n: users.length })}
         action={<div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={bulkRemind} loading={reminding}><Bell className="h-4 w-4" />{t("users.bulkRemind")}</Button>
           <Button size="sm" variant="outline" onClick={() => { setShowBulk(!showBulk); setShowCreate(false); }}><Upload className="h-4 w-4" />{t("users.bulkImport")}</Button>
           <Button size="sm" onClick={() => { setShowCreate(!showCreate); setShowBulk(false); }}><UserPlus className="h-4 w-4" />{t("users.inviteUser")}</Button>
         </div>}
       />
+
+      {/* Registration Stats */}
+      {regStats && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <CheckCircle className="h-5 w-5 text-emerald-600" />
+            <div>
+              <div className="text-2xl font-bold text-emerald-700">{regStats.active}</div>
+              <div className="text-xs text-emerald-600">Active</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <Clock className="h-5 w-5 text-amber-600" />
+            <div>
+              <div className="text-2xl font-bold text-amber-700">{regStats.pending}</div>
+              <div className="text-xs text-amber-600">Pending</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <AlertTriangle className="h-5 w-5 text-red-600" />
+            <div>
+              <div className="text-2xl font-bold text-red-700">{regStats.expired}</div>
+              <div className="text-xs text-red-600">Expired</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats by role — compact clickable chips */}
       <div className="flex flex-wrap gap-2">
@@ -332,10 +432,42 @@ export default function AdminUsersPage() {
         <Card accent="brand">
           <CardHeader><h3 className="text-sm font-semibold text-ink">{t("users.inviteNewUser")}</h3></CardHeader>
           <CardBody className="space-y-4">
+            {/* Thai name fields */}
+            <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.thaiInfo")}</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label={t("users.fullNameTh")} required>
-                <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Name Surname" />
+              <Field label={t("users.prefixTh")}>
+                <Input value={newUser.prefixTh} onChange={(e) => setNewUser({ ...newUser, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
               </Field>
+              <Field label={t("users.firstNameTh")} required>
+                <Input value={newUser.firstNameTh} onChange={(e) => {
+                  const updated = { ...newUser, firstNameTh: e.target.value };
+                  updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
+                  setNewUser(updated);
+                }} placeholder="ชื่อ" />
+              </Field>
+              <Field label={t("users.lastNameTh")} required>
+                <Input value={newUser.lastNameTh} onChange={(e) => {
+                  const updated = { ...newUser, lastNameTh: e.target.value };
+                  updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
+                  setNewUser(updated);
+                }} placeholder="นามสกุล" />
+              </Field>
+            </div>
+            {/* English name fields */}
+            <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.englishInfo")}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Field label={t("users.prefixEn")}>
+                <Input value={newUser.prefixEn} onChange={(e) => setNewUser({ ...newUser, prefixEn: e.target.value })} placeholder={t("users.prefixEnPlaceholder")} />
+              </Field>
+              <Field label={t("users.firstNameEn")}>
+                <Input value={newUser.firstNameEn} onChange={(e) => setNewUser({ ...newUser, firstNameEn: e.target.value })} placeholder="First Name" />
+              </Field>
+              <Field label={t("users.lastNameEn")}>
+                <Input value={newUser.lastNameEn} onChange={(e) => setNewUser({ ...newUser, lastNameEn: e.target.value })} placeholder="Last Name" />
+              </Field>
+            </div>
+            {/* Email & Affiliation */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label={t("users.email")} required>
                 <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder="user@dpstcon.org" />
               </Field>
@@ -365,7 +497,7 @@ export default function AdminUsersPage() {
           </CardBody>
           <CardFooter className="flex justify-end gap-2">
             <Button variant="secondary" size="sm" onClick={() => setShowCreate(false)}>{t("common.cancel")}</Button>
-            <Button size="sm" onClick={createUser} loading={creating} disabled={!newUser.name || !newUser.email}>
+            <Button size="sm" onClick={createUser} loading={creating} disabled={(!newUser.firstNameTh && !newUser.name) || !newUser.email}>
               <Send className="h-4 w-4" />{t("users.sendInvitation")}
             </Button>
           </CardFooter>
@@ -377,9 +509,9 @@ export default function AdminUsersPage() {
         <Card accent="info">
           <CardHeader><h3 className="text-sm font-semibold text-ink">{t("users.bulkImportTitle")}</h3></CardHeader>
           <CardBody className="space-y-3">
-            <Field label={t("users.csvData")} hint={t("users.csvFormat")}>
+            <Field label={t("users.csvData")} hint={t("users.csvFormatExtended")}>
               <Textarea value={bulkData} onChange={(e) => setBulkData(e.target.value)} rows={6}
-                placeholder={"Somchai Jaidee,somchai@dpstcon.org,REVIEWER,Mahidol University\nSomying Rakrian,somying@dpstcon.org,AUTHOR|REVIEWER,Chulalongkorn University"} />
+                placeholder={"นาย,สมชาย,ใจดี,Mr.,Somchai,Jaidee,somchai@dpstcon.org,AUTHOR,Mahidol University\nนางสาว,สมหญิง,รักเรียน,Ms.,Somying,Rakrian,somying@dpstcon.org,AUTHOR|REVIEWER,Chulalongkorn University"} />
             </Field>
             {bulkResults.length > 0 && (
               <div className="bg-surface-alt rounded-lg p-3 text-sm">
@@ -515,16 +647,43 @@ export default function AdminUsersPage() {
                   <button onClick={closeModal} className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-gray-100 transition-colors"><X className="h-5 w-5" /></button>
                 </div>
                 <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+                  {/* Thai name fields */}
+                  <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.thaiInfo")}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Field label={t("users.prefixTh")}>
+                      <Input value={editForm.prefixTh} onChange={(e) => setEditForm({ ...editForm, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
+                    </Field>
+                    <Field label={t("users.firstNameTh")}>
+                      <Input value={editForm.firstNameTh} onChange={(e) => setEditForm({ ...editForm, firstNameTh: e.target.value })} placeholder="ชื่อ" />
+                    </Field>
+                    <Field label={t("users.lastNameTh")}>
+                      <Input value={editForm.lastNameTh} onChange={(e) => setEditForm({ ...editForm, lastNameTh: e.target.value })} placeholder="นามสกุล" />
+                    </Field>
+                  </div>
+                  {/* English name fields */}
+                  <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.englishInfo")}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Field label={t("users.prefixEn")}>
+                      <Input value={editForm.prefixEn} onChange={(e) => setEditForm({ ...editForm, prefixEn: e.target.value })} placeholder={t("users.prefixEnPlaceholder")} />
+                    </Field>
+                    <Field label={t("users.firstNameEn")}>
+                      <Input value={editForm.firstNameEn} onChange={(e) => setEditForm({ ...editForm, firstNameEn: e.target.value })} placeholder="First Name" />
+                    </Field>
+                    <Field label={t("users.lastNameEn")}>
+                      <Input value={editForm.lastNameEn} onChange={(e) => setEditForm({ ...editForm, lastNameEn: e.target.value })} placeholder="Last Name" />
+                    </Field>
+                  </div>
+                  {/* Full name (auto-generated, editable as fallback) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label={t("users.fullNameTh")} required>
+                    <Field label={t("users.fullNameTh")} hint="auto-filled from prefix+name">
                       <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
                     </Field>
-                    <Field label="Full Name (English)">
+                    <Field label={t("users.fullNameEn")}>
                       <Input value={editForm.nameEn} onChange={(e) => setEditForm({ ...editForm, nameEn: e.target.value })} placeholder="Name Surname" />
                     </Field>
                   </div>
-                  <Field label="Affiliation">
-                    <Input value={editForm.affiliation} onChange={(e) => setEditForm({ ...editForm, affiliation: e.target.value })} placeholder="University or Organization" />
+                  <Field label={t("users.affiliation")}>
+                    <Input value={editForm.affiliation} onChange={(e) => setEditForm({ ...editForm, affiliation: e.target.value })} placeholder={t("users.affiliationPlaceholder")} />
                   </Field>
                   <Field label={t("users.roles")}>
                     <div className="flex flex-wrap gap-2">

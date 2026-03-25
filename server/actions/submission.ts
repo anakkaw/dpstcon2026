@@ -17,8 +17,11 @@ export async function createSubmission(formData: FormData) {
   const session = await getSession();
 
   const title = (formData.get("title") as string || "").trim();
+  const titleEn = (formData.get("titleEn") as string || "").trim();
   const abstract = (formData.get("abstract") as string || "").trim();
+  const abstractEn = (formData.get("abstractEn") as string || "").trim();
   const keywords = (formData.get("keywords") as string || "").trim();
+  const keywordsEn = (formData.get("keywordsEn") as string || "").trim();
   const trackId = formData.get("trackId") as string | null;
   const advisorEmail = (formData.get("advisorEmail") as string || "").trim();
   const advisorName = (formData.get("advisorName") as string || "").trim();
@@ -38,8 +41,11 @@ export async function createSubmission(formData: FormData) {
     .insert(submissions)
     .values({
       title,
+      titleEn: titleEn || undefined,
       abstract: abstract || undefined,
+      abstractEn: abstractEn || undefined,
       keywords: keywords || undefined,
+      keywordsEn: keywordsEn || undefined,
       trackId: trackId || undefined,
       authorId: session.user.id,
       advisorEmail,
@@ -62,8 +68,11 @@ export async function updateSubmission(id: string, formData: FormData) {
     .update(submissions)
     .set({
       title: formData.get("title") as string,
+      titleEn: (formData.get("titleEn") as string) || undefined,
       abstract: formData.get("abstract") as string,
+      abstractEn: (formData.get("abstractEn") as string) || undefined,
       keywords: formData.get("keywords") as string,
+      keywordsEn: (formData.get("keywordsEn") as string) || undefined,
       updatedAt: new Date(),
     })
     .where(eq(submissions.id, id))

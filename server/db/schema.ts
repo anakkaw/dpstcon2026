@@ -126,6 +126,13 @@ export const user = pgTable(
     nameEn: varchar("name_en", { length: 255 }),
     affiliation: varchar("affiliation", { length: 500 }),
     bio: text("bio"),
+    // Bilingual name fields
+    prefixTh: varchar("prefix_th", { length: 50 }),
+    prefixEn: varchar("prefix_en", { length: 50 }),
+    firstNameTh: varchar("first_name_th", { length: 255 }),
+    lastNameTh: varchar("last_name_th", { length: 255 }),
+    firstNameEn: varchar("first_name_en", { length: 255 }),
+    lastNameEn: varchar("last_name_en", { length: 255 }),
     // Invite-only fields
     inviteToken: varchar("invite_token", { length: 255 }),
     inviteExpiresAt: timestamp("invite_expires_at"),
@@ -236,8 +243,11 @@ export const submissions = pgTable(
       .references(() => user.id)
       .notNull(),
     title: varchar("title", { length: 500 }).notNull(),
+    titleEn: varchar("title_en", { length: 500 }),
     abstract: text("abstract"),
+    abstractEn: text("abstract_en"),
     keywords: varchar("keywords", { length: 500 }),
+    keywordsEn: varchar("keywords_en", { length: 500 }),
     status: submissionStatusEnum("status").default("DRAFT").notNull(),
     fileUrl: varchar("file_url", { length: 1000 }),
     cameraReadyUrl: varchar("camera_ready_url", { length: 1000 }),

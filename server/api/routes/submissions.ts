@@ -171,8 +171,11 @@ app.get("/:id", async (c) => {
 // POST /api/submissions
 const createSchema = z.object({
   title: z.string().min(1).max(500),
+  titleEn: z.string().max(500).optional(),
   abstract: z.string().optional(),
+  abstractEn: z.string().optional(),
   keywords: z.string().optional(),
+  keywordsEn: z.string().optional(),
   trackId: z.string().uuid().optional(),
   advisorEmail: z.string().email(),
   advisorName: z.string().min(1),
@@ -194,8 +197,11 @@ app.post("/", async (c) => {
     .values({
       authorId: currentUser.id,
       title: data.title,
+      titleEn: data.titleEn,
       abstract: data.abstract,
+      abstractEn: data.abstractEn,
       keywords: data.keywords,
+      keywordsEn: data.keywordsEn,
       trackId: data.trackId,
       advisorEmail: data.advisorEmail,
       advisorName: data.advisorName,
@@ -227,8 +233,11 @@ app.patch("/:id", async (c) => {
   // Validate allowed fields to prevent mass assignment
   const patchSchema = z.object({
     title: z.string().min(1).max(500).optional(),
+    titleEn: z.string().max(500).optional(),
     abstract: z.string().optional(),
+    abstractEn: z.string().optional(),
     keywords: z.string().optional(),
+    keywordsEn: z.string().optional(),
     trackId: z.string().uuid().optional(),
     advisorEmail: z.string().email().optional(),
     advisorName: z.string().optional(),

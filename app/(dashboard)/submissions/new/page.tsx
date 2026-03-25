@@ -93,15 +93,6 @@ export default function NewSubmissionPage() {
             <h3 className="text-sm font-semibold text-ink">{t("submissions.new.title")}</h3>
           </CardHeader>
           <CardBody className="space-y-4">
-            <Field label={t("submissions.new.paperTitle")} htmlFor="title" required>
-              <Input
-                id="title"
-                name="title"
-                placeholder={t("submissions.new.paperTitlePlaceholder")}
-                required
-              />
-            </Field>
-
             <Field
               label={t("submissions.new.track")}
               htmlFor="trackId"
@@ -119,32 +110,81 @@ export default function NewSubmissionPage() {
               </Select>
             </Field>
 
-            <Field
-              label={t("submissions.new.abstract")}
-              htmlFor="abstract"
-              required
-              hint={t("submissions.new.abstractDesc")}
-            >
-              <Textarea
-                id="abstract"
-                name="abstract"
-                placeholder={t("submissions.new.abstractPlaceholder")}
-                rows={6}
-                required
-              />
-            </Field>
+            {/* Paper Title — Bilingual */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label={t("submissions.new.paperTitleTh")} htmlFor="title" required>
+                <Input
+                  id="title"
+                  name="title"
+                  placeholder={t("submissions.new.paperTitleThPlaceholder")}
+                  required
+                />
+              </Field>
+              <Field label={t("submissions.new.paperTitleEn")} htmlFor="titleEn" required>
+                <Input
+                  id="titleEn"
+                  name="titleEn"
+                  placeholder={t("submissions.new.paperTitleEnPlaceholder")}
+                  required
+                />
+              </Field>
+            </div>
 
-            <Field
-              label={t("submissions.new.keywords")}
-              htmlFor="keywords"
-              hint={t("submissions.new.keywordsDesc")}
-            >
-              <Input
-                id="keywords"
-                name="keywords"
-                placeholder={t("submissions.new.keywordsPlaceholder")}
-              />
-            </Field>
+            {/* Abstract — Bilingual */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field
+                label={t("submissions.new.abstractTh")}
+                htmlFor="abstract"
+                required
+                hint={t("submissions.new.abstractDesc")}
+              >
+                <Textarea
+                  id="abstract"
+                  name="abstract"
+                  placeholder={t("submissions.new.abstractThPlaceholder")}
+                  rows={6}
+                  required
+                />
+              </Field>
+              <Field
+                label={t("submissions.new.abstractEn")}
+                htmlFor="abstractEn"
+                required
+              >
+                <Textarea
+                  id="abstractEn"
+                  name="abstractEn"
+                  placeholder={t("submissions.new.abstractEnPlaceholder")}
+                  rows={6}
+                  required
+                />
+              </Field>
+            </div>
+
+            {/* Keywords — Bilingual */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field
+                label={t("submissions.new.keywordsTh")}
+                htmlFor="keywords"
+                hint={t("submissions.new.keywordsDesc")}
+              >
+                <Input
+                  id="keywords"
+                  name="keywords"
+                  placeholder={t("submissions.new.keywordsThPlaceholder")}
+                />
+              </Field>
+              <Field
+                label={t("submissions.new.keywordsEn")}
+                htmlFor="keywordsEn"
+              >
+                <Input
+                  id="keywordsEn"
+                  name="keywordsEn"
+                  placeholder={t("submissions.new.keywordsEnPlaceholder")}
+                />
+              </Field>
+            </div>
           </CardBody>
         </Card>
 
