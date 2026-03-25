@@ -1,5 +1,3 @@
-import { auth } from "@/server/auth";
-import { headers } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/server/db";
 import {
@@ -13,8 +11,10 @@ import {
   settings,
   tracks,
 } from "@/server/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
+import { getServerAuthContext } from "@/server/auth-helpers";
+import { hasRole } from "@/lib/permissions";
 
 export default async function SubmissionDetailPage({
   params,
@@ -22,12 +22,12 @@ export default async function SubmissionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/login");
+  const authContext = await getServerAuthContext();
+  if (!authContext?.user.isActive) redirect("/login");
 
-  const currentUser = session.user as { id: string; role: string };
-  const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(currentUser.role);
-  const isAuthor = currentUser.role === "AUTHOR";
+  const currentUser = authContext.user;
+  const canManageSubmission = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const isAuthorOnly = currentUser.role === "AUTHOR";
 
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, id),
@@ -46,25 +46,39 @@ export default async function SubmissionDetailPage({
 
   if (!submission) notFound();
 
-  if (isAuthor && submission.authorId !== currentUser.id) {
-    notFound();
+  let hasAccess = hasRole(currentUser, "ADMIN");
+
+  if (!hasAccess && submission.authorId === currentUser.id) {
+    hasAccess = true;
   }
 
-  // PROGRAM_CHAIR can only access submissions in their tracks
-  if (currentUser.role === "PROGRAM_CHAIR" && submission.trackId) {
+  if (!hasAccess && hasRole(currentUser, "REVIEWER")) {
+    const assignment = await db.query.reviewAssignments.findFirst({
+      where: and(
+        eq(reviewAssignments.submissionId, id),
+        eq(reviewAssignments.reviewerId, currentUser.id)
+      ),
+      columns: { id: true },
+    });
+    hasAccess = !!assignment;
+  }
+
+  if (!hasAccess && hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
     const track = await db.query.tracks.findFirst({
       where: eq(tracks.id, submission.trackId),
       columns: { headUserId: true },
     });
-    if (!track || track.headUserId !== currentUser.id) notFound();
-  } else if (currentUser.role === "PROGRAM_CHAIR" && !submission.trackId) {
+    hasAccess = track?.headUserId === currentUser.id;
+  }
+
+  if (!hasAccess) {
     notFound();
   }
 
   let filteredDiscussions = submission.discussions;
   let filteredReviews = submission.reviews;
 
-  if (isAuthor) {
+  if (isAuthorOnly) {
     filteredDiscussions = submission.discussions.filter((d) => d.visibility === "AUTHOR_VISIBLE");
     filteredReviews = submission.reviews.map((r) => ({
       ...r,
@@ -76,7 +90,7 @@ export default async function SubmissionDetailPage({
   // Fetch all supplementary data in parallel (was 7 sequential queries)
   const [reviewers, files, assignmentRows, decision, presRows, criteria, deadlineRows] = await Promise.all([
     // Reviewers list (admin only)
-    isAdmin
+    canManageSubmission
       ? db.select({ id: user.id, name: user.name, email: user.email, prefixTh: user.prefixTh, firstNameTh: user.firstNameTh, lastNameTh: user.lastNameTh, prefixEn: user.prefixEn, firstNameEn: user.firstNameEn, lastNameEn: user.lastNameEn }).from(user).where(eq(user.role, "REVIEWER"))
       : Promise.resolve([]),
     // Uploaded files

@@ -1,0 +1,570 @@
+"use client";
+
+import { useState, useEffect, Fragment } from "react";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
+import { SectionTitle } from "@/components/ui/section-title";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Alert } from "@/components/ui/alert";
+import { TrackFilter } from "@/components/track-filter";
+import { getAssignmentStatusLabels } from "@/lib/labels";
+import { useI18n } from "@/lib/i18n";
+import { formatDate } from "@/lib/utils";
+import { displayNameTh, nameInitial } from "@/lib/display-name";
+import { useDashboardAuth } from "@/components/dashboard-auth-context";
+import {
+  ClipboardCheck, ChevronUp, ChevronDown, ChevronRight,
+  ArrowUpDown, ExternalLink, Clock, AlertTriangle, Users,
+  UserPlus, Trash2, Search, X, CheckCircle2, CircleDot,
+} from "lucide-react";
+
+const STATUS_COLORS: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
+  PENDING: "warning", ACCEPTED: "info", DECLINED: "neutral", COMPLETED: "success", OVERDUE: "danger",
+};
+
+export interface AssignmentData {
+  id: string;
+  status: string;
+  assignedAt: string;
+  dueDate: string | null;
+  submission: {
+    id: string;
+    title: string;
+    status: string;
+    author: { id: string; name: string };
+    track: { id: string; name: string } | null;
+  };
+  reviewer: { id: string; name: string } | null;
+}
+
+export interface ReviewerUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface GroupedSubmission {
+  submissionId: string;
+  title: string;
+  authorName: string;
+  track: { id: string; name: string } | null;
+  assignments: AssignmentData[];
+  completedCount: number;
+  totalCount: number;
+  hasOverdue: boolean;
+}
+
+type SortKey = "title" | "author" | "track" | "reviewers" | "progress";
+
+export function ReviewsPageClient({
+  initialAssignments,
+  initialReviewerUsers,
+}: {
+  initialAssignments: AssignmentData[];
+  initialReviewerUsers: ReviewerUser[];
+}) {
+  const { t, locale } = useI18n();
+  const assignmentLabels = getAssignmentStatusLabels(t);
+  const { roles } = useDashboardAuth();
+  const isAdmin = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
+
+  const [assignments, setAssignments] = useState<AssignmentData[]>(initialAssignments);
+  const [reviewerUsers] = useState<ReviewerUser[]>(initialReviewerUsers);
+  const [trackFilter, setTrackFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [assigningSubId, setAssigningSubId] = useState<string | null>(null);
+  const [selectedReviewerId, setSelectedReviewerId] = useState("");
+  const [assignDueDate, setAssignDueDate] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const [sortKey, setSortKey] = useState<SortKey>("title");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [now, setNow] = useState(() => Date.now());
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  async function reloadAssignments() {
+    const data = await fetch("/api/reviews/assignments").then((response) => response.json());
+    setAssignments(data.assignments || []);
+  }
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  function isDueSoon(dueDate: string | null) {
+    if (!dueDate) return false;
+    const diff = new Date(dueDate).getTime() - now;
+    return diff > 0 && diff < 3 * 24 * 60 * 60 * 1000;
+  }
+
+  function isOverdue(dueDate: string | null) {
+    if (!dueDate) return false;
+    return new Date(dueDate).getTime() < now;
+  }
+
+  async function handleAssign(submissionId: string) {
+    if (!selectedReviewerId) return;
+    setAssignSaving(true);
+    try {
+      const res = await fetch("/api/reviews/assignments/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          reviewerId: selectedReviewerId,
+          dueDate: assignDueDate || undefined,
+        }),
+      });
+      if (res.ok) {
+        setMessage("Reviewer assigned successfully");
+        setAssigningSubId(null);
+        setSelectedReviewerId("");
+        setAssignDueDate("");
+        await reloadAssignments();
+      } else {
+        const err = await res.json();
+        setMessage(err.error || "An error occurred");
+      }
+    } catch {}
+    setAssignSaving(false);
+  }
+
+  async function handleRemove(assignmentId: string) {
+    setRemovingId(assignmentId);
+    try {
+      const res = await fetch(`/api/reviews/assignments/${assignmentId}`, { method: "DELETE" });
+      if (res.ok) {
+        setMessage("Assignment removed successfully");
+        await reloadAssignments();
+      }
+    } catch {}
+    setRemovingId(null);
+  }
+
+  const statusCounts: Record<string, number> = {};
+  for (const assignment of assignments) {
+    if (trackFilter && assignment.submission.track?.id !== trackFilter) continue;
+    statusCounts[assignment.status] = (statusCounts[assignment.status] || 0) + 1;
+  }
+  const totalAssignments = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
+
+  const trackCounts: Record<string, number> = {};
+  for (const assignment of assignments) {
+    if (assignment.submission.track?.id) {
+      trackCounts[assignment.submission.track.id] = (trackCounts[assignment.submission.track.id] || 0) + 1;
+    }
+  }
+
+  const groupMap = new Map<string, GroupedSubmission>();
+  for (const assignment of assignments) {
+    if (trackFilter && assignment.submission.track?.id !== trackFilter) continue;
+    if (statusFilter !== "ALL" && assignment.status !== statusFilter) continue;
+    let group = groupMap.get(assignment.submission.id);
+    if (!group) {
+      group = {
+        submissionId: assignment.submission.id,
+        title: assignment.submission.title,
+        authorName: displayNameTh(assignment.submission.author),
+        track: assignment.submission.track,
+        assignments: [],
+        completedCount: 0,
+        totalCount: 0,
+        hasOverdue: false,
+      };
+      groupMap.set(assignment.submission.id, group);
+    }
+    group.assignments.push(assignment);
+    group.totalCount++;
+    if (assignment.status === "COMPLETED") group.completedCount++;
+    if (assignment.status !== "COMPLETED" && assignment.status !== "DECLINED" && isOverdue(assignment.dueDate)) {
+      group.hasOverdue = true;
+    }
+  }
+
+  const groups = [...groupMap.values()]
+    .filter((group) => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return group.title.toLowerCase().includes(q) ||
+        group.authorName.toLowerCase().includes(q) ||
+        group.track?.name.toLowerCase().includes(q) ||
+        group.assignments.some((assignment) => assignment.reviewer ? displayNameTh(assignment.reviewer).toLowerCase().includes(q) : false);
+    })
+    .sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      switch (sortKey) {
+        case "title": return dir * a.title.localeCompare(b.title);
+        case "author": return dir * a.authorName.localeCompare(b.authorName);
+        case "track": return dir * (a.track?.name || "").localeCompare(b.track?.name || "");
+        case "reviewers": return dir * (a.totalCount - b.totalCount);
+        case "progress": {
+          const pa = a.totalCount > 0 ? a.completedCount / a.totalCount : 0;
+          const pb = b.totalCount > 0 ? b.completedCount / b.totalCount : 0;
+          return dir * (pa - pb);
+        }
+        default: return 0;
+      }
+    });
+
+  if (!isAdmin) {
+    const myFiltered = assignments.filter((assignment) => !trackFilter || assignment.submission.track?.id === trackFilter);
+    return (
+      <div className="space-y-5">
+        <SectionTitle title={t("reviews.myReviewTasks")} subtitle={`${myFiltered.length} items`} />
+        <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
+        {myFiltered.length === 0 ? (
+          <EmptyState icon={<ClipboardCheck className="h-12 w-12" />} title={t("reviews.noReviewTasks")} body={t("reviews.noReviewTasksDesc")} />
+        ) : (
+          <div className="space-y-3">
+            {myFiltered.map((assignment) => (
+              <Link key={assignment.id} href={`/submissions/${assignment.submission.id}`}>
+                <Card hover className="mb-0">
+                  <CardBody className="py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-ink truncate">{assignment.submission.title}</h3>
+                        <div className="flex items-center gap-2.5 mt-2 text-xs text-ink-muted flex-wrap">
+                          {assignment.submission.track && <Badge tone="info">{assignment.submission.track.name}</Badge>}
+                          <span>{t("reviews.author")}: {displayNameTh(assignment.submission.author)}</span>
+                          {assignment.dueDate && (
+                            <span className={isOverdue(assignment.dueDate) ? "text-danger font-medium" : isDueSoon(assignment.dueDate) ? "text-amber-600 font-medium" : ""}>
+                              {t("reviews.due")} {formatDate(assignment.dueDate, locale)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Badge tone={STATUS_COLORS[assignment.status] || "neutral"}>{assignmentLabels[assignment.status] || assignment.status}</Badge>
+                    </div>
+                  </CardBody>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const statusTabs = [
+    { key: "ALL", label: t("common.all"), count: totalAssignments },
+    { key: "PENDING", label: t("reviews.pending"), count: statusCounts.PENDING || 0 },
+    { key: "ACCEPTED", label: t("reviews.inReview"), count: statusCounts.ACCEPTED || 0 },
+    { key: "COMPLETED", label: t("reviews.completed"), count: statusCounts.COMPLETED || 0 },
+    { key: "OVERDUE", label: t("reviews.overdue"), count: statusCounts.OVERDUE || 0 },
+    { key: "DECLINED", label: t("reviews.declined"), count: statusCounts.DECLINED || 0 },
+  ].filter((tab) => tab.key === "ALL" || tab.count > 0);
+
+  const assignedReviewerIds = assigningSubId
+    ? new Set(assignments.filter((assignment) => assignment.submission.id === assigningSubId).map((assignment) => assignment.reviewer?.id).filter(Boolean))
+    : new Set<string>();
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        title={t("reviews.management")}
+        subtitle={`${groups.length} ${t("reviews.submissions").toLowerCase()} · ${totalAssignments} review tasks`}
+      />
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <SummaryCard label={t("reviews.submissions")} value={groups.length} icon={<ClipboardCheck className="h-5 w-5" />} color="blue" />
+        <SummaryCard label={t("reviews.totalReviews")} value={totalAssignments} icon={<Users className="h-5 w-5" />} color="indigo" />
+        <SummaryCard label={t("reviews.inProgress")} value={statusCounts.ACCEPTED || 0} icon={<CircleDot className="h-5 w-5" />} color="violet" />
+        <SummaryCard label={t("reviews.completed")} value={statusCounts.COMPLETED || 0} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
+        <SummaryCard label={t("reviews.overdue")} value={statusCounts.OVERDUE || 0} icon={<AlertTriangle className="h-5 w-5" />} color="red" />
+      </div>
+
+      <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
+
+      {message && (
+        <Alert tone="info" className="animate-fade-in">
+          {message}
+          <button onClick={() => setMessage("")} className="ml-2 opacity-60 hover:opacity-100"><X className="h-3.5 w-3.5 inline" /></button>
+        </Alert>
+      )}
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted pointer-events-none" />
+          <input
+            type="text"
+            placeholder={t("reviews.searchPlaceholder")}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 text-sm border border-border/60 rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex gap-1 overflow-x-auto">
+          {statusTabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-150 whitespace-nowrap ${
+                statusFilter === tab.key
+                  ? "bg-brand-500 text-white shadow-sm"
+                  : "bg-surface-alt text-ink-muted hover:text-ink hover:bg-gray-200/80"
+              }`}
+            >
+              {tab.label}
+              <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-bold ${
+                statusFilter === tab.key ? "bg-white/20 text-white" : "bg-gray-200/80 text-gray-500"
+              }`}>{tab.count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {groups.length === 0 ? (
+        <EmptyState
+          icon={<ClipboardCheck className="h-12 w-12" />}
+          title={searchQuery ? t("reviews.noResults") : statusFilter !== "ALL" ? `No ${statusTabs.find(tab => tab.key === statusFilter)?.label || statusFilter} reviews` : t("reviews.noReviewsYet")}
+        />
+      ) : (
+        <Card>
+          <CardBody className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50/80 border-b border-border/60">
+                    <th className="w-10" />
+                    <SortTh label={t("reviews.submission")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%] pl-1" />
+                    <SortTh label={t("reviews.author")} sortKey_="author" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label={t("reviews.track")} sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortTh label={t("reviews.reviewers")} sortKey_="reviewers" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                    <SortTh label={t("reviews.progress")} sortKey_="progress" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[160px]" />
+                    <th className="w-20 px-3 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-center">{t("reviews.actions")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((group) => {
+                    const isExpanded = expandedId === group.submissionId;
+                    const pct = group.totalCount > 0 ? Math.round((group.completedCount / group.totalCount) * 100) : 0;
+                    const isAssigning = assigningSubId === group.submissionId;
+
+                    return (
+                      <Fragment key={group.submissionId}>
+                        <tr
+                          className={`border-t border-border/40 hover:bg-blue-50/30 transition-colors cursor-pointer ${group.hasOverdue ? "bg-red-50/20" : ""} ${isExpanded ? "bg-blue-50/40" : ""}`}
+                          onClick={() => { setExpandedId(isExpanded ? null : group.submissionId); setAssigningSubId(null); }}
+                        >
+                          <td className="pl-4 py-3.5">
+                            <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-all duration-200 ${isExpanded ? "bg-brand-500 text-white" : "bg-gray-100 text-ink-muted"}`}>
+                              <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
+                            </div>
+                          </td>
+                          <td className="pl-1 pr-2 py-3.5">
+                            <p className="font-medium text-ink leading-snug line-clamp-2">{group.title}</p>
+                          </td>
+                          <td className="px-4 py-3.5 text-xs text-ink-light whitespace-nowrap">{group.authorName}</td>
+                          <td className="px-4 py-3.5">
+                            {group.track ? <Badge tone="info">{group.track.name}</Badge> : <span className="text-ink-muted text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <div className="flex items-center justify-center">
+                              <div className="flex -space-x-1.5">
+                                {group.assignments.slice(0, 3).map((assignment) => (
+                                  <div key={assignment.id} className="relative" title={`${assignment.reviewer ? displayNameTh(assignment.reviewer) : "?"} - ${assignmentLabels[assignment.status] || assignment.status}`}>
+                                    <div className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold ${
+                                      assignment.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" :
+                                      assignment.status === "OVERDUE" ? "bg-red-100 text-red-700" :
+                                      assignment.status === "ACCEPTED" ? "bg-blue-100 text-blue-700" :
+                                      assignment.status === "DECLINED" ? "bg-gray-100 text-gray-500" :
+                                      "bg-amber-100 text-amber-700"
+                                    }`}>
+                                      {assignment.reviewer ? nameInitial(assignment.reviewer) : "?"}
+                                    </div>
+                                  </div>
+                                ))}
+                                {group.assignments.length > 3 && (
+                                  <div className="w-7 h-7 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-500">
+                                    +{group.assignments.length - 3}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all ${pct === 100 ? "bg-emerald-500" : group.hasOverdue ? "bg-red-400" : "bg-blue-500"}`} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className={`text-xs font-medium w-14 text-right ${pct === 100 ? "text-emerald-600" : group.hasOverdue ? "text-red-500" : "text-ink-muted"}`}>
+                                {group.completedCount}/{group.totalCount}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => { setAssigningSubId(isAssigning ? null : group.submissionId); setExpandedId(group.submissionId); setSelectedReviewerId(""); setAssignDueDate(""); }}
+                                className={`p-1.5 rounded-lg transition-colors ${isAssigning ? "bg-brand-100 text-brand-600" : "text-ink-muted hover:text-brand-600 hover:bg-brand-50"}`}
+                                title="Assign reviewer"
+                              >
+                                <UserPlus className="h-4 w-4" />
+                              </button>
+                              <Link href={`/submissions/${group.submissionId}`} className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors">
+                                <ExternalLink className="h-4 w-4" />
+                              </Link>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {isExpanded && (
+                          <>
+                            {group.assignments.map((assignment) => {
+                              const overdue = assignment.status !== "COMPLETED" && assignment.status !== "DECLINED" && isOverdue(assignment.dueDate);
+                              const dueSoon = !overdue && assignment.status !== "COMPLETED" && assignment.status !== "DECLINED" && isDueSoon(assignment.dueDate);
+                              return (
+                                <tr key={assignment.id} className="bg-gray-50/60 border-t border-border/20 hover:bg-gray-100/50 transition-colors">
+                                  <td />
+                                  <td colSpan={2} className="px-2 py-2.5">
+                                    <div className="flex items-center gap-3 pl-4">
+                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                                        assignment.status === "COMPLETED" ? "bg-emerald-100" :
+                                        assignment.status === "OVERDUE" ? "bg-red-100" :
+                                        assignment.status === "ACCEPTED" ? "bg-blue-100" :
+                                        assignment.status === "DECLINED" ? "bg-gray-100" :
+                                        "bg-amber-100"
+                                      }`}>
+                                        <span className={`text-xs font-bold ${
+                                          assignment.status === "COMPLETED" ? "text-emerald-700" :
+                                          assignment.status === "OVERDUE" ? "text-red-700" :
+                                          assignment.status === "ACCEPTED" ? "text-blue-700" :
+                                          assignment.status === "DECLINED" ? "text-gray-500" :
+                                          "text-amber-700"
+                                        }`}>{assignment.reviewer ? nameInitial(assignment.reviewer) : "?"}</span>
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium text-ink">{assignment.reviewer ? displayNameTh(assignment.reviewer) : "—"}</p>
+                                        <p className="text-[11px] text-ink-muted">{t("reviews.assigned")} {formatDate(assignment.assignedAt, locale)}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    <Badge tone={STATUS_COLORS[assignment.status] || "neutral"} dot>
+                                      {assignmentLabels[assignment.status] || assignment.status}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-2.5 text-center">
+                                    {assignment.dueDate ? (
+                                      <span className={`inline-flex items-center gap-1 text-xs ${overdue ? "text-red-600 font-medium" : dueSoon ? "text-amber-600 font-medium" : "text-ink-muted"}`}>
+                                        {overdue && <AlertTriangle className="h-3 w-3" />}
+                                        {dueSoon && <Clock className="h-3 w-3" />}
+                                        {formatDate(assignment.dueDate, locale)}
+                                      </span>
+                                    ) : <span className="text-ink-muted text-xs">{t("reviews.noDeadline")}</span>}
+                                  </td>
+                                  <td />
+                                  <td className="px-3 py-2.5 text-center">
+                                    {assignment.status !== "COMPLETED" && (
+                                      <button
+                                        onClick={() => handleRemove(assignment.id)}
+                                        disabled={removingId === assignment.id}
+                                        className="p-1.5 rounded-lg text-ink-muted hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                        title="Remove assignment"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+
+                            {isAssigning && (
+                              <tr className="bg-brand-50/40 border-t border-brand-200/40">
+                                <td />
+                                <td colSpan={6} className="px-6 py-3">
+                                  <div className="flex items-end gap-3 max-w-2xl">
+                                    <Field label={t("reviews.reviewers")} className="flex-1">
+                                      <Select value={selectedReviewerId} onChange={(e) => setSelectedReviewerId(e.target.value)}>
+                                        <option value="">{t("reviews.selectReviewer")}</option>
+                                        {reviewerUsers
+                                          .filter((reviewer) => !assignedReviewerIds.has(reviewer.id))
+                                          .map((reviewer) => (
+                                            <option key={reviewer.id} value={reviewer.id}>{displayNameTh(reviewer)} ({reviewer.email})</option>
+                                          ))}
+                                      </Select>
+                                    </Field>
+                                    <Field label={t("reviews.dueDate")} className="w-44">
+                                      <Input type="date" value={assignDueDate} onChange={(e) => setAssignDueDate(e.target.value)} />
+                                    </Field>
+                                    <div className="flex gap-1.5 pb-0.5">
+                                      <Button size="sm" onClick={() => handleAssign(group.submissionId)} loading={assignSaving} disabled={!selectedReviewerId}>{t("reviews.assign")}</Button>
+                                      <Button size="sm" variant="ghost" onClick={() => setAssigningSubId(null)}>{t("common.cancel")}</Button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
+  const styles: Record<string, { card: string; text: string; icon: string }> = {
+    blue:    { card: "from-blue-50 to-indigo-50 border-blue-100", text: "text-blue-700", icon: "text-blue-400" },
+    indigo:  { card: "from-indigo-50 to-violet-50 border-indigo-100", text: "text-indigo-700", icon: "text-indigo-400" },
+    violet:  { card: "from-violet-50 to-fuchsia-50 border-violet-100", text: "text-violet-700", icon: "text-violet-400" },
+    emerald: { card: "from-emerald-50 to-green-50 border-emerald-100", text: "text-emerald-700", icon: "text-emerald-400" },
+    red:     { card: "from-red-50 to-rose-50 border-red-100", text: "text-red-700", icon: "text-red-400" },
+  };
+  const s = styles[color] || styles.blue;
+  return (
+    <div className={`rounded-xl bg-gradient-to-br ${s.card} border px-4 py-3`}>
+      <div className="flex items-center justify-between mb-1">
+        <p className={`text-2xl font-bold ${s.text}`}>{value}</p>
+        <div className={s.icon}>{icon}</div>
+      </div>
+      <p className={`text-xs font-medium ${s.text} opacity-70`}>{label}</p>
+    </div>
+  );
+}
+
+function SortTh({ label, sortKey_, currentKey, dir, onSort, align, className }: {
+  label: string; sortKey_: string; currentKey: string; dir: "asc" | "desc";
+  onSort: (k: never) => void; align?: "center" | "left"; className?: string;
+}) {
+  const active = currentKey === sortKey_;
+  return (
+    <th
+      className={`${align === "center" ? "text-center" : "text-left"} px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider cursor-pointer select-none hover:text-ink transition-colors ${className || ""}`}
+      onClick={() => onSort(sortKey_ as never)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+      </span>
+    </th>
+  );
+}

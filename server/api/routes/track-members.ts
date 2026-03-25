@@ -11,6 +11,20 @@ const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
+// GET /api/track-members/tracks
+app.get("/tracks", async (c) => {
+  const currentUser = c.get("user");
+
+  const accessibleTracks = hasRole(currentUser, "ADMIN")
+    ? await db.select({ id: tracks.id, name: tracks.name }).from(tracks)
+    : await db
+        .select({ id: tracks.id, name: tracks.name })
+        .from(tracks)
+        .where(eq(tracks.headUserId, currentUser.id));
+
+  return c.json({ tracks: accessibleTracks });
+});
+
 /** Check if user is head of the given track */
 async function isTrackHead(userId: string, trackId: string): Promise<boolean> {
   const track = await db.query.tracks.findFirst({

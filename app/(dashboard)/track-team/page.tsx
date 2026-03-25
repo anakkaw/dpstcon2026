@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSession } from "@/lib/auth-client";
+import { useState, useEffect } from "react";
+import { useDashboardAuth } from "@/components/dashboard-auth-context";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { Field } from "@/components/ui/field";
 import { SectionTitle } from "@/components/ui/section-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
-import { getRoleLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { Users, UserPlus, Trash2, ShieldCheck, ClipboardCheck } from "lucide-react";
 import { displayNameTh } from "@/lib/display-name";
@@ -42,10 +41,9 @@ interface AvailableUser {
 
 export default function TrackTeamPage() {
   const { t } = useI18n();
-  const { data: session } = useSession();
-  const role = (session?.user as Record<string, unknown>)?.role as string;
-  const isChair = role === "PROGRAM_CHAIR";
-  const isAdmin = role === "ADMIN";
+  const { roles } = useDashboardAuth();
+  const isChair = roles.includes("PROGRAM_CHAIR");
+  const isAdmin = roles.includes("ADMIN");
 
   const [tracks, setTracks] = useState<TrackData[]>([]);
   const [selectedTrack, setSelectedTrack] = useState("");
@@ -60,31 +58,18 @@ export default function TrackTeamPage() {
 
   // Load tracks the user heads
   useEffect(() => {
-    fetch("/api/submissions/tracks")
+    fetch("/api/track-members/tracks")
       .then((r) => r.json())
-      .then(async (data) => {
-        const allTracks: TrackData[] = data.tracks || [];
-        // For chair: filter to own tracks by trying to access each
-        // For admin: show all
-        if (isAdmin) {
-          setTracks(allTracks);
-          if (allTracks.length > 0) setSelectedTrack(allTracks[0].id);
-        } else {
-          // Try to load members for each track — Forbidden = not my track
-          const myTracks: TrackData[] = [];
-          for (const t of allTracks) {
-            const res = await fetch(`/api/track-members/${t.id}`);
-            if (res.ok) myTracks.push(t);
-          }
-          setTracks(myTracks);
-          if (myTracks.length > 0) setSelectedTrack(myTracks[0].id);
-        }
+      .then((data) => {
+        const nextTracks: TrackData[] = data.tracks || [];
+        setTracks(nextTracks);
+        setSelectedTrack((current) => current || nextTracks[0]?.id || "");
       })
       .finally(() => setLoading(false));
   }, [isAdmin]);
 
   // Load members + available users when track changes
-  const loadTrackData = useCallback(async (trackId: string) => {
+  async function loadTrackData(trackId: string) {
     if (!trackId) return;
     const [membersRes, availableRes] = await Promise.all([
       fetch(`/api/track-members/${trackId}`),
@@ -98,11 +83,35 @@ export default function TrackTeamPage() {
       const data = await availableRes.json();
       setAvailable(data.users || []);
     }
-  }, []);
+  }
 
   useEffect(() => {
-    if (selectedTrack) loadTrackData(selectedTrack);
-  }, [selectedTrack, loadTrackData]);
+    if (!selectedTrack) return;
+
+    let active = true;
+
+    (async () => {
+      const [membersRes, availableRes] = await Promise.all([
+        fetch(`/api/track-members/${selectedTrack}`),
+        fetch(`/api/track-members/${selectedTrack}/available`),
+      ]);
+
+      if (!active) return;
+
+      if (membersRes.ok) {
+        const data = await membersRes.json();
+        if (active) setMembers(data.members || []);
+      }
+      if (availableRes.ok) {
+        const data = await availableRes.json();
+        if (active) setAvailable(data.users || []);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedTrack]);
 
   async function handleAdd() {
     if (!addUserId || !selectedTrack) return;

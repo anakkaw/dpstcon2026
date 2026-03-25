@@ -1,5 +1,3 @@
-import { auth } from "@/server/auth";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/server/db";
 import {
@@ -10,18 +8,18 @@ import {
   tracks,
   decisions,
   presentationAssignments,
-  presentationCriteria,
   settings,
   notifications,
 } from "@/server/db/schema";
 import { eq, count, and, sql } from "drizzle-orm";
 import { DashboardClient } from "./dashboard-client";
+import { getServerAuthContext } from "@/server/auth-helpers";
 
 export default async function DashboardPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/login");
+  const authContext = await getServerAuthContext();
+  if (!authContext?.user.isActive) redirect("/login");
 
-  const currentUser = session.user as { id: string; role: string; name: string; prefixTh?: string; firstNameTh?: string; lastNameTh?: string };
+  const currentUser = authContext.user as { id: string; role: string; name: string; prefixTh?: string; firstNameTh?: string; lastNameTh?: string };
   let stats: Record<string, unknown> = {};
 
   if (currentUser.role === "AUTHOR") {

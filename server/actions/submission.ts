@@ -1,20 +1,13 @@
 "use server";
 
 import { db } from "@/server/db";
-import { submissions, coAuthors, reviewAssignments } from "@/server/db/schema";
-import { auth } from "@/server/auth";
-import { headers } from "next/headers";
+import { submissions, reviewAssignments } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-
-async function getSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) throw new Error("Unauthorized");
-  return session;
-}
+import { requireActiveServerAuthContext } from "@/server/auth-helpers";
 
 export async function createSubmission(formData: FormData) {
-  const session = await getSession();
+  const { session } = await requireActiveServerAuthContext();
 
   const title = (formData.get("title") as string || "").trim();
   const titleEn = (formData.get("titleEn") as string || "").trim();
@@ -59,7 +52,7 @@ export async function createSubmission(formData: FormData) {
 }
 
 export async function updateSubmission(id: string, formData: FormData) {
-  const session = await getSession();
+  const { session } = await requireActiveServerAuthContext();
   const existing = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!existing) throw new Error("Not found");
   if (existing.authorId !== session.user.id) throw new Error("Forbidden");
@@ -83,7 +76,7 @@ export async function updateSubmission(id: string, formData: FormData) {
 }
 
 export async function submitPaper(id: string) {
-  const session = await getSession();
+  const { session } = await requireActiveServerAuthContext();
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) throw new Error("Not found");
   if (submission.authorId !== session.user.id) throw new Error("Forbidden");
@@ -137,7 +130,7 @@ export async function submitPaper(id: string) {
 }
 
 export async function resubmitPaper(id: string) {
-  const session = await getSession();
+  const { session } = await requireActiveServerAuthContext();
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) throw new Error("Not found");
   if (submission.authorId !== session.user.id) throw new Error("Forbidden");
@@ -170,7 +163,7 @@ export async function resubmitPaper(id: string) {
 }
 
 export async function withdrawPaper(id: string) {
-  const session = await getSession();
+  const { session } = await requireActiveServerAuthContext();
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) throw new Error("Not found");
   if (submission.authorId !== session.user.id) throw new Error("Forbidden");

@@ -1,28 +1,10 @@
 "use server";
 
 import { db } from "@/server/db";
-import { reviews, reviewAssignments, decisions, submissions, presentationAssignments, userRoles } from "@/server/db/schema";
-import { auth } from "@/server/auth";
-import { headers } from "next/headers";
+import { reviews, reviewAssignments, decisions, submissions, presentationAssignments } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-
-async function getSessionWithRoles() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) throw new Error("Unauthorized");
-
-  // Load user's roles
-  const roleRows = await db
-    .select({ role: userRoles.role })
-    .from(userRoles)
-    .where(eq(userRoles.userId, session.user.id));
-  const roles = roleRows.map((r) => r.role);
-
-  return {
-    ...session,
-    roles: roles.length > 0 ? roles : [session.user.role as string],
-  };
-}
+import { requireActiveServerAuthContext } from "@/server/auth-helpers";
 
 export async function submitReview(data: {
   submissionId: string;
@@ -31,7 +13,7 @@ export async function submitReview(data: {
   commentsToChair?: string;
   recommendation: string;
 }) {
-  const session = await getSessionWithRoles();
+  const { session, user } = await requireActiveServerAuthContext();
 
   // Verify reviewer has an assignment for this submission
   const assignment = await db.query.reviewAssignments.findFirst({
@@ -41,7 +23,7 @@ export async function submitReview(data: {
     ),
   });
 
-  if (!assignment && !session.roles.includes("ADMIN")) {
+  if (!assignment && !user.roles.includes("ADMIN")) {
     throw new Error("คุณไม่ได้รับมอบหมายให้รีวิวบทความนี้");
   }
 
@@ -77,10 +59,10 @@ export async function makeDecision(data: {
   comments?: string;
   conditions?: string;
 }) {
-  const session = await getSessionWithRoles();
+  const { session, user } = await requireActiveServerAuthContext();
 
   // Only ADMIN or PROGRAM_CHAIR can make decisions
-  const canDecide = session.roles.some((r) =>
+  const canDecide = user.roles.some((r) =>
     ["ADMIN", "PROGRAM_CHAIR"].includes(r)
   );
   if (!canDecide) {

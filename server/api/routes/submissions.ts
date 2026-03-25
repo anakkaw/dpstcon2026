@@ -1,4 +1,5 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { db } from "@/server/db";
 import { submissions, coAuthors, tracks, reviewAssignments, storedFiles } from "@/server/db/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -9,6 +10,118 @@ import { getUploadUrl, getDownloadUrl, generateFileKey } from "@/server/r2";
 import { hasRole } from "@/lib/permissions";
 
 const app = new OpenAPIHono<AuthEnv>();
+
+const FILE_KIND_PATHS = {
+  MANUSCRIPT: "manuscript",
+  SUPPLEMENTARY: "supplementary",
+  CAMERA_READY: "camera-ready",
+} as const;
+
+const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+const UPLOAD_TOKEN_TTL_MS = 15 * 60 * 1000;
+
+type UploadTokenPayload = {
+  submissionId: string;
+  userId: string;
+  fileKey: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  kind: keyof typeof FILE_KIND_PATHS;
+  expiresAt: number;
+};
+
+function getUploadTokenSecret() {
+  return process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
+}
+
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function signUploadToken(payload: UploadTokenPayload) {
+  const secret = getUploadTokenSecret();
+  if (!secret) return null;
+
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", secret).update(encodedPayload).digest("base64url");
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifyUploadToken(token: string) {
+  const secret = getUploadTokenSecret();
+  if (!secret) return null;
+
+  const [encodedPayload, signature] = token.split(".");
+  if (!encodedPayload || !signature) return null;
+
+  const expectedSignature = createHmac("sha256", secret).update(encodedPayload).digest("base64url");
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(encodedPayload, "base64url").toString("utf8")
+    ) as UploadTokenPayload;
+
+    if (payload.expiresAt < Date.now()) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function matchesExpectedFileKey(
+  submissionId: string,
+  kind: keyof typeof FILE_KIND_PATHS,
+  fileName: string,
+  fileKey: string
+) {
+  const expectedPrefix = `submissions/${submissionId}/${FILE_KIND_PATHS[kind]}/`;
+  const expectedSuffix = `-${sanitizeFileName(fileName)}`;
+  return fileKey.startsWith(expectedPrefix) && fileKey.endsWith(expectedSuffix);
+}
+
+async function canAccessSubmission(
+  currentUser: AuthEnv["Variables"]["user"],
+  submission: { id: string; authorId: string; trackId: string | null }
+) {
+  if (hasRole(currentUser, "ADMIN")) return true;
+  if (submission.authorId === currentUser.id) return true;
+
+  if (hasRole(currentUser, "REVIEWER")) {
+    const assignment = await db.query.reviewAssignments.findFirst({
+      where: and(
+        eq(reviewAssignments.submissionId, submission.id),
+        eq(reviewAssignments.reviewerId, currentUser.id)
+      ),
+      columns: { id: true },
+    });
+
+    if (assignment) return true;
+  }
+
+  if (hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
+    const track = await db.query.tracks.findFirst({
+      where: eq(tracks.id, submission.trackId),
+      columns: { headUserId: true },
+    });
+
+    if (track?.headUserId === currentUser.id) return true;
+  }
+
+  return false;
+}
 
 app.use("/*", authMiddleware);
 
@@ -114,36 +227,8 @@ app.get("/:id", async (c) => {
 
   if (!submission) return c.json({ error: "Not found" }, 404);
 
-  // Access control: ADMIN can access all
-  if (!hasRole(currentUser, "ADMIN")) {
-    let hasAccess = false;
-
-    // Author can access own
-    if (submission.authorId === currentUser.id) {
-      hasAccess = true;
-    }
-
-    // Reviewer can access if assigned
-    if (hasRole(currentUser, "REVIEWER")) {
-      const assignment = await db.query.reviewAssignments.findFirst({
-        where: and(
-          eq(reviewAssignments.submissionId, id),
-          eq(reviewAssignments.reviewerId, currentUser.id)
-        ),
-      });
-      if (assignment) hasAccess = true;
-    }
-
-    // Program chair can access if track head
-    if (hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
-      const track = await db.query.tracks.findFirst({
-        where: eq(tracks.id, submission.trackId),
-        columns: { headUserId: true },
-      });
-      if (track?.headUserId === currentUser.id) hasAccess = true;
-    }
-
-    if (!hasAccess) return c.json({ error: "Forbidden" }, 403);
+  if (!(await canAccessSubmission(currentUser, submission))) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   let filteredDiscussions = submission.discussions;
@@ -430,7 +515,7 @@ const uploadSchema = z.object({
     (v) => (ALLOWED_MIME_TYPES as readonly string[]).includes(v),
     { message: "ไฟล์ประเภทนี้ไม่ได้รับอนุญาต (อนุญาต: PDF, DOCX, XLSX, ZIP, PNG, JPEG)" }
   ),
-  fileSize: z.number().positive().max(50 * 1024 * 1024),
+  fileSize: z.number().positive().max(MAX_UPLOAD_SIZE),
   kind: z.enum(["MANUSCRIPT", "SUPPLEMENTARY", "CAMERA_READY"]),
 });
 
@@ -448,12 +533,29 @@ app.post("/:id/upload-url", async (c) => {
   }
 
   const { fileName, mimeType, kind } = parsed.data;
-  const kindMap = { MANUSCRIPT: "manuscript", SUPPLEMENTARY: "supplementary", CAMERA_READY: "camera-ready" } as const;
-  const fileKey = generateFileKey(id, fileName, kindMap[kind]);
+  if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
+    return c.json({ error: "Camera-ready upload is not available for this submission" }, 400);
+  }
+
+  const fileKey = generateFileKey(id, fileName, FILE_KIND_PATHS[kind]);
+  const uploadToken = signUploadToken({
+    submissionId: id,
+    userId: currentUser.id,
+    fileKey,
+    fileName,
+    mimeType,
+    fileSize: parsed.data.fileSize,
+    kind,
+    expiresAt: Date.now() + UPLOAD_TOKEN_TTL_MS,
+  });
+
+  if (!uploadToken) {
+    return c.json({ error: "Upload signing not configured" }, 503);
+  }
 
   try {
     const uploadUrl = await getUploadUrl(fileKey, mimeType);
-    return c.json({ uploadUrl, fileKey });
+    return c.json({ uploadUrl, fileKey, uploadToken });
   } catch {
     return c.json({ error: "File storage not configured" }, 503);
   }
@@ -463,9 +565,13 @@ app.post("/:id/upload-url", async (c) => {
 const confirmUploadSchema = z.object({
   fileKey: z.string().min(1),
   fileName: z.string().min(1),
-  mimeType: z.string().min(1),
-  fileSize: z.number().positive(),
+  mimeType: z.string().min(1).refine(
+    (v) => (ALLOWED_MIME_TYPES as readonly string[]).includes(v),
+    { message: "ไฟล์ประเภทนี้ไม่ได้รับอนุญาต" }
+  ),
+  fileSize: z.number().positive().max(MAX_UPLOAD_SIZE),
   kind: z.enum(["MANUSCRIPT", "SUPPLEMENTARY", "CAMERA_READY"]),
+  uploadToken: z.string().min(1),
 });
 
 app.post("/:id/confirm-upload", async (c) => {
@@ -481,7 +587,32 @@ app.post("/:id/confirm-upload", async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  const { fileKey, fileName, mimeType, fileSize, kind } = parsed.data;
+  const { fileKey, fileName, mimeType, fileSize, kind, uploadToken } = parsed.data;
+  const tokenPayload = verifyUploadToken(uploadToken);
+
+  if (!tokenPayload) {
+    return c.json({ error: "Invalid or expired upload token" }, 400);
+  }
+
+  if (
+    tokenPayload.submissionId !== id ||
+    tokenPayload.userId !== currentUser.id ||
+    tokenPayload.fileKey !== fileKey ||
+    tokenPayload.fileName !== fileName ||
+    tokenPayload.mimeType !== mimeType ||
+    tokenPayload.fileSize !== fileSize ||
+    tokenPayload.kind !== kind
+  ) {
+    return c.json({ error: "Upload confirmation does not match the requested upload" }, 400);
+  }
+
+  if (!matchesExpectedFileKey(id, kind, fileName, fileKey)) {
+    return c.json({ error: "Invalid file key" }, 400);
+  }
+
+  if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
+    return c.json({ error: "Camera-ready upload is not allowed in the current status" }, 400);
+  }
 
   const [file] = await db
     .insert(storedFiles)
@@ -515,7 +646,7 @@ app.get("/:id/files", async (c) => {
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
-  if (submission.authorId !== currentUser.id && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "REVIEWER")) {
+  if (!(await canAccessSubmission(currentUser, submission))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -530,12 +661,11 @@ app.get("/:id/file-url", async (c) => {
 
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, id),
-    columns: { fileUrl: true, authorId: true },
+    columns: { id: true, fileUrl: true, authorId: true, trackId: true },
   });
   if (!submission?.fileUrl) return c.json({ error: "No file" }, 404);
 
-  // Authorization check
-  if (submission.authorId !== currentUser.id && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "REVIEWER")) {
+  if (!(await canAccessSubmission(currentUser, submission))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -554,7 +684,7 @@ app.get("/:id/download/:fileId", async (c) => {
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
-  if (submission.authorId !== currentUser.id && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "REVIEWER")) {
+  if (!(await canAccessSubmission(currentUser, submission))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 

@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getNavItemsForRoles } from "@/lib/constants";
 import { getRoleLabels } from "@/lib/labels";
-import { useSession, signOut } from "@/lib/auth-client";
+import { signOut } from "@/lib/auth-client";
 import { useI18n } from "@/lib/i18n";
+import type { TranslationKey } from "@/lib/i18n/translations/th";
 import { LanguageToggle } from "@/components/language-toggle";
 import { NotificationBell } from "@/components/notification-bell";
+import { useDashboardAuth } from "@/components/dashboard-auth-context";
 import { Footer } from "@/components/ui/footer";
 import {
   LayoutDashboard,
@@ -16,7 +18,7 @@ import {
   ClipboardCheck,
   Presentation,
   Mic,
-  Image,
+  Image as ImageIcon,
   Settings,
   Calendar,
   Users,
@@ -26,7 +28,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 
 const iconMap: Record<string, React.ReactNode> = {
   LayoutDashboard: <LayoutDashboard className="h-5 w-5" />,
@@ -34,7 +36,7 @@ const iconMap: Record<string, React.ReactNode> = {
   ClipboardCheck: <ClipboardCheck className="h-5 w-5" />,
   Presentation: <Presentation className="h-5 w-5" />,
   Mic: <Mic className="h-5 w-5" />,
-  Image: <Image className="h-5 w-5" />,
+  Image: <ImageIcon className="h-5 w-5" />,
   Settings: <Settings className="h-5 w-5" />,
   Calendar: <Calendar className="h-5 w-5" />,
   Users: <Users className="h-5 w-5" />,
@@ -43,31 +45,13 @@ const iconMap: Record<string, React.ReactNode> = {
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession();
+  const user = useDashboardAuth();
   const pathname = usePathname();
   const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const ROLE_LABELS = getRoleLabels(t);
 
-  const role = ((session?.user as Record<string, unknown>)?.role as string) || "AUTHOR";
-  const userId = (session?.user as Record<string, unknown>)?.id as string | undefined;
-
-  const [roles, setRoles] = useState<string[]>([role]);
-  const fetchedForRef = useRef<string | null>(null);
-
-  // Fetch roles once per user — ref prevents duplicate requests
-  useEffect(() => {
-    if (!userId || fetchedForRef.current === userId) return;
-    fetchedForRef.current = userId;
-    fetch("/api/users/me/roles")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.roles?.length) setRoles(data.roles);
-      })
-      .catch(() => {});
-  }, [userId]);
-
-  const navItems = getNavItemsForRoles(roles);
+  const navItems = getNavItemsForRoles(user.roles);
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-hover">
@@ -122,7 +106,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 {iconMap[item.icon] || <LayoutDashboard className="h-5 w-5" />}
-                {t(item.label as any)}
+                {t(item.label as TranslationKey)}
               </Link>
             );
           })}
@@ -150,23 +134,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="h-9 w-9 rounded-full bg-brand-gradient flex items-center justify-center shrink-0">
               <span className="text-white text-sm font-bold">
                 {(() => {
-                  const u = session?.user as unknown as { firstNameEn?: string; firstNameTh?: string; name?: string } | undefined;
-                  return u?.firstNameEn?.[0]?.toUpperCase() || u?.firstNameTh?.[0] || u?.name?.[0]?.toUpperCase() || "U";
+                  return user.firstNameEn?.[0]?.toUpperCase() || user.firstNameTh?.[0] || user.name?.[0]?.toUpperCase() || "U";
                 })()}
               </span>
             </div>
             <div className="hidden sm:block min-w-0">
               <p className="text-sm font-medium text-ink truncate leading-tight">
                 {(() => {
-                  const u = session?.user as unknown as { prefixTh?: string; firstNameTh?: string; lastNameTh?: string; name?: string } | undefined;
-                  const f = u?.firstNameTh || "";
-                  const l = u?.lastNameTh || "";
-                  if (f || l) return `${u?.prefixTh || ""}${f} ${l}`.trim();
-                  return u?.name || "User";
+                  const f = user.firstNameTh || "";
+                  const l = user.lastNameTh || "";
+                  if (f || l) return `${user.prefixTh || ""}${f} ${l}`.trim();
+                  return user.name || "User";
                 })()}
               </p>
               <p className="text-xs text-ink-muted leading-tight">
-                {roles.map((r) => ROLE_LABELS[r] || r).join(", ")}
+                {user.roles.map((r) => ROLE_LABELS[r] || r).join(", ")}
               </p>
             </div>
             <button

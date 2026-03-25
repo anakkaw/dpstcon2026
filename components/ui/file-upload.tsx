@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
 interface FileUploadProps {
   submissionId: string;
@@ -78,7 +78,7 @@ export function FileUpload({
           throw new Error(data.error || t("fileUpload.uploadUrlError"));
         }
 
-        const { uploadUrl, fileKey } = await urlRes.json();
+        const { uploadUrl, fileKey, uploadToken } = await urlRes.json();
         setProgress(30);
 
         // Step 2: Upload file to R2 via presigned URL
@@ -119,12 +119,13 @@ export function FileUpload({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             fileKey,
-            fileName: file.name,
-            mimeType: file.type || "application/octet-stream",
-            fileSize: file.size,
-            kind,
-          }),
-        });
+              fileName: file.name,
+              mimeType: file.type || "application/octet-stream",
+              fileSize: file.size,
+              kind,
+              uploadToken,
+            }),
+          });
 
         if (!confirmRes.ok) {
           throw new Error(t("fileUpload.confirmFailed"));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession } from "@/lib/auth-client";
+import { useDashboardAuth } from "@/components/dashboard-auth-context";
 import { Card, CardBody, CardHeader, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,8 @@ import { formatDate } from "@/lib/utils";
 import { getDaysUntil } from "@/lib/author-utils";
 import { useI18n } from "@/lib/i18n";
 import {
-  Calendar, FileText, Download, Save, Plus, Trash2, Pencil, X,
-  Clock, CheckCircle2, AlertTriangle, ChevronRight,
+  FileText, Download, Save, Plus, Trash2, Pencil, X,
+  Clock, CheckCircle2, AlertTriangle,
 } from "lucide-react";
 
 interface TemplateData {
@@ -47,9 +47,8 @@ const DEADLINE_DEFAULTS = [
 
 export default function DeadlinesPage() {
   const { t, locale } = useI18n();
-  const { data: session } = useSession();
-  const role = (session?.user as Record<string, unknown>)?.role as string;
-  const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(role);
+  const { roles } = useDashboardAuth();
+  const isAdmin = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
 
   const [templates, setTemplates] = useState<TemplateData[]>([]);
   const [settings, setSettings] = useState<DeadlineSettings>({});
@@ -66,11 +65,10 @@ export default function DeadlinesPage() {
   const [addingTemplate, setAddingTemplate] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/templates").then((r) => r.json()).catch(() => ({ templates: [] })),
-      fetch("/api/submissions/tracks").then((r) => r.json()).catch(() => ({})),
-    ])
-      .then(([tmplData]) => {
+    fetch("/api/templates")
+      .then((r) => r.json())
+      .catch(() => ({ templates: [] }))
+      .then((tmplData) => {
         setTemplates(tmplData.templates || []);
         const fallback: DeadlineSettings = {
           submissionDeadline: "2026-06-30",
