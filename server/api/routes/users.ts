@@ -112,7 +112,6 @@ app.patch("/:id", requireRole("ADMIN"), async (c) => {
 
   const schema = z.object({
     name: z.string().optional(),
-    nameEn: z.string().optional(),
     affiliation: z.string().optional(),
     bio: z.string().optional(),
     prefixTh: z.string().optional(),
@@ -128,9 +127,18 @@ app.patch("/:id", requireRole("ADMIN"), async (c) => {
     return c.json({ error: "Validation error" }, 400);
   }
 
+  // Auto-compose `name` from structured fields if available
+  const data = { ...parsed.data };
+  if (data.prefixTh !== undefined || data.firstNameTh !== undefined || data.lastNameTh !== undefined) {
+    const p = data.prefixTh ?? "";
+    const f = data.firstNameTh ?? "";
+    const l = data.lastNameTh ?? "";
+    if (f || l) data.name = `${p}${f} ${l}`.trim();
+  }
+
   const [updated] = await db
     .update(user)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...data, updatedAt: new Date() })
     .where(eq(user.id, id))
     .returning();
 
@@ -226,9 +234,6 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   const displayName = parsed.data.prefixTh && parsed.data.firstNameTh && parsed.data.lastNameTh
     ? `${parsed.data.prefixTh}${parsed.data.firstNameTh} ${parsed.data.lastNameTh}`
     : parsed.data.name;
-  const displayNameEn = parsed.data.prefixEn && parsed.data.firstNameEn && parsed.data.lastNameEn
-    ? `${parsed.data.prefixEn} ${parsed.data.firstNameEn} ${parsed.data.lastNameEn}`
-    : undefined;
 
   // Create user directly via Drizzle
   const userId = crypto.randomUUID();
@@ -241,7 +246,6 @@ app.post("/", requireRole("ADMIN"), async (c) => {
       emailVerified: false,
       role: primaryRole as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
       affiliation: parsed.data.affiliation,
-      nameEn: displayNameEn,
       prefixTh: parsed.data.prefixTh,
       prefixEn: parsed.data.prefixEn,
       firstNameTh: parsed.data.firstNameTh,
@@ -392,14 +396,10 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
       const displayName = u.prefixTh && u.firstNameTh && u.lastNameTh
         ? `${u.prefixTh}${u.firstNameTh} ${u.lastNameTh}`
         : u.name;
-      const displayNameEn = u.prefixEn && u.firstNameEn && u.lastNameEn
-        ? `${u.prefixEn} ${u.firstNameEn} ${u.lastNameEn}`
-        : undefined;
 
       newUserInserts.push({
         id: userId,
         name: displayName,
-        nameEn: displayNameEn,
         email: u.email,
         emailVerified: false,
         role: primaryRole as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",

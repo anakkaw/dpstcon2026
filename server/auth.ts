@@ -25,10 +25,6 @@ export const auth = betterAuth({
         defaultValue: "AUTHOR",
         input: false,
       },
-      nameEn: {
-        type: "string",
-        required: false,
-      },
       affiliation: {
         type: "string",
         required: false,

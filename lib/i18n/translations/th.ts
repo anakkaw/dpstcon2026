@@ -266,7 +266,7 @@ const th = {
   "users.inviteUser": "เชิญผู้ใช้",
   "users.inviteNewUser": "เชิญผู้ใช้ใหม่",
   "users.fullNameTh": "ชื่อ-นามสกุล (ไทย)",
-  "users.fullNameEn": "ชื่อ-นามสกุล (อังกฤษ)",
+  "users.fullNameEn": "ชื่อ-นามสกุล (อังกฤษ)", // kept for backward compat
   "users.email": "อีเมล",
   "users.affiliation": "สังกัด",
   "users.affiliationPlaceholder": "มหาวิทยาลัย / องค์กร",

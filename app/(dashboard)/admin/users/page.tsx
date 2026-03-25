@@ -32,7 +32,6 @@ interface UserData {
   role: string;
   roles: string[];
   affiliation: string | null;
-  nameEn: string | null;
   bio: string | null;
   prefixTh: string | null;
   prefixEn: string | null;
@@ -85,7 +84,7 @@ export default function AdminUsersPage() {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [editForm, setEditForm] = useState({
-    name: "", nameEn: "", affiliation: "", bio: "", roles: [] as string[],
+    name: "", affiliation: "", bio: "", roles: [] as string[],
     prefixTh: "", prefixEn: "", firstNameTh: "", lastNameTh: "", firstNameEn: "", lastNameEn: "",
   });
   const [resetPw, setResetPw] = useState("");
@@ -149,7 +148,6 @@ export default function AdminUsersPage() {
     if (mode === "edit") {
       setEditForm({
         name: user.name,
-        nameEn: user.nameEn || "",
         affiliation: user.affiliation || "",
         bio: user.bio || "",
         roles: user.roles || [user.role],
@@ -211,7 +209,7 @@ export default function AdminUsersPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editForm.name, nameEn: editForm.nameEn, affiliation: editForm.affiliation, bio: editForm.bio,
+          name: editForm.name, affiliation: editForm.affiliation, bio: editForm.bio,
           prefixTh: editForm.prefixTh, prefixEn: editForm.prefixEn,
           firstNameTh: editForm.firstNameTh, lastNameTh: editForm.lastNameTh,
           firstNameEn: editForm.firstNameEn, lastNameEn: editForm.lastNameEn,
@@ -310,7 +308,8 @@ export default function AdminUsersPage() {
   const filtered = useMemo(() => {
     let result = users.filter((u) => {
       const q = search.toLowerCase();
-      const matchSearch = !search || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.affiliation || "").toLowerCase().includes(q) || (u.nameEn || "").toLowerCase().includes(q);
+      const nameEnFull = [u.prefixEn, u.firstNameEn, u.lastNameEn].filter(Boolean).join(" ");
+      const matchSearch = !search || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.affiliation || "").toLowerCase().includes(q) || nameEnFull.toLowerCase().includes(q);
       const matchRole = !filterRole || (u.roles || [u.role]).includes(filterRole);
       return matchSearch && matchRole;
     });
@@ -565,7 +564,7 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-3">
                         <button onClick={() => setExpandedId(expandedId === u.id ? null : u.id)} className="text-left w-full group/name">
                           <div className="font-medium text-ink group-hover/name:text-brand-600 transition-colors">{u.name}</div>
-                          {u.nameEn && <div className="text-xs text-ink-muted">{u.nameEn}</div>}
+                          {(u.firstNameEn || u.lastNameEn) && <div className="text-xs text-ink-muted">{[u.prefixEn, u.firstNameEn, u.lastNameEn].filter(Boolean).join(" ")}</div>}
                         </button>
                       </td>
                       <td className="px-4 py-3 text-ink-light">{u.email}</td>
@@ -673,15 +672,8 @@ export default function AdminUsersPage() {
                       <Input value={editForm.lastNameEn} onChange={(e) => setEditForm({ ...editForm, lastNameEn: e.target.value })} placeholder="Last Name" />
                     </Field>
                   </div>
-                  {/* Full name (auto-generated, editable as fallback) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label={t("users.fullNameTh")} hint="auto-filled from prefix+name">
-                      <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-                    </Field>
-                    <Field label={t("users.fullNameEn")}>
-                      <Input value={editForm.nameEn} onChange={(e) => setEditForm({ ...editForm, nameEn: e.target.value })} placeholder="Name Surname" />
-                    </Field>
-                  </div>
+                  {/* Full name (auto-generated, hidden input) */}
+                  <input type="hidden" value={editForm.name} />
                   <Field label={t("users.affiliation")}>
                     <Input value={editForm.affiliation} onChange={(e) => setEditForm({ ...editForm, affiliation: e.target.value })} placeholder={t("users.affiliationPlaceholder")} />
                   </Field>

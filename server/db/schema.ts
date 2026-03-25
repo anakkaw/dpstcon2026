@@ -123,7 +123,6 @@ export const user = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
     role: roleEnum("role").default("AUTHOR").notNull(),
-    nameEn: varchar("name_en", { length: 255 }),
     affiliation: varchar("affiliation", { length: 500 }),
     bio: text("bio"),
     // Bilingual name fields
