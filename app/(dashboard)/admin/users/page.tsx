@@ -52,6 +52,19 @@ interface RegistrationStats {
 }
 
 type ModalMode = null | "edit" | "password" | "delete";
+/** Compose display name from structured fields, fallback to `name` */
+function displayNameTh(u: { prefixTh?: string | null; firstNameTh?: string | null; lastNameTh?: string | null; name: string }): string {
+  const f = u.firstNameTh || "";
+  const l = u.lastNameTh || "";
+  if (!f && !l) return u.name;
+  const p = u.prefixTh || "";
+  return `${p}${f} ${l}`.trim();
+}
+
+function displayNameEn(u: { prefixEn?: string | null; firstNameEn?: string | null; lastNameEn?: string | null }): string {
+  return [u.prefixEn, u.firstNameEn, u.lastNameEn].filter(Boolean).join(" ");
+}
+
 function getInviteStatus(u: UserData): { label: string; tone: "success" | "warning" | "danger" } {
   if (u.isActive) return { label: "Active", tone: "success" };
   if (u.inviteExpiresAt && new Date(u.inviteExpiresAt) > new Date()) return { label: "Pending", tone: "warning" };
@@ -308,14 +321,15 @@ export default function AdminUsersPage() {
   const filtered = useMemo(() => {
     let result = users.filter((u) => {
       const q = search.toLowerCase();
-      const nameEnFull = [u.prefixEn, u.firstNameEn, u.lastNameEn].filter(Boolean).join(" ");
-      const matchSearch = !search || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.affiliation || "").toLowerCase().includes(q) || nameEnFull.toLowerCase().includes(q);
+      const nameThFull = displayNameTh(u);
+      const nameEnFull = displayNameEn(u);
+      const matchSearch = !search || nameThFull.toLowerCase().includes(q) || nameEnFull.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.affiliation || "").toLowerCase().includes(q);
       const matchRole = !filterRole || (u.roles || [u.role]).includes(filterRole);
       return matchSearch && matchRole;
     });
     result.sort((a, b) => {
       let cmp = 0;
-      if (sortBy === "name") cmp = a.name.localeCompare(b.name, "th");
+      if (sortBy === "name") cmp = displayNameTh(a).localeCompare(displayNameTh(b), "th");
       else if (sortBy === "email") cmp = a.email.localeCompare(b.email);
       else if (sortBy === "affiliation") cmp = (a.affiliation || "").localeCompare(b.affiliation || "", "th");
       else if (sortBy === "createdAt") cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
@@ -567,8 +581,8 @@ export default function AdminUsersPage() {
                     <tr key={u.id} className="border-b border-border/40 hover:bg-surface-hover/50 transition-colors group">
                       <td className="px-4 py-3">
                         <button onClick={() => setExpandedId(expandedId === u.id ? null : u.id)} className="text-left w-full group/name">
-                          <div className="font-medium text-ink group-hover/name:text-brand-600 transition-colors">{u.name}</div>
-                          {(u.firstNameEn || u.lastNameEn) && <div className="text-xs text-ink-muted">{[u.prefixEn, u.firstNameEn, u.lastNameEn].filter(Boolean).join(" ")}</div>}
+                          <div className="font-medium text-ink group-hover/name:text-brand-600 transition-colors">{displayNameTh(u)}</div>
+                          {(u.firstNameEn || u.lastNameEn) && <div className="text-xs text-ink-muted">{displayNameEn(u)}</div>}
                         </button>
                       </td>
                       <td className="px-4 py-3 text-ink-light">{u.email}</td>
@@ -730,7 +744,7 @@ export default function AdminUsersPage() {
                     <h3 id="modal-title" className="text-base font-semibold text-ink flex items-center gap-2">
                       <KeyRound className="h-4 w-4 text-yellow-500" />Reset Password
                     </h3>
-                    <p className="text-sm text-ink-muted mt-0.5">{selectedUser.name} — {selectedUser.email}</p>
+                    <p className="text-sm text-ink-muted mt-0.5">{displayNameTh(selectedUser)} — {selectedUser.email}</p>
                   </div>
                   <button onClick={closeModal} className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-gray-100 transition-colors"><X className="h-5 w-5" /></button>
                 </div>
@@ -769,7 +783,7 @@ export default function AdminUsersPage() {
                       <Trash2 className="h-6 w-6 text-danger" />
                     </div>
                     <div>
-                      <p className="text-base font-semibold text-ink">{selectedUser.name}</p>
+                      <p className="text-base font-semibold text-ink">{displayNameTh(selectedUser)}</p>
                       <p className="text-sm text-ink-muted">{selectedUser.email}{selectedUser.affiliation ? ` · ${selectedUser.affiliation}` : ""}</p>
                       <p className="text-sm text-danger mt-2 font-medium">This action cannot be undone.</p>
                     </div>
