@@ -73,7 +73,7 @@ export default function AdminUsersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [newUser, setNewUser] = useState({
-    name: "", email: "", roles: ["AUTHOR"] as string[], affiliation: "",
+    email: "", roles: ["AUTHOR"] as string[], affiliation: "",
     prefixTh: "", prefixEn: "", firstNameTh: "", lastNameTh: "", firstNameEn: "", lastNameEn: "",
   });
   const [creating, setCreating] = useState(false);
@@ -85,7 +85,7 @@ export default function AdminUsersPage() {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [editForm, setEditForm] = useState({
-    name: "", affiliation: "", bio: "", roles: [] as string[],
+    affiliation: "", bio: "", roles: [] as string[],
     prefixTh: "", prefixEn: "", firstNameTh: "", lastNameTh: "", firstNameEn: "", lastNameEn: "",
   });
   const [resetPw, setResetPw] = useState("");
@@ -148,7 +148,6 @@ export default function AdminUsersPage() {
     setModalMode(mode);
     if (mode === "edit") {
       setEditForm({
-        name: user.name,
         affiliation: user.affiliation || "",
         bio: user.bio || "",
         roles: user.roles || [user.role],
@@ -189,7 +188,7 @@ export default function AdminUsersPage() {
       if (res.ok) {
         showMsg("Invitation sent successfully");
         setNewUser({
-          name: "", email: "", roles: ["AUTHOR"], affiliation: "",
+          email: "", roles: ["AUTHOR"], affiliation: "",
           prefixTh: "", prefixEn: "", firstNameTh: "", lastNameTh: "", firstNameEn: "", lastNameEn: "",
         });
         setShowCreate(false);
@@ -210,7 +209,7 @@ export default function AdminUsersPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editForm.name, affiliation: editForm.affiliation, bio: editForm.bio,
+          affiliation: editForm.affiliation, bio: editForm.bio,
           prefixTh: editForm.prefixTh, prefixEn: editForm.prefixEn,
           firstNameTh: editForm.firstNameTh, lastNameTh: editForm.lastNameTh,
           firstNameEn: editForm.firstNameEn, lastNameEn: editForm.lastNameEn,
@@ -437,25 +436,13 @@ export default function AdminUsersPage() {
             <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.thaiInfo")}</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label={t("users.prefixTh")}>
-                <Input value={newUser.prefixTh} onChange={(e) => {
-                  const updated = { ...newUser, prefixTh: e.target.value };
-                  updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
-                  setNewUser(updated);
-                }} placeholder={t("users.prefixThPlaceholder")} />
+                <Input value={newUser.prefixTh} onChange={(e) => setNewUser({ ...newUser, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
               </Field>
               <Field label={t("users.firstNameTh")} required>
-                <Input value={newUser.firstNameTh} onChange={(e) => {
-                  const updated = { ...newUser, firstNameTh: e.target.value };
-                  updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
-                  setNewUser(updated);
-                }} placeholder="ชื่อ" />
+                <Input value={newUser.firstNameTh} onChange={(e) => setNewUser({ ...newUser, firstNameTh: e.target.value })} placeholder="ชื่อ" />
               </Field>
               <Field label={t("users.lastNameTh")} required>
-                <Input value={newUser.lastNameTh} onChange={(e) => {
-                  const updated = { ...newUser, lastNameTh: e.target.value };
-                  updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
-                  setNewUser(updated);
-                }} placeholder="นามสกุล" />
+                <Input value={newUser.lastNameTh} onChange={(e) => setNewUser({ ...newUser, lastNameTh: e.target.value })} placeholder="นามสกุล" />
               </Field>
             </div>
             {/* English name fields */}
@@ -502,7 +489,7 @@ export default function AdminUsersPage() {
           </CardBody>
           <CardFooter className="flex justify-end gap-2">
             <Button variant="secondary" size="sm" onClick={() => setShowCreate(false)}>{t("common.cancel")}</Button>
-            <Button size="sm" onClick={createUser} loading={creating} disabled={(!newUser.firstNameTh && !newUser.name) || !newUser.email}>
+            <Button size="sm" onClick={createUser} loading={creating} disabled={!newUser.firstNameTh || !newUser.lastNameTh || !newUser.email}>
               <Send className="h-4 w-4" />{t("users.sendInvitation")}
             </Button>
           </CardFooter>
@@ -656,25 +643,13 @@ export default function AdminUsersPage() {
                   <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.thaiInfo")}</p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Field label={t("users.prefixTh")}>
-                      <Input value={editForm.prefixTh} onChange={(e) => {
-                        const updated = { ...editForm, prefixTh: e.target.value };
-                        updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
-                        setEditForm(updated);
-                      }} placeholder={t("users.prefixThPlaceholder")} />
+                      <Input value={editForm.prefixTh} onChange={(e) => setEditForm({ ...editForm, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
                     </Field>
                     <Field label={t("users.firstNameTh")}>
-                      <Input value={editForm.firstNameTh} onChange={(e) => {
-                        const updated = { ...editForm, firstNameTh: e.target.value };
-                        updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
-                        setEditForm(updated);
-                      }} placeholder="ชื่อ" />
+                      <Input value={editForm.firstNameTh} onChange={(e) => setEditForm({ ...editForm, firstNameTh: e.target.value })} placeholder="ชื่อ" />
                     </Field>
                     <Field label={t("users.lastNameTh")}>
-                      <Input value={editForm.lastNameTh} onChange={(e) => {
-                        const updated = { ...editForm, lastNameTh: e.target.value };
-                        updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
-                        setEditForm(updated);
-                      }} placeholder="นามสกุล" />
+                      <Input value={editForm.lastNameTh} onChange={(e) => setEditForm({ ...editForm, lastNameTh: e.target.value })} placeholder="นามสกุล" />
                     </Field>
                   </div>
                   {/* English name fields */}
@@ -690,8 +665,6 @@ export default function AdminUsersPage() {
                       <Input value={editForm.lastNameEn} onChange={(e) => setEditForm({ ...editForm, lastNameEn: e.target.value })} placeholder="Last Name" />
                     </Field>
                   </div>
-                  {/* Full name (auto-generated, hidden input) */}
-                  <input type="hidden" value={editForm.name} />
                   <Field label={t("users.affiliation")}>
                     <Input value={editForm.affiliation} onChange={(e) => setEditForm({ ...editForm, affiliation: e.target.value })} placeholder={t("users.affiliationPlaceholder")} />
                   </Field>

@@ -127,7 +127,7 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
   const schema = z.object({
     users: z.array(
       z.object({
-        name: z.string().min(1),
+        name: z.string().optional(), // Legacy — auto-composed from structured fields
         email: z.string().email(),
         roles: z
           .array(
@@ -143,8 +143,8 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
         affiliation: z.string().optional(),
         prefixTh: z.string().optional(),
         prefixEn: z.string().optional(),
-        firstNameTh: z.string().optional(),
-        lastNameTh: z.string().optional(),
+        firstNameTh: z.string().min(1),
+        lastNameTh: z.string().min(1),
         firstNameEn: z.string().optional(),
         lastNameEn: z.string().optional(),
       })
@@ -216,8 +216,8 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
       const primaryRole = getPrimaryRole(u.roles);
       const userId = crypto.randomUUID();
 
-      // Auto-compose name from structured fields
-      const displayName = composeName(u.prefixTh, u.firstNameTh, u.lastNameTh) || u.name;
+      // Auto-compose name from structured fields (firstNameTh/lastNameTh required by schema)
+      const displayName = composeName(u.prefixTh, u.firstNameTh, u.lastNameTh);
 
       newUserInserts.push({
         id: userId,
@@ -451,7 +451,7 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   const body = await c.req.json();
 
   const schema = z.object({
-    name: z.string().min(1),
+    name: z.string().optional(), // Legacy field — auto-composed from structured fields
     email: z.string().email(),
     roles: z
       .array(
@@ -461,8 +461,8 @@ app.post("/", requireRole("ADMIN"), async (c) => {
     affiliation: z.string().optional(),
     prefixTh: z.string().optional(),
     prefixEn: z.string().optional(),
-    firstNameTh: z.string().optional(),
-    lastNameTh: z.string().optional(),
+    firstNameTh: z.string().min(1, "ต้องระบุชื่อ (ภาษาไทย)"),
+    lastNameTh: z.string().min(1, "ต้องระบุนามสกุล (ภาษาไทย)"),
     firstNameEn: z.string().optional(),
     lastNameEn: z.string().optional(),
   });
@@ -489,8 +489,8 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   );
   const primaryRole = getPrimaryRole(parsed.data.roles);
 
-  // Auto-compose name from structured fields (prefix is optional)
-  const displayName = composeName(parsed.data.prefixTh, parsed.data.firstNameTh, parsed.data.lastNameTh) || parsed.data.name;
+  // Auto-compose name from structured fields — always use structured fields as source of truth
+  const displayName = composeName(parsed.data.prefixTh, parsed.data.firstNameTh, parsed.data.lastNameTh);
 
   // Create user directly via Drizzle
   const userId = crypto.randomUUID();
