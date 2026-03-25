@@ -13,6 +13,7 @@ import { formatDateTime } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { Mic, Calendar, Save, Plus, Users, ClipboardList, X, Check, Clock, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download } from "lucide-react";
 import { TrackFilter } from "@/components/track-filter";
+import { displayNameTh } from "@/lib/display-name";
 
 interface PresentationData {
   id: string;
@@ -120,7 +121,7 @@ export default function OralPresentationPage() {
     const dir = sortDir === "asc" ? 1 : -1;
     switch (sortKey) {
       case "title": return dir * a.submission.title.localeCompare(b.submission.title);
-      case "author": return dir * a.submission.author.name.localeCompare(b.submission.author.name);
+      case "author": return dir * displayNameTh(a.submission.author).localeCompare(displayNameTh(b.submission.author));
       case "track": return dir * (a.submission.track?.name || "").localeCompare(b.submission.track?.name || "");
       case "scheduledAt": return dir * ((a.scheduledAt || "").localeCompare(b.scheduledAt || ""));
       case "room": return dir * ((a.room || "").localeCompare(b.room || ""));
@@ -313,7 +314,7 @@ export default function OralPresentationPage() {
                         <tr className="border-t border-border/40 hover:bg-surface-hover/50 transition-colors group">
                           <td className="px-5 py-3.5">
                             <p className="font-medium text-ink leading-snug">{p.submission.title}</p>
-                            <p className="text-xs text-ink-muted mt-0.5">{p.submission.author.name}</p>
+                            <p className="text-xs text-ink-muted mt-0.5">{displayNameTh(p.submission.author)}</p>
                           </td>
                           <td className="px-4 py-3.5">
                             {p.submission.track ? <Badge tone="info">{p.submission.track.name}</Badge> : <span className="text-ink-muted text-xs">—</span>}
@@ -478,7 +479,7 @@ export default function OralPresentationPage() {
                         <tr className="border-t border-border/40 hover:bg-surface-hover/50 transition-colors group">
                           <td className="px-5 py-3.5">
                             <p className="font-medium text-ink leading-snug">{p.submission.title}</p>
-                            <p className="text-xs text-ink-muted mt-0.5">{p.submission.author.name}</p>
+                            <p className="text-xs text-ink-muted mt-0.5">{displayNameTh(p.submission.author)}</p>
                           </td>
                           <td className="px-4 py-3.5">
                             {p.submission.track ? <Badge tone="info">{p.submission.track.name}</Badge> : <span className="text-ink-muted text-xs">—</span>}
@@ -527,7 +528,7 @@ export default function OralPresentationPage() {
                                             className="rounded border-border text-brand-500 focus:ring-brand-500"
                                           />
                                           <div className="min-w-0">
-                                            <p className="text-sm font-medium text-ink truncate">{u.name}</p>
+                                            <p className="text-sm font-medium text-ink truncate">{displayNameTh(u)}</p>
                                             <p className="text-xs text-ink-muted truncate">{u.email}</p>
                                           </div>
                                         </label>
@@ -590,7 +591,7 @@ export default function OralPresentationPage() {
                       return (
                         <tr key={p.id} className="border-t border-border/40 hover:bg-surface-hover/50 transition-colors">
                           <td className="px-5 py-3.5 font-medium text-ink">{p.submission.title}</td>
-                          <td className="px-4 py-3.5 text-ink-light">{p.submission.author.name}</td>
+                          <td className="px-4 py-3.5 text-ink-light">{displayNameTh(p.submission.author)}</td>
                           <td className="px-4 py-3.5">
                             {p.submission.track ? <Badge tone="info">{p.submission.track.name}</Badge> : <span className="text-ink-muted">—</span>}
                           </td>

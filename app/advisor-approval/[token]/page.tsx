@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/lib/i18n";
+import { displayNameTh } from "@/lib/display-name";
 
 interface FileData {
   id: string;
@@ -168,7 +169,7 @@ export default function AdvisorApprovalPage() {
             <div className="flex gap-8">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.author")}</p>
-                <p className="text-sm text-ink mt-0.5">{submission?.author.name}</p>
+                <p className="text-sm text-ink mt-0.5">{submission?.author ? displayNameTh(submission.author) : ""}</p>
                 {submission?.author.affiliation && (
                   <p className="text-xs text-gray-500">{submission.author.affiliation}</p>
                 )}

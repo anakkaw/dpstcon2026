@@ -20,7 +20,7 @@ app.get("/:token", async (c) => {
       eq(user.inviteToken, token),
       gt(user.inviteExpiresAt, new Date())
     ),
-    columns: { id: true, name: true, email: true, isActive: true },
+    columns: { id: true, name: true, email: true, isActive: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true },
   });
 
   if (!found) {
@@ -37,9 +37,14 @@ app.get("/:token", async (c) => {
     );
   }
 
+  // Compose display name from structured fields
+  const f = found.firstNameTh || "";
+  const l = found.lastNameTh || "";
+  const displayName = (f || l) ? `${found.prefixTh || ""}${f} ${l}`.trim() : found.name;
+
   return c.json({
     valid: true,
-    userName: found.name,
+    userName: displayName,
     email: found.email,
   });
 });

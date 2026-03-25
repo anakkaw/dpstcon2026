@@ -15,6 +15,7 @@ import { TrackFilter } from "@/components/track-filter";
 import { getAssignmentStatusLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { formatDate } from "@/lib/utils";
+import { displayNameTh, nameInitial } from "@/lib/display-name";
 import {
   ClipboardCheck, ChevronUp, ChevronDown, ChevronRight,
   ArrowUpDown, ExternalLink, Clock, AlertTriangle, Users,
@@ -187,7 +188,7 @@ export default function ReviewsPage() {
     let group = groupMap.get(a.submission.id);
     if (!group) {
       group = {
-        submissionId: a.submission.id, title: a.submission.title, authorName: a.submission.author.name,
+        submissionId: a.submission.id, title: a.submission.title, authorName: displayNameTh(a.submission.author),
         track: a.submission.track, assignments: [], completedCount: 0, totalCount: 0, hasOverdue: false,
       };
       groupMap.set(a.submission.id, group);
@@ -206,7 +207,7 @@ export default function ReviewsPage() {
       return g.title.toLowerCase().includes(q) ||
         g.authorName.toLowerCase().includes(q) ||
         g.track?.name.toLowerCase().includes(q) ||
-        g.assignments.some((a) => a.reviewer?.name.toLowerCase().includes(q));
+        g.assignments.some((a) => a.reviewer ? displayNameTh(a.reviewer).toLowerCase().includes(q) : false);
     })
     .sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
@@ -252,7 +253,7 @@ export default function ReviewsPage() {
                         <h3 className="text-sm font-semibold text-ink truncate">{a.submission.title}</h3>
                         <div className="flex items-center gap-2.5 mt-2 text-xs text-ink-muted flex-wrap">
                           {a.submission.track && <Badge tone="info">{a.submission.track.name}</Badge>}
-                          <span>{t("reviews.author")}: {a.submission.author.name}</span>
+                          <span>{t("reviews.author")}: {displayNameTh(a.submission.author)}</span>
                           {a.dueDate && (
                             <span className={isOverdue(a.dueDate) ? "text-danger font-medium" : isDueSoon(a.dueDate) ? "text-amber-600 font-medium" : ""}>
                               {t("reviews.due")} {formatDate(a.dueDate, locale)}
@@ -406,7 +407,7 @@ export default function ReviewsPage() {
                                 {g.assignments.slice(0, 3).map((a) => {
                                   const StatusIcon = STATUS_ICONS[a.status] || CircleDot;
                                   return (
-                                    <div key={a.id} className="relative" title={`${a.reviewer?.name || "?"} - ${assignmentLabels[a.status] || a.status}`}>
+                                    <div key={a.id} className="relative" title={`${a.reviewer ? displayNameTh(a.reviewer) : "?"} - ${assignmentLabels[a.status] || a.status}`}>
                                       <div className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold ${
                                         a.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" :
                                         a.status === "OVERDUE" ? "bg-red-100 text-red-700" :
@@ -414,7 +415,7 @@ export default function ReviewsPage() {
                                         a.status === "DECLINED" ? "bg-gray-100 text-gray-500" :
                                         "bg-amber-100 text-amber-700"
                                       }`}>
-                                        {a.reviewer?.name?.[0]?.toUpperCase() || "?"}
+                                        {a.reviewer ? nameInitial(a.reviewer) : "?"}
                                       </div>
                                     </div>
                                   );
@@ -478,10 +479,10 @@ export default function ReviewsPage() {
                                           a.status === "ACCEPTED" ? "text-blue-700" :
                                           a.status === "DECLINED" ? "text-gray-500" :
                                           "text-amber-700"
-                                        }`}>{a.reviewer?.name?.[0]?.toUpperCase() || "?"}</span>
+                                        }`}>{a.reviewer ? nameInitial(a.reviewer) : "?"}</span>
                                       </div>
                                       <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium text-ink">{a.reviewer?.name || "—"}</p>
+                                        <p className="text-sm font-medium text-ink">{a.reviewer ? displayNameTh(a.reviewer) : "—"}</p>
                                         <p className="text-[11px] text-ink-muted">{t("reviews.assigned")} {formatDate(a.assignedAt, locale)}</p>
                                       </div>
                                     </div>
@@ -529,7 +530,7 @@ export default function ReviewsPage() {
                                         {reviewerUsers
                                           .filter((u) => !assignedReviewerIds.has(u.id))
                                           .map((u) => (
-                                            <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                                            <option key={u.id} value={u.id}>{displayNameTh(u)} ({u.email})</option>
                                           ))}
                                       </Select>
                                     </Field>

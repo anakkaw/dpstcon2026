@@ -12,7 +12,7 @@ app.get("/proceedings", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
 
   const allSubmissions = await db.query.submissions.findMany({
     with: {
-      author: { columns: { name: true, email: true, affiliation: true } },
+      author: { columns: { name: true, email: true, affiliation: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
       track: { columns: { name: true } },
       reviews: {
         columns: { recommendation: true, completedAt: true },

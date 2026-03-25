@@ -39,7 +39,7 @@ app.get("/:token", async (c) => {
       submittedAt: true,
     },
     with: {
-      author: { columns: { name: true, email: true, affiliation: true } },
+      author: { columns: { name: true, email: true, affiliation: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
       track: { columns: { name: true } },
     },
   });

@@ -21,7 +21,7 @@ export default async function DashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
 
-  const currentUser = session.user as { id: string; role: string; name: string };
+  const currentUser = session.user as { id: string; role: string; name: string; prefixTh?: string; firstNameTh?: string; lastNameTh?: string };
   let stats: Record<string, unknown> = {};
 
   if (currentUser.role === "AUTHOR") {
@@ -214,5 +214,9 @@ export default async function DashboardPage() {
     };
   }
 
-  return <DashboardClient role={currentUser.role} userName={currentUser.name} stats={stats} />;
+  const f = currentUser.firstNameTh || "";
+  const l = currentUser.lastNameTh || "";
+  const displayName = (f || l) ? `${currentUser.prefixTh || ""}${f} ${l}`.trim() : currentUser.name;
+
+  return <DashboardClient role={currentUser.role} userName={displayName} stats={stats} />;
 }

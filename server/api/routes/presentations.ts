@@ -23,7 +23,7 @@ app.get("/", async (c) => {
       submission: {
         columns: { id: true, title: true },
         with: {
-          author: { columns: { id: true, name: true } },
+          author: { columns: { id: true, name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
           track: { columns: { id: true, name: true } },
         },
       },
@@ -178,7 +178,7 @@ app.get("/scoring-dashboard", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) =
   const [presentations, evaluations, criteria] = await Promise.all([
     db.query.presentationAssignments.findMany({
       with: {
-        submission: { columns: { id: true, title: true }, with: { author: { columns: { name: true } }, track: { columns: { id: true, name: true } } } },
+        submission: { columns: { id: true, title: true }, with: { author: { columns: { name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } }, track: { columns: { id: true, name: true } } } },
       },
     }),
     db.query.presentationEvaluations.findMany({

@@ -77,7 +77,7 @@ export default async function SubmissionDetailPage({
   const [reviewers, files, assignmentRows, decision, presRows, criteria, deadlineRows] = await Promise.all([
     // Reviewers list (admin only)
     isAdmin
-      ? db.select({ id: user.id, name: user.name, email: user.email }).from(user).where(eq(user.role, "REVIEWER"))
+      ? db.select({ id: user.id, name: user.name, email: user.email, prefixTh: user.prefixTh, firstNameTh: user.firstNameTh, lastNameTh: user.lastNameTh, prefixEn: user.prefixEn, firstNameEn: user.firstNameEn, lastNameEn: user.lastNameEn }).from(user).where(eq(user.role, "REVIEWER"))
       : Promise.resolve([]),
     // Uploaded files
     db.select().from(storedFiles).where(eq(storedFiles.submissionId, id)),

@@ -31,7 +31,7 @@ app.get("/:trackId", async (c) => {
   const members = await db.query.trackMembers.findMany({
     where: eq(trackMembers.trackId, trackId),
     with: {
-      user: { columns: { id: true, name: true, email: true, role: true, affiliation: true } },
+      user: { columns: { id: true, name: true, email: true, role: true, affiliation: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
     },
   });
 
@@ -132,7 +132,7 @@ app.get("/:trackId/available", async (c) => {
   }
 
   const allUsers = await db
-    .select({ id: user.id, name: user.name, email: user.email, role: user.role, affiliation: user.affiliation })
+    .select({ id: user.id, name: user.name, email: user.email, role: user.role, affiliation: user.affiliation, prefixTh: user.prefixTh, firstNameTh: user.firstNameTh, lastNameTh: user.lastNameTh, prefixEn: user.prefixEn, firstNameEn: user.firstNameEn, lastNameEn: user.lastNameEn })
     .from(user);
 
   const existingMembers = await db

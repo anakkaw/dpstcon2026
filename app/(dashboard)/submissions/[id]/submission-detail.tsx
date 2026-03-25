@@ -27,6 +27,7 @@ import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { ReviewProgress } from "@/components/author/review-progress";
 import { PresentationCard } from "@/components/author/presentation-card";
 import { getNextAction, getRelevantDeadlineKey, getDaysUntil } from "@/lib/author-utils";
+import { displayNameTh } from "@/lib/display-name";
 import {
   UserPlus, Gavel, Send, RotateCcw, Paperclip, AlertTriangle,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
@@ -318,7 +319,7 @@ export function SubmissionDetail({
           <div>
             <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">Author</h3>
             <p className="text-sm text-ink">
-              {submission.author.name}
+              {displayNameTh(submission.author)}
               {submission.author.affiliation && <span className="text-ink-muted"> ({submission.author.affiliation})</span>}
             </p>
             <p className="text-xs text-ink-muted">{submission.author.email}</p>
@@ -441,7 +442,7 @@ export function SubmissionDetail({
                 {submission.reviews.map((review, i) => (
                   <Collapsible
                     key={review.id}
-                    title={`Reviewer ${i + 1}${isAdmin ? ` (${review.reviewer.name})` : ""} ${review.completedAt ? `— ${RECOMMENDATION_LABELS[review.recommendation ?? ""] || "รีวิวแล้ว"}` : "— ยังไม่รีวิว"}`}
+                    title={`Reviewer ${i + 1}${isAdmin ? ` (${displayNameTh(review.reviewer)})` : ""} ${review.completedAt ? `— ${RECOMMENDATION_LABELS[review.recommendation ?? ""] || "รีวิวแล้ว"}` : "— ยังไม่รีวิว"}`}
                     defaultOpen={i === 0}
                   >
                     {review.completedAt ? (
@@ -502,7 +503,7 @@ export function SubmissionDetail({
                   {reviewers
                     .filter((r) => !submission.reviews.some((rev) => rev.reviewer.id === r.id))
                     .map((r) => (
-                      <option key={r.id} value={r.id}>{r.name} ({r.email})</option>
+                      <option key={r.id} value={r.id}>{displayNameTh(r)} ({r.email})</option>
                     ))}
                 </Select>
               </div>
@@ -561,7 +562,7 @@ export function SubmissionDetail({
               submission.discussions.map((disc) => (
                 <div key={disc.id} className="bg-surface-alt rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-ink">{disc.author.name}</span>
+                    <span className="text-sm font-medium text-ink">{displayNameTh(disc.author)}</span>
                     <span className="text-xs text-ink-muted">{formatDateTime(disc.createdAt)}</span>
                   </div>
                   <p className="text-sm text-ink leading-relaxed">{disc.message}</p>

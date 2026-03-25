@@ -29,11 +29,11 @@ app.get("/assignments", async (c) => {
       submission: {
         columns: { id: true, title: true, abstract: true, status: true },
         with: {
-          author: { columns: { id: true, name: true } },
+          author: { columns: { id: true, name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
           track: { columns: { id: true, name: true } },
         },
       },
-      reviewer: { columns: { id: true, name: true } },
+      reviewer: { columns: { id: true, name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
     },
   });
 

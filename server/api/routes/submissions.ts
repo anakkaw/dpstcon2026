@@ -26,7 +26,7 @@ app.get("/", async (c) => {
   if (hasRole(currentUser, "ADMIN")) {
     const results = await db.query.submissions.findMany({
       with: {
-        author: { columns: { id: true, name: true, email: true } },
+        author: { columns: { id: true, name: true, email: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
         track: { columns: { id: true, name: true } },
         reviews: { columns: { id: true, recommendation: true, completedAt: true } },
         reviewAssignments: { columns: { id: true, status: true } },
@@ -82,7 +82,7 @@ app.get("/", async (c) => {
   const results = await db.query.submissions.findMany({
     where: sql`${submissions.id} IN ${ids}`,
     with: {
-      author: { columns: { id: true, name: true, email: true } },
+      author: { columns: { id: true, name: true, email: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
       track: { columns: { id: true, name: true } },
       reviews: { columns: { id: true, recommendation: true, completedAt: true } },
       reviewAssignments: { columns: { id: true, status: true } },
@@ -100,14 +100,14 @@ app.get("/:id", async (c) => {
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, id),
     with: {
-      author: { columns: { id: true, name: true, email: true, affiliation: true } },
+      author: { columns: { id: true, name: true, email: true, affiliation: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
       track: { columns: { id: true, name: true } },
       coAuthors: true,
       reviews: {
-        with: { reviewer: { columns: { id: true, name: true } } },
+        with: { reviewer: { columns: { id: true, name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } } },
       },
       discussions: {
-        with: { author: { columns: { id: true, name: true } } },
+        with: { author: { columns: { id: true, name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } } },
       },
     },
   });
@@ -160,7 +160,7 @@ app.get("/:id", async (c) => {
     );
     filteredReviews = submission.reviews.map((r) => ({
       ...r,
-      reviewer: { id: "", name: "" },
+      reviewer: { id: "", name: "", prefixTh: null, firstNameTh: null, lastNameTh: null, prefixEn: null, firstNameEn: null, lastNameEn: null },
       commentsToChair: null,
     }));
   }

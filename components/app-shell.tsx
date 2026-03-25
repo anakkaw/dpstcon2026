@@ -149,12 +149,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-full bg-brand-gradient flex items-center justify-center shrink-0">
               <span className="text-white text-sm font-bold">
-                {session?.user?.name?.[0]?.toUpperCase() || "U"}
+                {(() => {
+                  const u = session?.user as unknown as { firstNameEn?: string; firstNameTh?: string; name?: string } | undefined;
+                  return u?.firstNameEn?.[0]?.toUpperCase() || u?.firstNameTh?.[0] || u?.name?.[0]?.toUpperCase() || "U";
+                })()}
               </span>
             </div>
             <div className="hidden sm:block min-w-0">
               <p className="text-sm font-medium text-ink truncate leading-tight">
-                {session?.user?.name || "User"}
+                {(() => {
+                  const u = session?.user as unknown as { prefixTh?: string; firstNameTh?: string; lastNameTh?: string; name?: string } | undefined;
+                  const f = u?.firstNameTh || "";
+                  const l = u?.lastNameTh || "";
+                  if (f || l) return `${u?.prefixTh || ""}${f} ${l}`.trim();
+                  return u?.name || "User";
+                })()}
               </p>
               <p className="text-xs text-ink-muted leading-tight">
                 {roles.map((r) => ROLE_LABELS[r] || r).join(", ")}

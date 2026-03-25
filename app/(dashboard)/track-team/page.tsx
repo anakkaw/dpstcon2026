@@ -13,6 +13,7 @@ import { Alert } from "@/components/ui/alert";
 import { getRoleLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { Users, UserPlus, Trash2, ShieldCheck, ClipboardCheck } from "lucide-react";
+import { displayNameTh } from "@/lib/display-name";
 
 interface TrackData {
   id: string;
@@ -200,7 +201,7 @@ export default function TrackTeamPage() {
                 <option value="">{t("trackTeam.selectUser")}</option>
                 {available.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} ({u.email}){u.affiliation ? ` - ${u.affiliation}` : ""}
+                    {displayNameTh(u)} ({u.email}){u.affiliation ? ` - ${u.affiliation}` : ""}
                   </option>
                 ))}
               </Select>
@@ -234,7 +235,7 @@ export default function TrackTeamPage() {
               {reviewers.map((m) => (
                 <div key={m.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-ink">{m.user.name}</p>
+                    <p className="text-sm font-medium text-ink">{displayNameTh(m.user)}</p>
                     <p className="text-xs text-ink-muted">
                       {m.user.email}
                       {m.user.affiliation && ` - ${m.user.affiliation}`}
@@ -269,7 +270,7 @@ export default function TrackTeamPage() {
               {committees.map((m) => (
                 <div key={m.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-ink">{m.user.name}</p>
+                    <p className="text-sm font-medium text-ink">{displayNameTh(m.user)}</p>
                     <p className="text-xs text-ink-muted">
                       {m.user.email}
                       {m.user.affiliation && ` - ${m.user.affiliation}`}

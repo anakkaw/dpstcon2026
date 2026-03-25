@@ -12,6 +12,7 @@ import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getRoleLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
+import { displayNameTh, displayNameEn } from "@/lib/display-name";
 import { formatDate } from "@/lib/utils";
 import {
   UserPlus, Upload, Search, Pencil, KeyRound, Trash2, X, Send, RefreshCw,
@@ -52,19 +53,6 @@ interface RegistrationStats {
 }
 
 type ModalMode = null | "edit" | "password" | "delete";
-/** Compose display name from structured fields, fallback to `name` */
-function displayNameTh(u: { prefixTh?: string | null; firstNameTh?: string | null; lastNameTh?: string | null; name: string }): string {
-  const f = u.firstNameTh || "";
-  const l = u.lastNameTh || "";
-  if (!f && !l) return u.name;
-  const p = u.prefixTh || "";
-  return `${p}${f} ${l}`.trim();
-}
-
-function displayNameEn(u: { prefixEn?: string | null; firstNameEn?: string | null; lastNameEn?: string | null }): string {
-  return [u.prefixEn, u.firstNameEn, u.lastNameEn].filter(Boolean).join(" ");
-}
-
 function getInviteStatus(u: UserData): { label: string; tone: "success" | "warning" | "danger" } {
   if (u.isActive) return { label: "Active", tone: "success" };
   if (u.inviteExpiresAt && new Date(u.inviteExpiresAt) > new Date()) return { label: "Pending", tone: "warning" };

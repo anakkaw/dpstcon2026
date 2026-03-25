@@ -11,6 +11,7 @@ import { TrackFilter } from "@/components/track-filter";
 import { getSubmissionStatusLabels, SUBMISSION_STATUS_COLORS } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { formatDate, truncate } from "@/lib/utils";
+import { displayNameTh } from "@/lib/display-name";
 import {
   Plus, FileText, Download, ChevronUp, ChevronDown, ArrowUpDown,
   ExternalLink, Users, Search, X, CheckCircle2, XCircle, Clock,
@@ -84,7 +85,7 @@ export default function SubmissionsPage() {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return s.title.toLowerCase().includes(q) ||
-          s.author.name.toLowerCase().includes(q) ||
+          displayNameTh(s.author).toLowerCase().includes(q) ||
           s.author.email.toLowerCase().includes(q) ||
           s.track?.name.toLowerCase().includes(q) ||
           (statusLabels[s.status] || s.status).toLowerCase().includes(q);
@@ -95,7 +96,7 @@ export default function SubmissionsPage() {
       const dir = sortDir === "asc" ? 1 : -1;
       switch (sortKey) {
         case "title": return dir * a.title.localeCompare(b.title);
-        case "author": return dir * a.author.name.localeCompare(b.author.name);
+        case "author": return dir * displayNameTh(a.author).localeCompare(displayNameTh(b.author));
         case "track": return dir * (a.track?.name || "").localeCompare(b.track?.name || "");
         case "status": return dir * a.status.localeCompare(b.status);
         case "createdAt": return dir * a.createdAt.localeCompare(b.createdAt);
@@ -279,7 +280,7 @@ export default function SubmissionsPage() {
                         </td>
                         <td className="px-4 py-3.5">
                           <div>
-                            <p className="text-xs font-medium text-ink whitespace-nowrap">{sub.author.name}</p>
+                            <p className="text-xs font-medium text-ink whitespace-nowrap">{displayNameTh(sub.author)}</p>
                             <p className="text-[11px] text-ink-muted">{sub.author.email}</p>
                           </div>
                         </td>
