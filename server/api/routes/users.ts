@@ -18,6 +18,15 @@ import { getPrimaryRole } from "@/lib/permissions";
 
 const INVITE_EXPIRY_HOURS = 72;
 
+/** Compose Thai display name from structured fields. Returns empty string if no name parts. */
+function composeName(prefix?: string | null, firstName?: string | null, lastName?: string | null): string {
+  const f = firstName || "";
+  const l = lastName || "";
+  if (!f && !l) return "";
+  const p = prefix || "";
+  return `${p}${f} ${l}`.trim();
+}
+
 const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
@@ -81,6 +90,251 @@ app.get("/me/roles", async (c) => {
   return c.json({ roles: currentUser.roles });
 });
 
+// GET /api/users/registration-stats — registration status summary (ADMIN)
+// ⚠️ Must be registered BEFORE /:id to avoid being caught by the wildcard
+app.get("/registration-stats", requireRole("ADMIN"), async (c) => {
+  const allUsers = await db
+    .select({
+      id: user.id,
+      isActive: user.isActive,
+      inviteExpiresAt: user.inviteExpiresAt,
+    })
+    .from(user);
+
+  const now = new Date();
+  let active = 0;
+  let pending = 0;
+  let expired = 0;
+
+  for (const u of allUsers) {
+    if (u.isActive) {
+      active++;
+    } else if (u.inviteExpiresAt && new Date(u.inviteExpiresAt) > now) {
+      pending++;
+    } else {
+      expired++;
+    }
+  }
+
+  return c.json({ total: allUsers.length, active, pending, expired });
+});
+
+// POST /api/users/bulk-import — bulk import with invites (ADMIN)
+// ⚠️ Must be registered BEFORE /:id to avoid being caught by the wildcard
+app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
+  const body = await c.req.json();
+
+  const schema = z.object({
+    users: z.array(
+      z.object({
+        name: z.string().min(1),
+        email: z.string().email(),
+        roles: z
+          .array(
+            z.enum([
+              "ADMIN",
+              "PROGRAM_CHAIR",
+              "REVIEWER",
+              "COMMITTEE",
+              "AUTHOR",
+            ])
+          )
+          .default(["AUTHOR"]),
+        affiliation: z.string().optional(),
+        prefixTh: z.string().optional(),
+        prefixEn: z.string().optional(),
+        firstNameTh: z.string().optional(),
+        lastNameTh: z.string().optional(),
+        firstNameEn: z.string().optional(),
+        lastNameEn: z.string().optional(),
+      })
+    ),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const results: { email: string; status: string }[] = [];
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  // Pre-fetch all existing users by email in a single query to avoid N+1
+  const importEmails = parsed.data.users.map((u) => u.email);
+  const existingUsers = importEmails.length > 0
+    ? await db.select().from(user).where(inArray(user.email, importEmails))
+    : [];
+  const existingByEmail = new Map(existingUsers.map((u) => [u.email, u]));
+
+  // Pre-fetch all roles for existing users in a single query
+  const existingUserIds = existingUsers.map((u) => u.id);
+  const existingRolesAll = existingUserIds.length > 0
+    ? await db.select({ userId: userRoles.userId, role: userRoles.role }).from(userRoles).where(inArray(userRoles.userId, existingUserIds))
+    : [];
+  const existingRolesMap = new Map<string, Set<string>>();
+  for (const r of existingRolesAll) {
+    if (!existingRolesMap.has(r.userId)) existingRolesMap.set(r.userId, new Set());
+    existingRolesMap.get(r.userId)!.add(r.role);
+  }
+
+  // Collect batch inserts for new users
+  const newUserInserts: typeof user.$inferInsert[] = [];
+  const newAccountInserts: typeof accountTable.$inferInsert[] = [];
+  const newRoleInserts: typeof userRoles.$inferInsert[] = [];
+  const emailsToSend: { to: string; subject: string; html: string }[] = [];
+
+  for (const u of parsed.data.users) {
+    try {
+      const existing = existingByEmail.get(u.email);
+
+      if (existing) {
+        const existingRoleSet = existingRolesMap.get(existing.id) || new Set();
+        const newRoles = u.roles.filter((r) => !existingRoleSet.has(r));
+        if (newRoles.length > 0) {
+          await db.insert(userRoles).values(
+            newRoles.map((role) => ({
+              userId: existing.id,
+              role: role as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
+            }))
+          );
+          const allRoles = [...existingRoleSet, ...newRoles];
+          const primaryRole = getPrimaryRole(allRoles);
+          await db
+            .update(user)
+            .set({
+              role: primaryRole as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
+              updatedAt: new Date(),
+            })
+            .where(eq(user.id, existing.id));
+        }
+        results.push({ email: u.email, status: "updated_roles" });
+        continue;
+      }
+
+      const inviteToken = crypto.randomUUID();
+      const inviteExpiresAt = new Date(
+        Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000
+      );
+      const primaryRole = getPrimaryRole(u.roles);
+      const userId = crypto.randomUUID();
+
+      // Auto-compose name from structured fields
+      const displayName = composeName(u.prefixTh, u.firstNameTh, u.lastNameTh) || u.name;
+
+      newUserInserts.push({
+        id: userId,
+        name: displayName,
+        email: u.email,
+        emailVerified: false,
+        role: primaryRole as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
+        affiliation: u.affiliation,
+        prefixTh: u.prefixTh,
+        prefixEn: u.prefixEn,
+        firstNameTh: u.firstNameTh,
+        lastNameTh: u.lastNameTh,
+        firstNameEn: u.firstNameEn,
+        lastNameEn: u.lastNameEn,
+        inviteToken,
+        inviteExpiresAt,
+        isActive: false,
+      });
+
+      newAccountInserts.push({
+        id: crypto.randomUUID(),
+        accountId: userId,
+        providerId: "credential",
+        userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      for (const role of u.roles) {
+        newRoleInserts.push({
+          userId,
+          role: role as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
+        });
+      }
+
+      const activationUrl = `${appUrl}/activate/${inviteToken}`;
+      const emailContent = inviteEmail({
+        userName: displayName,
+        activationUrl,
+        expiresInHours: INVITE_EXPIRY_HOURS,
+      });
+      emailsToSend.push({ to: u.email, subject: emailContent.subject, html: emailContent.html });
+
+      results.push({ email: u.email, status: "invited" });
+    } catch {
+      results.push({ email: u.email, status: "failed" });
+    }
+  }
+
+  // Batch insert new users, accounts, and roles
+  if (newUserInserts.length > 0) {
+    await db.insert(user).values(newUserInserts);
+  }
+  if (newAccountInserts.length > 0) {
+    await db.insert(accountTable).values(newAccountInserts);
+  }
+  if (newRoleInserts.length > 0) {
+    await db.insert(userRoles).values(newRoleInserts);
+  }
+
+  // Queue emails in parallel
+  await Promise.all(emailsToSend.map((e) => queueEmail(e)));
+
+  return c.json({
+    total: parsed.data.users.length,
+    invited: results.filter((r) => r.status === "invited").length,
+    updated: results.filter((r) => r.status === "updated_roles").length,
+    failed: results.filter((r) => r.status === "failed").length,
+    results,
+  });
+});
+
+// POST /api/users/bulk-remind — resend invites to all pending/expired users (ADMIN)
+// ⚠️ Must be registered BEFORE /:id to avoid being caught by the wildcard
+app.post("/bulk-remind", requireRole("ADMIN"), async (c) => {
+  const pendingUsers = await db
+    .select({ id: user.id, name: user.name, email: user.email })
+    .from(user)
+    .where(eq(user.isActive, false));
+
+  if (pendingUsers.length === 0) {
+    return c.json({ ok: true, message: "ไม่มีผู้ใช้ที่รอเปิดใช้งาน", sent: 0 });
+  }
+
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  let sent = 0;
+
+  for (const u of pendingUsers) {
+    try {
+      const newToken = crypto.randomUUID();
+      const newExpiry = new Date(Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000);
+
+      await db
+        .update(user)
+        .set({ inviteToken: newToken, inviteExpiresAt: newExpiry, updatedAt: new Date() })
+        .where(eq(user.id, u.id));
+
+      const activationUrl = `${appUrl}/activate/${newToken}`;
+      const emailContent = inviteEmail({
+        userName: u.name,
+        activationUrl,
+        expiresInHours: INVITE_EXPIRY_HOURS,
+      });
+      await queueEmail({
+        to: u.email,
+        subject: emailContent.subject,
+        html: emailContent.html,
+      });
+      sent++;
+    } catch {
+      // Skip failed individual sends
+    }
+  }
+
+  return c.json({ ok: true, sent, total: pendingUsers.length });
+});
+
 // GET /api/users/:id — user detail (ADMIN)
 app.get("/:id", requireRole("ADMIN"), async (c) => {
   const { id } = c.req.param();
@@ -130,10 +384,15 @@ app.patch("/:id", requireRole("ADMIN"), async (c) => {
   // Auto-compose `name` from structured fields if available
   const data = { ...parsed.data };
   if (data.prefixTh !== undefined || data.firstNameTh !== undefined || data.lastNameTh !== undefined) {
-    const p = data.prefixTh ?? "";
-    const f = data.firstNameTh ?? "";
-    const l = data.lastNameTh ?? "";
-    if (f || l) data.name = `${p}${f} ${l}`.trim();
+    // Fetch existing user data to merge with partial update
+    const existing = await db.query.user.findFirst({ where: eq(user.id, id) });
+    if (existing) {
+      const p = data.prefixTh ?? existing.prefixTh ?? "";
+      const f = data.firstNameTh ?? existing.firstNameTh ?? "";
+      const l = data.lastNameTh ?? existing.lastNameTh ?? "";
+      const composed = composeName(p, f, l);
+      if (composed) data.name = composed;
+    }
   }
 
   const [updated] = await db
@@ -230,10 +489,8 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   );
   const primaryRole = getPrimaryRole(parsed.data.roles);
 
-  // Auto-compose name from prefix + firstName + lastName if available
-  const displayName = parsed.data.prefixTh && parsed.data.firstNameTh && parsed.data.lastNameTh
-    ? `${parsed.data.prefixTh}${parsed.data.firstNameTh} ${parsed.data.lastNameTh}`
-    : parsed.data.name;
+  // Auto-compose name from structured fields (prefix is optional)
+  const displayName = composeName(parsed.data.prefixTh, parsed.data.firstNameTh, parsed.data.lastNameTh) || parsed.data.name;
 
   // Create user directly via Drizzle
   const userId = crypto.randomUUID();
@@ -280,7 +537,7 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const activationUrl = `${appUrl}/activate/${inviteToken}`;
   const emailContent = inviteEmail({
-    userName: parsed.data.name,
+    userName: displayName,
     activationUrl,
     expiresInHours: INVITE_EXPIRY_HOURS,
   });
@@ -294,178 +551,6 @@ app.post("/", requireRole("ADMIN"), async (c) => {
     { user: { ...created, roles: parsed.data.roles } },
     201
   );
-});
-
-// POST /api/users/bulk-import — bulk import with invites (ADMIN)
-app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
-  const body = await c.req.json();
-
-  const schema = z.object({
-    users: z.array(
-      z.object({
-        name: z.string().min(1),
-        email: z.string().email(),
-        roles: z
-          .array(
-            z.enum([
-              "ADMIN",
-              "PROGRAM_CHAIR",
-              "REVIEWER",
-              "COMMITTEE",
-              "AUTHOR",
-            ])
-          )
-          .default(["AUTHOR"]),
-        affiliation: z.string().optional(),
-        prefixTh: z.string().optional(),
-        prefixEn: z.string().optional(),
-        firstNameTh: z.string().optional(),
-        lastNameTh: z.string().optional(),
-        firstNameEn: z.string().optional(),
-        lastNameEn: z.string().optional(),
-      })
-    ),
-  });
-
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
-
-  const results: { email: string; status: string }[] = [];
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-  // Pre-fetch all existing users by email in a single query to avoid N+1
-  const importEmails = parsed.data.users.map((u) => u.email);
-  const existingUsers = importEmails.length > 0
-    ? await db.select().from(user).where(inArray(user.email, importEmails))
-    : [];
-  const existingByEmail = new Map(existingUsers.map((u) => [u.email, u]));
-
-  // Pre-fetch all roles for existing users in a single query
-  const existingUserIds = existingUsers.map((u) => u.id);
-  const existingRolesAll = existingUserIds.length > 0
-    ? await db.select({ userId: userRoles.userId, role: userRoles.role }).from(userRoles).where(inArray(userRoles.userId, existingUserIds))
-    : [];
-  const existingRolesMap = new Map<string, Set<string>>();
-  for (const r of existingRolesAll) {
-    if (!existingRolesMap.has(r.userId)) existingRolesMap.set(r.userId, new Set());
-    existingRolesMap.get(r.userId)!.add(r.role);
-  }
-
-  // Collect batch inserts for new users
-  const newUserInserts: typeof user.$inferInsert[] = [];
-  const newAccountInserts: typeof accountTable.$inferInsert[] = [];
-  const newRoleInserts: typeof userRoles.$inferInsert[] = [];
-  const emailsToSend: { to: string; subject: string; html: string }[] = [];
-
-  for (const u of parsed.data.users) {
-    try {
-      const existing = existingByEmail.get(u.email);
-
-      if (existing) {
-        const existingRoleSet = existingRolesMap.get(existing.id) || new Set();
-        const newRoles = u.roles.filter((r) => !existingRoleSet.has(r));
-        if (newRoles.length > 0) {
-          await db.insert(userRoles).values(
-            newRoles.map((role) => ({
-              userId: existing.id,
-              role: role as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
-            }))
-          );
-          const allRoles = [...existingRoleSet, ...newRoles];
-          const primaryRole = getPrimaryRole(allRoles);
-          await db
-            .update(user)
-            .set({
-              role: primaryRole as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
-              updatedAt: new Date(),
-            })
-            .where(eq(user.id, existing.id));
-        }
-        results.push({ email: u.email, status: "updated_roles" });
-        continue;
-      }
-
-      const inviteToken = crypto.randomUUID();
-      const inviteExpiresAt = new Date(
-        Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000
-      );
-      const primaryRole = getPrimaryRole(u.roles);
-      const userId = crypto.randomUUID();
-
-      // Auto-compose name from prefix + firstName + lastName if available
-      const displayName = u.prefixTh && u.firstNameTh && u.lastNameTh
-        ? `${u.prefixTh}${u.firstNameTh} ${u.lastNameTh}`
-        : u.name;
-
-      newUserInserts.push({
-        id: userId,
-        name: displayName,
-        email: u.email,
-        emailVerified: false,
-        role: primaryRole as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
-        affiliation: u.affiliation,
-        prefixTh: u.prefixTh,
-        prefixEn: u.prefixEn,
-        firstNameTh: u.firstNameTh,
-        lastNameTh: u.lastNameTh,
-        firstNameEn: u.firstNameEn,
-        lastNameEn: u.lastNameEn,
-        inviteToken,
-        inviteExpiresAt,
-        isActive: false,
-      });
-
-      newAccountInserts.push({
-        id: crypto.randomUUID(),
-        accountId: userId,
-        providerId: "credential",
-        userId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      for (const role of u.roles) {
-        newRoleInserts.push({
-          userId,
-          role: role as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
-        });
-      }
-
-      const activationUrl = `${appUrl}/activate/${inviteToken}`;
-      const emailContent = inviteEmail({
-        userName: u.name,
-        activationUrl,
-        expiresInHours: INVITE_EXPIRY_HOURS,
-      });
-      emailsToSend.push({ to: u.email, subject: emailContent.subject, html: emailContent.html });
-
-      results.push({ email: u.email, status: "invited" });
-    } catch {
-      results.push({ email: u.email, status: "failed" });
-    }
-  }
-
-  // Batch insert new users, accounts, and roles
-  if (newUserInserts.length > 0) {
-    await db.insert(user).values(newUserInserts);
-  }
-  if (newAccountInserts.length > 0) {
-    await db.insert(accountTable).values(newAccountInserts);
-  }
-  if (newRoleInserts.length > 0) {
-    await db.insert(userRoles).values(newRoleInserts);
-  }
-
-  // Queue emails in parallel
-  await Promise.all(emailsToSend.map((e) => queueEmail(e)));
-
-  return c.json({
-    total: parsed.data.users.length,
-    invited: results.filter((r) => r.status === "invited").length,
-    updated: results.filter((r) => r.status === "updated_roles").length,
-    failed: results.filter((r) => r.status === "failed").length,
-    results,
-  });
 });
 
 // POST /api/users/:id/resend-invite — resend invite email (ADMIN)
@@ -540,78 +625,6 @@ app.post("/:id/reset-password", requireRole("ADMIN"), async (c) => {
   if (!updated) return c.json({ error: "ไม่พบบัญชีของผู้ใช้นี้" }, 404);
 
   return c.json({ ok: true, message: "รีเซ็ตรหัสผ่านสำเร็จ" });
-});
-
-// POST /api/users/bulk-remind — resend invites to all pending/expired users (ADMIN)
-app.post("/bulk-remind", requireRole("ADMIN"), async (c) => {
-  const pendingUsers = await db
-    .select({ id: user.id, name: user.name, email: user.email })
-    .from(user)
-    .where(eq(user.isActive, false));
-
-  if (pendingUsers.length === 0) {
-    return c.json({ ok: true, message: "ไม่มีผู้ใช้ที่รอเปิดใช้งาน", sent: 0 });
-  }
-
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  let sent = 0;
-
-  for (const u of pendingUsers) {
-    try {
-      const newToken = crypto.randomUUID();
-      const newExpiry = new Date(Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000);
-
-      await db
-        .update(user)
-        .set({ inviteToken: newToken, inviteExpiresAt: newExpiry, updatedAt: new Date() })
-        .where(eq(user.id, u.id));
-
-      const activationUrl = `${appUrl}/activate/${newToken}`;
-      const emailContent = inviteEmail({
-        userName: u.name,
-        activationUrl,
-        expiresInHours: INVITE_EXPIRY_HOURS,
-      });
-      await queueEmail({
-        to: u.email,
-        subject: emailContent.subject,
-        html: emailContent.html,
-      });
-      sent++;
-    } catch {
-      // Skip failed individual sends
-    }
-  }
-
-  return c.json({ ok: true, sent, total: pendingUsers.length });
-});
-
-// GET /api/users/registration-stats — registration status summary (ADMIN)
-app.get("/registration-stats", requireRole("ADMIN"), async (c) => {
-  const allUsers = await db
-    .select({
-      id: user.id,
-      isActive: user.isActive,
-      inviteExpiresAt: user.inviteExpiresAt,
-    })
-    .from(user);
-
-  const now = new Date();
-  let active = 0;
-  let pending = 0;
-  let expired = 0;
-
-  for (const u of allUsers) {
-    if (u.isActive) {
-      active++;
-    } else if (u.inviteExpiresAt && new Date(u.inviteExpiresAt) > now) {
-      pending++;
-    } else {
-      expired++;
-    }
-  }
-
-  return c.json({ total: allUsers.length, active, pending, expired });
 });
 
 // DELETE /api/users/:id — delete user (ADMIN)

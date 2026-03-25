@@ -435,7 +435,11 @@ export default function AdminUsersPage() {
             <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.thaiInfo")}</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label={t("users.prefixTh")}>
-                <Input value={newUser.prefixTh} onChange={(e) => setNewUser({ ...newUser, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
+                <Input value={newUser.prefixTh} onChange={(e) => {
+                  const updated = { ...newUser, prefixTh: e.target.value };
+                  updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
+                  setNewUser(updated);
+                }} placeholder={t("users.prefixThPlaceholder")} />
               </Field>
               <Field label={t("users.firstNameTh")} required>
                 <Input value={newUser.firstNameTh} onChange={(e) => {
@@ -650,13 +654,25 @@ export default function AdminUsersPage() {
                   <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.thaiInfo")}</p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Field label={t("users.prefixTh")}>
-                      <Input value={editForm.prefixTh} onChange={(e) => setEditForm({ ...editForm, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
+                      <Input value={editForm.prefixTh} onChange={(e) => {
+                        const updated = { ...editForm, prefixTh: e.target.value };
+                        updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
+                        setEditForm(updated);
+                      }} placeholder={t("users.prefixThPlaceholder")} />
                     </Field>
                     <Field label={t("users.firstNameTh")}>
-                      <Input value={editForm.firstNameTh} onChange={(e) => setEditForm({ ...editForm, firstNameTh: e.target.value })} placeholder="ชื่อ" />
+                      <Input value={editForm.firstNameTh} onChange={(e) => {
+                        const updated = { ...editForm, firstNameTh: e.target.value };
+                        updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
+                        setEditForm(updated);
+                      }} placeholder="ชื่อ" />
                     </Field>
                     <Field label={t("users.lastNameTh")}>
-                      <Input value={editForm.lastNameTh} onChange={(e) => setEditForm({ ...editForm, lastNameTh: e.target.value })} placeholder="นามสกุล" />
+                      <Input value={editForm.lastNameTh} onChange={(e) => {
+                        const updated = { ...editForm, lastNameTh: e.target.value };
+                        updated.name = `${updated.prefixTh}${updated.firstNameTh} ${updated.lastNameTh}`.trim();
+                        setEditForm(updated);
+                      }} placeholder="นามสกุล" />
                     </Field>
                   </div>
                   {/* English name fields */}
