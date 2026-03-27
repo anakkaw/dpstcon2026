@@ -91,7 +91,7 @@ export default function ConferencePage() {
     <div className="space-y-6 max-w-4xl">
       <SectionTitle
         title={t("conference.settings")}
-        subtitle={`${event.name} ${event.year}`}
+        subtitle={t("conference.subtitle", { event: event.name, year: event.year })}
       />
 
       {message && <Alert tone="success">{message}</Alert>}

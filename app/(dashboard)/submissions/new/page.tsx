@@ -21,6 +21,14 @@ interface Track {
   description: string | null;
 }
 
+interface DraftSummary {
+  trackName: string;
+  title: string;
+  titleEn: string;
+  advisorName: string;
+  advisorEmail: string;
+}
+
 export default function NewSubmissionPage() {
   const { t } = useI18n();
   const router = useRouter();
@@ -31,6 +39,7 @@ export default function NewSubmissionPage() {
   // After form submit: hold the created submission id and wait for file upload
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [fileUploaded, setFileUploaded] = useState(false);
+  const [draftSummary, setDraftSummary] = useState<DraftSummary | null>(null);
 
   useEffect(() => {
     fetch("/api/submissions/tracks")
@@ -44,6 +53,7 @@ export default function NewSubmissionPage() {
     setError("");
 
     const title = formData.get("title") as string;
+    const titleEn = formData.get("titleEn") as string;
     const trackId = formData.get("trackId") as string;
     const advisorName = formData.get("advisorName") as string;
     const advisorEmail = formData.get("advisorEmail") as string;
@@ -69,6 +79,13 @@ export default function NewSubmissionPage() {
       if (result?.id) {
         // Transition to file upload step on the same page
         setSubmissionId(result.id);
+        setDraftSummary({
+          trackName: tracks.find((track) => track.id === trackId)?.name || t("submissions.new.track"),
+          title: title.trim(),
+          titleEn: titleEn?.trim(),
+          advisorName: advisorName.trim(),
+          advisorEmail: advisorEmail.trim(),
+        });
         setError("");
       }
     } catch (err) {
@@ -102,6 +119,21 @@ export default function NewSubmissionPage() {
         title={t("submissions.new.title")}
         subtitle={t("submissions.new.subtitle")}
       />
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <StepCard
+          number={1}
+          title={t("submissions.new.stepDetailsTitle")}
+          description={t("submissions.new.stepDetailsDesc")}
+          status={submissionId ? "complete" : "active"}
+        />
+        <StepCard
+          number={2}
+          title={t("submissions.new.stepUploadTitle")}
+          description={t("submissions.new.stepUploadDesc")}
+          status={!submissionId ? "pending" : fileUploaded ? "complete" : "active"}
+        />
+      </div>
 
       {error && <Alert tone="danger">{error}</Alert>}
 
@@ -241,52 +273,145 @@ export default function NewSubmissionPage() {
                 </Field>
               </div>
             </CardBody>
+            <CardFooter className="flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => router.back()}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit" loading={loading}>
+                {t("submissions.new.saveDraft")}
+              </Button>
+            </CardFooter>
           </Card>
-
-          <div className="flex justify-end gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => router.back()}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button type="submit" loading={loading}>
-              {t("submissions.new.saveDraft")}
-            </Button>
-          </div>
         </form>
       )}
 
       {/* ── Step 2: File upload (shown after draft is created) ── */}
       {submissionId && (
-        <Card>
-          <CardHeader>
-            <h3 className="text-sm font-semibold text-ink">{t("submissions.new.attachManuscript")}</h3>
-            <p className="text-xs text-ink-muted mt-0.5">
-              {t("submissions.new.attachManuscriptDesc")}
-            </p>
-          </CardHeader>
-          <CardBody>
-            <FileUpload
-              submissionId={submissionId}
-              kind="MANUSCRIPT"
-              onUploadComplete={handleUploadComplete}
-            />
-          </CardBody>
-          <CardFooter>
-            <div className="flex justify-end gap-3 w-full">
-              <Button
-                type="button"
-                onClick={handleContinue}
-                disabled={!fileUploaded}
-              >
-                {t("submissions.new.continueToDetail")}
-              </Button>
-            </div>
-          </CardFooter>
-        </Card>
+        <div className="space-y-4">
+          <Alert tone="success">{t("submissions.new.draftSavedNotice")}</Alert>
+
+          {draftSummary && (
+            <Card accent="info">
+              <CardHeader>
+                <h3 className="text-sm font-semibold text-ink">{t("submissions.new.savedDraftTitle")}</h3>
+                <p className="mt-0.5 text-xs text-ink-muted">
+                  {t("submissions.new.savedDraftDesc")}
+                </p>
+              </CardHeader>
+              <CardBody className="grid gap-4 sm:grid-cols-2">
+                <SummaryField label={t("submissions.new.track")} value={draftSummary.trackName} />
+                <SummaryField label={t("submissions.new.advisorName")} value={draftSummary.advisorName} />
+                <SummaryField label={t("submissions.new.paperTitleTh")} value={draftSummary.title} />
+                <SummaryField label={t("submissions.new.advisorEmail")} value={draftSummary.advisorEmail} />
+                <div className="sm:col-span-2">
+                  <SummaryField label={t("submissions.new.paperTitleEn")} value={draftSummary.titleEn} />
+                </div>
+              </CardBody>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <h3 className="text-sm font-semibold text-ink">{t("submissions.new.attachManuscript")}</h3>
+              <p className="text-xs text-ink-muted mt-0.5">
+                {t("submissions.new.attachManuscriptDesc")}
+              </p>
+            </CardHeader>
+            <CardBody>
+              <FileUpload
+                submissionId={submissionId}
+                kind="MANUSCRIPT"
+                onUploadComplete={handleUploadComplete}
+              />
+            </CardBody>
+            <CardFooter>
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-ink-muted">
+                  {fileUploaded
+                    ? t("submissions.new.fileUploadedReady")
+                    : t("submissions.new.uploadRequired")}
+                </p>
+                <div className="flex w-full justify-end gap-3 sm:w-auto">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => router.push("/submissions")}
+                  >
+                    {t("nav.papers")}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleContinue}
+                    disabled={!fileUploaded}
+                  >
+                    {t("submissions.new.continueToDetail")}
+                  </Button>
+                </div>
+              </div>
+            </CardFooter>
+          </Card>
+        </div>
       )}
+    </div>
+  );
+}
+
+function StepCard({
+  number,
+  title,
+  description,
+  status,
+}: {
+  number: number;
+  title: string;
+  description: string;
+  status: "pending" | "active" | "complete";
+}) {
+  const styles = {
+    pending: {
+      badge: "border-border bg-surface-alt text-ink-muted",
+      card: "border-border bg-surface",
+      title: "text-ink",
+      desc: "text-ink-muted",
+    },
+    active: {
+      badge: "border-brand-200 bg-brand-50 text-brand-700",
+      card: "border-brand-200 bg-brand-50/40",
+      title: "text-brand-700",
+      desc: "text-brand-600/80",
+    },
+    complete: {
+      badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      card: "border-emerald-200 bg-emerald-50/50",
+      title: "text-emerald-700",
+      desc: "text-emerald-700/75",
+    },
+  }[status];
+
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${styles.card}`}>
+      <div className="flex items-start gap-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${styles.badge}`}>
+          {number}
+        </div>
+        <div className="min-w-0">
+          <p className={`text-sm font-semibold ${styles.title}`}>{title}</p>
+          <p className={`mt-1 text-xs ${styles.desc}`}>{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{label}</p>
+      <p className="mt-1 text-sm text-ink">{value || "—"}</p>
     </div>
   );
 }

@@ -14,14 +14,23 @@ export function SectionTitle({
   className,
 }: SectionTitleProps) {
   return (
-    <div className={cn("flex items-start justify-between gap-4", className)}>
-      <div>
+    <div
+      className={cn(
+        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+        className
+      )}
+    >
+      <div className="min-w-0">
         <h2 className="text-2xl font-bold text-ink tracking-tight">{title}</h2>
         {subtitle && (
           <p className="text-sm text-ink-muted mt-0.5">{subtitle}</p>
         )}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && (
+        <div className="flex w-full justify-start sm:w-auto sm:shrink-0 sm:justify-end">
+          {action}
+        </div>
+      )}
     </div>
   );
 }

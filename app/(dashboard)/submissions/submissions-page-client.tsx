@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { TrackFilter } from "@/components/track-filter";
 import { getSubmissionStatusLabels, SUBMISSION_STATUS_COLORS } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
@@ -104,9 +105,9 @@ export function SubmissionsPageClient({
   if (!isAdmin) {
     return (
       <div className="space-y-5">
-        <SectionTitle
+      <SectionTitle
           title={t("submissions.mySubmissions")}
-          subtitle={`${filtered.length} submissions`}
+          subtitle={t("submissions.mySubtitle", { n: filtered.length })}
           action={<Link href="/submissions/new"><Button size="sm"><Plus className="h-3.5 w-3.5" />{t("submissions.newSubmission")}</Button></Link>}
         />
         <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
@@ -164,7 +165,7 @@ export function SubmissionsPageClient({
     <div className="space-y-6">
       <SectionTitle
         title={t("submissions.submissions")}
-        subtitle={`${totalFiltered} ${t("submissions.submissions").toLowerCase()}`}
+        subtitle={t("submissions.managementSubtitle", { n: totalFiltered })}
         action={
           <a href="/api/exports/proceedings?format=csv" download>
             <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />{t("common.exportCSV")}</Button>
@@ -172,12 +173,12 @@ export function SubmissionsPageClient({
         }
       />
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <SummaryCard label={t("common.total")} value={totalFiltered} icon={<FileText className="h-5 w-5" />} color="blue" />
-        <SummaryCard label={t("submissions.inReview")} value={submitted} icon={<Eye className="h-5 w-5" />} color="indigo" />
-        <SummaryCard label={t("dashboard.accepted")} value={accepted} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
-        <SummaryCard label={t("submissions.rejected")} value={rejected} icon={<XCircle className="h-5 w-5" />} color="red" />
-        <SummaryCard label={t("dashboard.pending")} value={pending} icon={<Clock className="h-5 w-5" />} color="gray" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <SummaryStatCard label={t("common.total")} value={totalFiltered} icon={<FileText className="h-5 w-5" />} color="blue" />
+        <SummaryStatCard label={t("submissions.inReview")} value={submitted} icon={<Eye className="h-5 w-5" />} color="indigo" />
+        <SummaryStatCard label={t("dashboard.accepted")} value={accepted} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
+        <SummaryStatCard label={t("submissions.rejected")} value={rejected} icon={<XCircle className="h-5 w-5" />} color="red" />
+        <SummaryStatCard label={t("dashboard.pending")} value={pending} icon={<Clock className="h-5 w-5" />} color="gray" />
       </div>
 
       <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
@@ -198,12 +199,12 @@ export function SubmissionsPageClient({
             </button>
           )}
         </div>
-        <div className="flex gap-1 overflow-x-auto flex-wrap">
+        <div className="flex w-full gap-1 overflow-x-auto pb-1 sm:flex-wrap">
           {statusTabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-150 whitespace-nowrap ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                 statusFilter === tab.key
                   ? "bg-brand-500 text-white shadow-sm"
                   : "bg-surface-alt text-ink-muted hover:text-ink hover:bg-gray-200/80"
@@ -221,11 +222,86 @@ export function SubmissionsPageClient({
       {filtered.length === 0 ? (
         <EmptyState
           icon={<FileText className="h-12 w-12" />}
-          title={searchQuery ? `No results for "${searchQuery}"` : statusFilter !== "ALL" ? `No ${statusLabels[statusFilter] || statusFilter} submissions` : t("submissions.noSubmissions")}
+          title={
+            searchQuery
+              ? t("submissions.noResultsFor", { query: searchQuery })
+              : statusFilter !== "ALL"
+                ? t("submissions.noStatusItems", { status: statusLabels[statusFilter] || statusFilter })
+                : t("submissions.noSubmissions")
+          }
         />
       ) : (
-        <Card>
-          <CardBody className="p-0">
+        <>
+          <div className="space-y-3 lg:hidden">
+            {filtered.map((sub) => {
+              const totalAssign = sub.reviewAssignments?.length || 0;
+              const completedAssign = sub.reviewAssignments?.filter((a) => a.status === "COMPLETED").length || 0;
+
+              return (
+                <Link key={sub.id} href={`/submissions/${sub.id}`}>
+                  <Card hover>
+                    <CardBody className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-base font-semibold leading-snug text-ink">{sub.title}</p>
+                          {sub.abstract && (
+                            <p className="mt-1 text-sm text-ink-muted line-clamp-2">
+                              {truncate(sub.abstract, 140)}
+                            </p>
+                          )}
+                        </div>
+                        <ExternalLink className="h-4 w-4 shrink-0 text-ink-muted" />
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {sub.track && <Badge tone="info">{sub.track.name}</Badge>}
+                        <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"} dot>
+                          {statusLabels[sub.status] || sub.status}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 rounded-xl bg-surface-alt p-3 text-sm">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                            {t("submissions.author")}
+                          </p>
+                          <p className="mt-1 text-ink">{displayNameTh(sub.author)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                            {t("submissions.submitted")}
+                          </p>
+                          <p className="mt-1 text-ink">{formatDate(sub.createdAt, locale)}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-ink-muted">{t("submissions.reviewsCol")}</span>
+                        {totalAssign > 0 ? (
+                          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                            <span className="text-sm font-medium text-ink">
+                              {completedAssign}/{totalAssign}
+                            </span>
+                            <div className="h-2 w-24 overflow-hidden rounded-full bg-gray-100">
+                              <div
+                                className={`h-full rounded-full ${completedAssign === totalAssign ? "bg-emerald-500" : "bg-blue-500"}`}
+                                style={{ width: `${totalAssign > 0 ? (completedAssign / totalAssign) * 100 : 0}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-ink-muted">—</span>
+                        )}
+                      </div>
+                    </CardBody>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+
+          <Card className="hidden lg:block">
+            <CardBody className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -300,35 +376,17 @@ export function SubmissionsPageClient({
                 </tbody>
               </table>
             </div>
-          </CardBody>
-        </Card>
+            </CardBody>
+          </Card>
+        </>
       )}
 
       {filtered.length > 0 && (
         <p className="text-xs text-ink-muted text-center">
-          Showing {filtered.length} of {totalFiltered} submission{totalFiltered !== 1 ? "s" : ""}{searchQuery ? ` matching "${searchQuery}"` : ""}
+          {t("submissions.showingCount", { shown: filtered.length, total: totalFiltered })}
+          {searchQuery ? ` ${t("submissions.matchingQuery", { query: searchQuery })}` : ""}
         </p>
       )}
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
-  const styles: Record<string, { card: string; text: string; icon: string }> = {
-    blue:    { card: "from-blue-50 to-indigo-50 border-blue-100", text: "text-blue-700", icon: "text-blue-400" },
-    indigo:  { card: "from-indigo-50 to-violet-50 border-indigo-100", text: "text-indigo-700", icon: "text-indigo-400" },
-    emerald: { card: "from-emerald-50 to-green-50 border-emerald-100", text: "text-emerald-700", icon: "text-emerald-400" },
-    red:     { card: "from-red-50 to-rose-50 border-red-100", text: "text-red-700", icon: "text-red-400" },
-    gray:    { card: "from-gray-50 to-slate-50 border-gray-200", text: "text-gray-700", icon: "text-gray-400" },
-  };
-  const s = styles[color] || styles.blue;
-  return (
-    <div className={`rounded-xl bg-gradient-to-br ${s.card} border px-4 py-3`}>
-      <div className="flex items-center justify-between mb-1">
-        <p className={`text-2xl font-bold ${s.text}`}>{value}</p>
-        <div className={s.icon}>{icon}</div>
-      </div>
-      <p className={`text-xs font-medium ${s.text} opacity-70`}>{label}</p>
     </div>
   );
 }

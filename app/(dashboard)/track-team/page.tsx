@@ -10,6 +10,8 @@ import { Field } from "@/components/ui/field";
 import { SectionTitle } from "@/components/ui/section-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageLoading } from "@/components/ui/page-loading";
 import { useI18n } from "@/lib/i18n";
 import { Users, UserPlus, Trash2, ShieldCheck, ClipboardCheck } from "lucide-react";
 import { displayNameTh } from "@/lib/display-name";
@@ -51,6 +53,7 @@ export default function TrackTeamPage() {
   const [available, setAvailable] = useState<AvailableUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [memberToRemove, setMemberToRemove] = useState<MemberData | null>(null);
 
   const [addUserId, setAddUserId] = useState("");
   const [addRole, setAddRole] = useState<"REVIEWER" | "COMMITTEE">("REVIEWER");
@@ -138,7 +141,6 @@ export default function TrackTeamPage() {
   }
 
   async function handleRemove(memberId: string) {
-    if (!confirm(t("trackTeam.confirmRemove"))) return;
     const res = await fetch(`/api/track-members/${selectedTrack}/${memberId}`, { method: "DELETE" });
     if (res.ok) {
       setMessage(t("trackTeam.memberRemoved"));
@@ -147,11 +149,7 @@ export default function TrackTeamPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-6 w-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (!isChair && !isAdmin) {
@@ -173,9 +171,32 @@ export default function TrackTeamPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+      <ConfirmDialog
+        open={!!memberToRemove}
+        title={t("trackTeam.removeTitle")}
+        description={
+          memberToRemove
+            ? t("trackTeam.removeDescription", { name: displayNameTh(memberToRemove.user) })
+            : ""
+        }
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        onCancel={() => setMemberToRemove(null)}
+        onConfirm={async () => {
+          if (!memberToRemove) return;
+          await handleRemove(memberToRemove.id);
+          setMemberToRemove(null);
+        }}
+      />
+
       <SectionTitle
         title={t("trackTeam.title")}
-        subtitle={t("trackTeam.subtitle")}
+        subtitle={
+          currentTrack
+            ? t("trackTeam.trackSummary", { track: currentTrack.name, members: members.length })
+            : t("trackTeam.subtitle")
+        }
       />
 
       {message && <Alert tone="info">{message}</Alert>}
@@ -252,7 +273,11 @@ export default function TrackTeamPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge tone="info">Reviewer</Badge>
-                    <Button variant="ghost" size="sm" onClick={() => handleRemove(m.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMemberToRemove(m)}
+                    >
                       <Trash2 className="h-3.5 w-3.5 text-red-500" />
                     </Button>
                   </div>
@@ -287,7 +312,11 @@ export default function TrackTeamPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge tone="success">Committee</Badge>
-                    <Button variant="ghost" size="sm" onClick={() => handleRemove(m.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMemberToRemove(m)}
+                    >
                       <Trash2 className="h-3.5 w-3.5 text-red-500" />
                     </Button>
                   </div>

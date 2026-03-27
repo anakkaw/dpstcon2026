@@ -10,6 +10,8 @@ import { Field } from "@/components/ui/field";
 import { SectionTitle } from "@/components/ui/section-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageLoading } from "@/components/ui/page-loading";
 import { formatDate } from "@/lib/utils";
 import { getDaysUntil } from "@/lib/author-utils";
 import { useI18n } from "@/lib/i18n";
@@ -45,17 +47,16 @@ const DEADLINE_FALLBACKS: DeadlineSettings = {
   notificationDate: "2026-08-31",
 };
 
-const DEADLINE_DEFAULTS = [
-  { defaultLabel: "Paper Submission", key: "submissionDeadline" as const, labelKey: "submissionDeadlineLabel" as const, icon: FileText, step: 1 },
-  { defaultLabel: "Review Deadline", key: "reviewDeadline" as const, labelKey: "reviewDeadlineLabel" as const, icon: Clock, step: 2 },
-  { defaultLabel: "Notification", key: "notificationDate" as const, labelKey: "notificationDateLabel" as const, icon: AlertTriangle, step: 3 },
-  { defaultLabel: "Camera-Ready", key: "cameraReadyDeadline" as const, labelKey: "cameraReadyDeadlineLabel" as const, icon: CheckCircle2, step: 4 },
-];
-
 export default function DeadlinesPage() {
   const { t, locale } = useI18n();
   const { roles } = useDashboardAuth();
   const isAdmin = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
+  const deadlineDefaults = [
+    { defaultLabel: t("deadlines.paperSubmission"), key: "submissionDeadline" as const, labelKey: "submissionDeadlineLabel" as const, icon: FileText, step: 1 },
+    { defaultLabel: t("deadlines.reviewDeadline"), key: "reviewDeadline" as const, labelKey: "reviewDeadlineLabel" as const, icon: Clock, step: 2 },
+    { defaultLabel: t("deadlines.notification"), key: "notificationDate" as const, labelKey: "notificationDateLabel" as const, icon: AlertTriangle, step: 3 },
+    { defaultLabel: t("deadlines.cameraReady"), key: "cameraReadyDeadline" as const, labelKey: "cameraReadyDeadlineLabel" as const, icon: CheckCircle2, step: 4 },
+  ];
 
   const [templates, setTemplates] = useState<TemplateData[]>([]);
   const [settings, setSettings] = useState<DeadlineSettings>({});
@@ -71,6 +72,7 @@ export default function DeadlinesPage() {
   const [templateForm, setTemplateForm] = useState({ name: "", description: "" });
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [addingTemplate, setAddingTemplate] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<TemplateData | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -107,12 +109,12 @@ export default function DeadlinesPage() {
         setSettings(nextSettings);
         setEditForm(nextSettings);
         setEditing(false);
-        showMsg("Deadlines saved successfully");
+        showMsg(t("deadlines.saveSuccess"));
       } else {
-        showMsg("Failed to save", "danger");
+        showMsg(t("deadlines.saveError"), "danger");
       }
     } catch {
-      showMsg("Failed to save", "danger");
+      showMsg(t("deadlines.saveError"), "danger");
     }
     setSaving(false);
   }
@@ -147,7 +149,7 @@ export default function DeadlinesPage() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        showMsg(data?.error || "Failed to create template", "danger");
+        showMsg(data?.error || t("deadlines.templateCreateError"), "danger");
         setAddingTemplate(false);
         return;
       }
@@ -163,40 +165,54 @@ export default function DeadlinesPage() {
 
         if (!uploadRes.ok) {
           await fetch(`/api/templates/${data.template.id}`, { method: "DELETE" }).catch(() => {});
-          throw new Error("Upload failed");
+          throw new Error(t("deadlines.templateUploadError"));
         }
 
         setTemplateForm({ name: "", description: "" });
         setTemplateFile(null);
         setShowAddTemplate(false);
-        showMsg("Template added");
+        showMsg(t("deadlines.templateAdded"));
         loadTemplates();
       } catch {
-        showMsg("Failed to upload file", "danger");
+        showMsg(t("deadlines.templateUploadError"), "danger");
       }
     } catch {
-      showMsg("Failed to create template", "danger");
+      showMsg(t("deadlines.templateCreateError"), "danger");
     }
     setAddingTemplate(false);
   }
 
   async function deleteTemplate(id: string) {
-    if (!confirm("Are you sure you want to delete this template?")) return;
     await fetch(`/api/templates/${id}`, { method: "DELETE" });
-    showMsg("Template deleted");
+    showMsg(t("deadlines.templateDeleted"));
     loadTemplates();
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-6 w-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageLoading label={t("deadlines.loading")} />;
   }
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={!!templateToDelete}
+        title={t("deadlines.deleteTemplateTitle")}
+        description={
+          templateToDelete
+            ? t("deadlines.deleteTemplateDescription", { name: templateToDelete.name })
+            : ""
+        }
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        onCancel={() => setTemplateToDelete(null)}
+        onConfirm={async () => {
+          if (!templateToDelete) return;
+          await deleteTemplate(templateToDelete.id);
+          setTemplateToDelete(null);
+        }}
+      />
+
       <SectionTitle
         title={t("deadlines.title")}
         subtitle={t("deadlines.subtitle")}
@@ -224,7 +240,7 @@ export default function DeadlinesPage() {
           </CardHeader>
           <CardBody>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {DEADLINE_DEFAULTS.map((d) => (
+              {deadlineDefaults.map((d) => (
                 <div key={d.key} className="space-y-2">
                   <Field label={t("deadlines.label")}>
                     <Input value={editForm[d.labelKey] || d.defaultLabel} onChange={(e) => setEditForm({ ...editForm, [d.labelKey]: e.target.value })} placeholder={d.defaultLabel} />
@@ -245,7 +261,7 @@ export default function DeadlinesPage() {
 
       {/* ─── Timeline Cards ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {DEADLINE_DEFAULTS.map((d) => {
+        {deadlineDefaults.map((d) => {
           const date = settings[d.key];
           if (!date) return null;
           const isPast = new Date(date) <= new Date();
@@ -319,14 +335,14 @@ export default function DeadlinesPage() {
                 <Input
                   value={templateForm.name}
                   onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                  placeholder="Template name (e.g. Full Paper Template)"
+                  placeholder={t("deadlines.templateNamePlaceholder")}
                 />
               </div>
               <div>
                 <Input
                   value={templateForm.description}
                   onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
-                  placeholder="Description (optional)"
+                  placeholder={t("deadlines.templateDescriptionPlaceholder")}
                 />
               </div>
               <div>
@@ -358,7 +374,7 @@ export default function DeadlinesPage() {
           ) : (
             <div className="divide-y divide-border/60">
               {templates.map((tmpl) => (
-                <div key={tmpl.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-surface-hover/50 transition-colors group">
+                <div key={tmpl.id} className="flex flex-col gap-3 px-5 py-3.5 transition-colors hover:bg-surface-hover/50 sm:flex-row sm:items-center group">
                   <div className="h-9 w-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                     <FileText className="h-4.5 w-4.5 text-brand-600" />
                   </div>
@@ -366,14 +382,18 @@ export default function DeadlinesPage() {
                     <p className="text-sm font-medium text-ink truncate">{tmpl.name}</p>
                     {tmpl.description && <p className="text-xs text-ink-muted truncate">{tmpl.description}</p>}
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 sm:shrink-0">
                     <a href={`/api/templates/${tmpl.id}/download`}>
                       <Button variant="outline" size="sm">
                         <Download className="h-3.5 w-3.5" />{t("common.download")}
                       </Button>
                     </a>
                     {isAdmin && (
-                      <button onClick={() => deleteTemplate(tmpl.id)} className="p-1.5 rounded-lg text-ink-muted hover:text-danger hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100" title="Delete">
+                      <button
+                        onClick={() => setTemplateToDelete(tmpl)}
+                        className="p-1.5 rounded-lg text-ink-muted transition-colors hover:bg-red-50 hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
+                        title={t("common.delete")}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     )}

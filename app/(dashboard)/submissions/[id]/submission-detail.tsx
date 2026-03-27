@@ -12,6 +12,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Divider } from "@/components/ui/divider";
 import { Collapsible } from "@/components/ui/collapsible";
 import { Alert } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   SUBMISSION_STATUS_LABELS,
   SUBMISSION_STATUS_COLORS,
@@ -106,6 +107,9 @@ export function SubmissionDetail({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [confirmAction, setConfirmAction] = useState<null | "withdraw" | "resubmit">(
+    null
+  );
   const isOwner = submission.author.id === currentUserId;
   const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(currentUserRole);
   const isAuthor = currentUserRole === "AUTHOR";
@@ -145,7 +149,6 @@ export function SubmissionDetail({
   }
 
   async function handleWithdraw() {
-    if (!confirm("คุณแน่ใจหรือไม่ที่จะถอนบทความนี้?")) return;
     setLoading(true);
     await withdrawPaper(submission.id);
     router.refresh();
@@ -153,7 +156,6 @@ export function SubmissionDetail({
   }
 
   async function handleResubmit() {
-    if (!confirm("คุณแน่ใจหรือไม่ที่จะส่งบทความแก้ไขใหม่?")) return;
     setLoading(true);
     await resubmitPaper(submission.id);
     router.refresh();
@@ -218,15 +220,43 @@ export function SubmissionDetail({
 
   return (
     <div className="space-y-6 max-w-4xl">
+      <ConfirmDialog
+        open={confirmAction === "withdraw"}
+        title="ยืนยันการถอนบทความ"
+        description="การถอนบทความจะยกเลิกกระบวนการพิจารณาปัจจุบันทันที คุณยังสามารถกลับมาส่งใหม่ได้เฉพาะเมื่อระบบรองรับ"
+        confirmLabel="ถอนบทความ"
+        cancelLabel="ยกเลิก"
+        tone="danger"
+        loading={loading}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={async () => {
+          await handleWithdraw();
+          setConfirmAction(null);
+        }}
+      />
+      <ConfirmDialog
+        open={confirmAction === "resubmit"}
+        title="ยืนยันการส่งฉบับแก้ไข"
+        description="ระบบจะส่งบทความฉบับแก้ไขเข้าสู่ขั้นตอนถัดไปทันที กรุณาตรวจสอบว่าได้อัปโหลดไฟล์ฉบับล่าสุดแล้ว"
+        confirmLabel="ส่งฉบับแก้ไข"
+        cancelLabel="ยกเลิก"
+        loading={loading}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={async () => {
+          await handleResubmit();
+          setConfirmAction(null);
+        }}
+      />
+
       <Breadcrumb items={[{ label: "บทความ", href: "/submissions" }, { label: submission.title }]} />
 
       {message && <Alert tone="info">{message}</Alert>}
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-ink tracking-tight">{submission.title}</h1>
-          <div className="flex items-center gap-2.5 mt-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2.5">
             <Badge tone={SUBMISSION_STATUS_COLORS[submission.status] || "neutral"}>
               {SUBMISSION_STATUS_LABELS[submission.status] || submission.status}
             </Badge>
@@ -235,9 +265,18 @@ export function SubmissionDetail({
             )}
           </div>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex flex-col gap-2 sm:shrink-0 sm:flex-row">
           {canSubmit && <Button onClick={handleSubmit} loading={loading} size="sm"><Send className="h-3.5 w-3.5" />ส่งบทความ</Button>}
-          {canWithdraw && <Button onClick={handleWithdraw} variant="danger" loading={loading} size="sm">ถอนบทความ</Button>}
+          {canWithdraw && (
+            <Button
+              onClick={() => setConfirmAction("withdraw")}
+              variant="danger"
+              loading={loading}
+              size="sm"
+            >
+              ถอนบทความ
+            </Button>
+          )}
         </div>
       </div>
 
@@ -512,7 +551,7 @@ export function SubmissionDetail({
           </CardBody>
           <CardFooter className="flex justify-end">
             <Button
-              onClick={handleResubmit}
+              onClick={() => setConfirmAction("resubmit")}
               loading={loading}
               disabled={!files.some((f) => f.kind === "MANUSCRIPT")}
             >

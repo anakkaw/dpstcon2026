@@ -11,6 +11,8 @@ import { Select } from "@/components/ui/select";
 import { SectionTitle } from "@/components/ui/section-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { TrackFilter } from "@/components/track-filter";
 import { getAssignmentStatusLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
@@ -86,6 +88,7 @@ export function ReviewsPageClient({
   const [assignDueDate, setAssignDueDate] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [assignmentToRemove, setAssignmentToRemove] = useState<AssignmentData | null>(null);
 
   const [sortKey, setSortKey] = useState<SortKey>("title");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -131,16 +134,18 @@ export function ReviewsPageClient({
         }),
       });
       if (res.ok) {
-        setMessage("Reviewer assigned successfully");
+        setMessage(t("reviews.assignmentAssigned"));
         setAssigningSubId(null);
         setSelectedReviewerId("");
         setAssignDueDate("");
         await reloadAssignments();
       } else {
         const err = await res.json();
-        setMessage(err.error || "An error occurred");
+        setMessage(err.error || t("reviews.assignFailed"));
       }
-    } catch {}
+    } catch {
+      setMessage(t("reviews.assignFailed"));
+    }
     setAssignSaving(false);
   }
 
@@ -149,11 +154,16 @@ export function ReviewsPageClient({
     try {
       const res = await fetch(`/api/reviews/assignments/${assignmentId}`, { method: "DELETE" });
       if (res.ok) {
-        setMessage("Assignment removed successfully");
+        setMessage(t("reviews.assignmentRemoved"));
         await reloadAssignments();
+      } else {
+        setMessage(t("reviews.removeFailed"));
       }
-    } catch {}
+    } catch {
+      setMessage(t("reviews.removeFailed"));
+    }
     setRemovingId(null);
+    setAssignmentToRemove(null);
   }
 
   const statusCounts: Record<string, number> = {};
@@ -225,7 +235,10 @@ export function ReviewsPageClient({
     const myFiltered = assignments.filter((assignment) => !trackFilter || assignment.submission.track?.id === trackFilter);
     return (
       <div className="space-y-5">
-        <SectionTitle title={t("reviews.myReviewTasks")} subtitle={`${myFiltered.length} items`} />
+        <SectionTitle
+          title={t("reviews.myReviewTasks")}
+          subtitle={t("reviews.mySubtitle", { n: myFiltered.length })}
+        />
         <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
         {myFiltered.length === 0 ? (
           <EmptyState icon={<ClipboardCheck className="h-12 w-12" />} title={t("reviews.noReviewTasks")} body={t("reviews.noReviewTasksDesc")} />
@@ -277,15 +290,15 @@ export function ReviewsPageClient({
     <div className="space-y-6">
       <SectionTitle
         title={t("reviews.management")}
-        subtitle={`${groups.length} ${t("reviews.submissions").toLowerCase()} · ${totalAssignments} review tasks`}
+        subtitle={t("reviews.summary", { submissions: groups.length, assignments: totalAssignments })}
       />
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <SummaryCard label={t("reviews.submissions")} value={groups.length} icon={<ClipboardCheck className="h-5 w-5" />} color="blue" />
-        <SummaryCard label={t("reviews.totalReviews")} value={totalAssignments} icon={<Users className="h-5 w-5" />} color="indigo" />
-        <SummaryCard label={t("reviews.inProgress")} value={statusCounts.ACCEPTED || 0} icon={<CircleDot className="h-5 w-5" />} color="violet" />
-        <SummaryCard label={t("reviews.completed")} value={statusCounts.COMPLETED || 0} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
-        <SummaryCard label={t("reviews.overdue")} value={statusCounts.OVERDUE || 0} icon={<AlertTriangle className="h-5 w-5" />} color="red" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <SummaryStatCard label={t("reviews.submissions")} value={groups.length} icon={<ClipboardCheck className="h-5 w-5" />} color="blue" />
+        <SummaryStatCard label={t("reviews.totalReviews")} value={totalAssignments} icon={<Users className="h-5 w-5" />} color="indigo" />
+        <SummaryStatCard label={t("reviews.inProgress")} value={statusCounts.ACCEPTED || 0} icon={<CircleDot className="h-5 w-5" />} color="violet" />
+        <SummaryStatCard label={t("reviews.completed")} value={statusCounts.COMPLETED || 0} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
+        <SummaryStatCard label={t("reviews.overdue")} value={statusCounts.OVERDUE || 0} icon={<AlertTriangle className="h-5 w-5" />} color="red" />
       </div>
 
       <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
@@ -313,12 +326,12 @@ export function ReviewsPageClient({
             </button>
           )}
         </div>
-        <div className="flex gap-1 overflow-x-auto">
+        <div className="flex w-full gap-1 overflow-x-auto pb-1 sm:flex-wrap">
           {statusTabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-150 whitespace-nowrap ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                 statusFilter === tab.key
                   ? "bg-brand-500 text-white shadow-sm"
                   : "bg-surface-alt text-ink-muted hover:text-ink hover:bg-gray-200/80"
@@ -336,11 +349,186 @@ export function ReviewsPageClient({
       {groups.length === 0 ? (
         <EmptyState
           icon={<ClipboardCheck className="h-12 w-12" />}
-          title={searchQuery ? t("reviews.noResults") : statusFilter !== "ALL" ? `No ${statusTabs.find(tab => tab.key === statusFilter)?.label || statusFilter} reviews` : t("reviews.noReviewsYet")}
+          title={
+            searchQuery
+              ? t("reviews.noResults")
+              : statusFilter !== "ALL"
+                ? t("reviews.noStatusItems", {
+                    status: statusTabs.find((tab) => tab.key === statusFilter)?.label || statusFilter,
+                  })
+                : t("reviews.noReviewsYet")
+          }
         />
       ) : (
-        <Card>
-          <CardBody className="p-0">
+        <>
+          <div className="space-y-3 lg:hidden">
+            {groups.map((group) => {
+              const isExpanded = expandedId === group.submissionId;
+              const pct = group.totalCount > 0 ? Math.round((group.completedCount / group.totalCount) * 100) : 0;
+              const isAssigning = assigningSubId === group.submissionId;
+
+              return (
+                <Card key={group.submissionId}>
+                  <CardBody className="space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <button
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => {
+                          setExpandedId(isExpanded ? null : group.submissionId);
+                          setAssigningSubId(null);
+                        }}
+                      >
+                        <p className="text-base font-semibold leading-snug text-ink">{group.title}</p>
+                        <p className="mt-1 text-sm text-ink-muted">{group.authorName}</p>
+                      </button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setExpandedId(isExpanded ? null : group.submissionId);
+                          setAssigningSubId(null);
+                        }}
+                      >
+                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {group.track && <Badge tone="info">{group.track.name}</Badge>}
+                      {group.hasOverdue && <Badge tone="danger">{t("reviews.overdue")}</Badge>}
+                    </div>
+
+                    <div className="rounded-xl bg-surface-alt p-3">
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span className="text-ink-muted">{t("reviews.progress")}</span>
+                        <span className="font-medium text-ink">
+                          {group.completedCount}/{group.totalCount}
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : group.hasOverdue ? "bg-red-400" : "bg-blue-500"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant={isAssigning ? "secondary" : "outline"}
+                        onClick={() => {
+                          setAssigningSubId(isAssigning ? null : group.submissionId);
+                          setExpandedId(group.submissionId);
+                          setSelectedReviewerId("");
+                          setAssignDueDate("");
+                        }}
+                      >
+                        <UserPlus className="h-4 w-4" />
+                        {t("reviews.assignReviewer")}
+                      </Button>
+                      <Link href={`/submissions/${group.submissionId}`}>
+                        <Button size="sm" variant="secondary">
+                          <ExternalLink className="h-4 w-4" />
+                          {t("common.viewAll")}
+                        </Button>
+                      </Link>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="space-y-3 border-t border-border-light pt-4">
+                        {group.assignments.map((assignment) => {
+                          const overdue =
+                            assignment.status !== "COMPLETED" &&
+                            assignment.status !== "DECLINED" &&
+                            isOverdue(assignment.dueDate);
+                          const dueSoon =
+                            !overdue &&
+                            assignment.status !== "COMPLETED" &&
+                            assignment.status !== "DECLINED" &&
+                            isDueSoon(assignment.dueDate);
+
+                          return (
+                            <div key={assignment.id} className="rounded-xl bg-surface-alt p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-ink">
+                                    {assignment.reviewer ? displayNameTh(assignment.reviewer) : "—"}
+                                  </p>
+                                  <p className="mt-1 text-xs text-ink-muted">
+                                    {t("reviews.assigned")} {formatDate(assignment.assignedAt, locale)}
+                                  </p>
+                                </div>
+                                <Badge tone={STATUS_COLORS[assignment.status] || "neutral"} dot>
+                                  {assignmentLabels[assignment.status] || assignment.status}
+                                </Badge>
+                              </div>
+
+                              <div className="mt-3 flex items-center justify-between gap-3">
+                                <span className="text-xs text-ink-muted">{t("reviews.dueDate")}</span>
+                                <span
+                                  className={`text-xs ${overdue ? "font-medium text-red-600" : dueSoon ? "font-medium text-amber-600" : "text-ink-muted"}`}
+                                >
+                                  {assignment.dueDate ? formatDate(assignment.dueDate, locale) : t("reviews.noDeadline")}
+                                </span>
+                              </div>
+
+                              {assignment.status !== "COMPLETED" && (
+                                <div className="mt-3 flex justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setAssignmentToRemove(assignment)}
+                                    disabled={removingId === assignment.id}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                    {t("common.delete")}
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {isAssigning && (
+                          <div className="rounded-xl border border-brand-200/50 bg-brand-50/40 p-4">
+                            <div className="space-y-3">
+                              <Field label={t("reviews.reviewers")} className="flex-1">
+                                <Select value={selectedReviewerId} onChange={(e) => setSelectedReviewerId(e.target.value)}>
+                                  <option value="">{t("reviews.selectReviewer")}</option>
+                                  {reviewerUsers
+                                    .filter((reviewer) => !assignedReviewerIds.has(reviewer.id))
+                                    .map((reviewer) => (
+                                      <option key={reviewer.id} value={reviewer.id}>
+                                        {displayNameTh(reviewer)} ({reviewer.email})
+                                      </option>
+                                    ))}
+                                </Select>
+                              </Field>
+                              <Field label={t("reviews.dueDate")}>
+                                <Input type="date" value={assignDueDate} onChange={(e) => setAssignDueDate(e.target.value)} />
+                              </Field>
+                              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                <Button size="sm" onClick={() => handleAssign(group.submissionId)} loading={assignSaving} disabled={!selectedReviewerId}>
+                                  {t("reviews.assign")}
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => setAssigningSubId(null)}>
+                                  {t("common.cancel")}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              );
+            })}
+          </div>
+
+          <Card className="hidden lg:block">
+            <CardBody className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -417,7 +605,7 @@ export function ReviewsPageClient({
                               <button
                                 onClick={() => { setAssigningSubId(isAssigning ? null : group.submissionId); setExpandedId(group.submissionId); setSelectedReviewerId(""); setAssignDueDate(""); }}
                                 className={`p-1.5 rounded-lg transition-colors ${isAssigning ? "bg-brand-100 text-brand-600" : "text-ink-muted hover:text-brand-600 hover:bg-brand-50"}`}
-                                title="Assign reviewer"
+                                title={t("reviews.assignReviewer")}
                               >
                                 <UserPlus className="h-4 w-4" />
                               </button>
@@ -477,10 +665,10 @@ export function ReviewsPageClient({
                                   <td className="px-3 py-2.5 text-center">
                                     {assignment.status !== "COMPLETED" && (
                                       <button
-                                        onClick={() => handleRemove(assignment.id)}
+                                        onClick={() => setAssignmentToRemove(assignment)}
                                         disabled={removingId === assignment.id}
                                         className="p-1.5 rounded-lg text-ink-muted hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                                        title="Remove assignment"
+                                        title={t("common.delete")}
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />
                                       </button>
@@ -524,29 +712,32 @@ export function ReviewsPageClient({
                 </tbody>
               </table>
             </div>
-          </CardBody>
-        </Card>
+            </CardBody>
+          </Card>
+        </>
       )}
-    </div>
-  );
-}
 
-function SummaryCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
-  const styles: Record<string, { card: string; text: string; icon: string }> = {
-    blue:    { card: "from-blue-50 to-indigo-50 border-blue-100", text: "text-blue-700", icon: "text-blue-400" },
-    indigo:  { card: "from-indigo-50 to-violet-50 border-indigo-100", text: "text-indigo-700", icon: "text-indigo-400" },
-    violet:  { card: "from-violet-50 to-fuchsia-50 border-violet-100", text: "text-violet-700", icon: "text-violet-400" },
-    emerald: { card: "from-emerald-50 to-green-50 border-emerald-100", text: "text-emerald-700", icon: "text-emerald-400" },
-    red:     { card: "from-red-50 to-rose-50 border-red-100", text: "text-red-700", icon: "text-red-400" },
-  };
-  const s = styles[color] || styles.blue;
-  return (
-    <div className={`rounded-xl bg-gradient-to-br ${s.card} border px-4 py-3`}>
-      <div className="flex items-center justify-between mb-1">
-        <p className={`text-2xl font-bold ${s.text}`}>{value}</p>
-        <div className={s.icon}>{icon}</div>
-      </div>
-      <p className={`text-xs font-medium ${s.text} opacity-70`}>{label}</p>
+      <ConfirmDialog
+        open={Boolean(assignmentToRemove)}
+        title={t("reviews.removeAssignmentTitle")}
+        description={t("reviews.removeAssignmentDescription", {
+          reviewer: assignmentToRemove?.reviewer ? displayNameTh(assignmentToRemove.reviewer) : "—",
+        })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        loading={Boolean(assignmentToRemove && removingId === assignmentToRemove.id)}
+        onCancel={() => {
+          if (!removingId) {
+            setAssignmentToRemove(null);
+          }
+        }}
+        onConfirm={() => {
+          if (assignmentToRemove) {
+            void handleRemove(assignmentToRemove.id);
+          }
+        }}
+      />
     </div>
   );
 }

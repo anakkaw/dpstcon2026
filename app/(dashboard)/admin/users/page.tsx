@@ -10,6 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageLoading } from "@/components/ui/page-loading";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { getRoleLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { displayNameTh, displayNameEn } from "@/lib/display-name";
@@ -96,6 +100,7 @@ export default function AdminUsersPage() {
   // Registration stats & bulk remind
   const [regStats, setRegStats] = useState<RegistrationStats | null>(null);
   const [reminding, setReminding] = useState(false);
+  const [bulkRemindOpen, setBulkRemindOpen] = useState(false);
 
   // Expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -155,7 +160,6 @@ export default function AdminUsersPage() {
   }, []);
 
   async function bulkRemind() {
-    if (!confirm(t("users.bulkRemindConfirm"))) return;
     setReminding(true);
     try {
       const res = await fetch("/api/users/bulk-remind", { method: "POST" });
@@ -169,6 +173,7 @@ export default function AdminUsersPage() {
       }
     } catch { showMsg(t("users.genericError"), "danger"); }
     setReminding(false);
+    setBulkRemindOpen(false);
   }
 
   function showMsg(text: string, type: "success" | "danger" = "success") {
@@ -364,18 +369,14 @@ export default function AdminUsersPage() {
   }, [users, search, filterRole, sortBy, sortDir]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-6 w-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageLoading label={t("users.loading")} />;
   }
 
   return (
     <div className="space-y-6">
       <SectionTitle title={t("users.title")} subtitle={t("users.usersInSystem", { n: users.length })}
-        action={<div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={bulkRemind} loading={reminding}><Bell className="h-4 w-4" />{t("users.bulkRemind")}</Button>
+        action={<div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => setBulkRemindOpen(true)} loading={reminding}><Bell className="h-4 w-4" />{t("users.bulkRemind")}</Button>
           <Button size="sm" variant="outline" onClick={() => { setShowBulk(!showBulk); setShowCreate(false); }}><Upload className="h-4 w-4" />{t("users.bulkImport")}</Button>
           <Button size="sm" onClick={() => { setShowCreate(!showCreate); setShowBulk(false); }}><UserPlus className="h-4 w-4" />{t("users.inviteUser")}</Button>
         </div>}
@@ -383,28 +384,10 @@ export default function AdminUsersPage() {
 
       {/* Registration Stats */}
       {regStats && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <CheckCircle className="h-5 w-5 text-emerald-600" />
-            <div>
-              <div className="text-2xl font-bold text-emerald-700">{regStats.active}</div>
-              <div className="text-xs text-emerald-600">{t("users.statusActive")}</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <Clock className="h-5 w-5 text-amber-600" />
-            <div>
-              <div className="text-2xl font-bold text-amber-700">{regStats.pending}</div>
-              <div className="text-xs text-amber-600">{t("users.statusPending")}</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-            <AlertTriangle className="h-5 w-5 text-red-600" />
-            <div>
-              <div className="text-2xl font-bold text-red-700">{regStats.expired}</div>
-              <div className="text-xs text-red-600">{t("users.statusExpired")}</div>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <SummaryStatCard label={t("users.statusActive")} value={regStats.active} icon={<CheckCircle className="h-5 w-5" />} color="emerald" />
+          <SummaryStatCard label={t("users.statusPending")} value={regStats.pending} icon={<Clock className="h-5 w-5" />} color="amber" />
+          <SummaryStatCard label={t("users.statusExpired")} value={regStats.expired} icon={<AlertTriangle className="h-5 w-5" />} color="red" />
         </div>
       )}
 
@@ -556,9 +539,87 @@ export default function AdminUsersPage() {
         </Card>
       )}
 
+      {/* Mobile cards */}
+      <div className="space-y-3 lg:hidden">
+        {filtered.map((u) => {
+          const userRoles = u.roles || [u.role];
+          const isExpanded = expandedId === u.id;
+
+          return (
+            <Card key={u.id}>
+              <CardBody className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : u.id)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p className="font-semibold text-ink">{displayNameTh(u)}</p>
+                    {(u.firstNameEn || u.lastNameEn) && (
+                      <p className="mt-0.5 text-xs text-ink-muted">
+                        {displayNameEn(u)}
+                      </p>
+                    )}
+                    <p className="mt-1 text-sm text-ink-light">{u.email}</p>
+                  </button>
+                  <Badge tone={u.isActive ? "success" : "warning"}>
+                    {u.isActive ? t("users.statusActive") : t("users.statusPending")}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {userRoles.map((role) => (
+                    <Badge key={role} tone={ROLE_COLORS[role] || "neutral"} className="text-xs">
+                      {roleLabels[role] || role}
+                    </Badge>
+                  ))}
+                </div>
+
+                {u.affiliation && (
+                  <p className="text-sm text-ink-muted">{u.affiliation}</p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => openModal("edit", u)}>
+                    <Pencil className="h-4 w-4" />{t("users.editAction")}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => openModal("password", u)}>
+                    <KeyRound className="h-4 w-4" />{t("users.passwordAction")}
+                  </Button>
+                  {!u.isActive && (
+                    <Button size="sm" variant="secondary" onClick={() => resendInvite(u.id)}>
+                      <RefreshCw className="h-4 w-4" />{t("users.resendAction")}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="danger" onClick={() => openModal("delete", u)}>
+                    <Trash2 className="h-4 w-4" />{t("users.deleteAction")}
+                  </Button>
+                </div>
+
+                {isExpanded && (
+                  <div className="grid grid-cols-1 gap-3 rounded-xl bg-surface-alt p-4 text-sm sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                        {t("users.email")}
+                      </p>
+                      <p className="mt-1 text-ink">{u.email}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                        {t("users.affiliation")}
+                      </p>
+                      <p className="mt-1 text-ink">{u.affiliation || "—"}</p>
+                    </div>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          );
+        })}
+      </div>
+
       {/* User table */}
-      <Card>
-        <CardBody className="p-0">
+      <Card className="hidden lg:block">
+        <CardBody className="hidden p-0 lg:block">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -644,154 +705,144 @@ export default function AdminUsersPage() {
         />
       )}
 
-      {/* ─── Modal Overlay ─── */}
-      {modalMode && selectedUser && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={closeModal}
-          onKeyDown={(e) => { if (e.key === "Escape") closeModal(); }}
+      {modalMode === "edit" && selectedUser && (
+        <ModalShell
+          open
+          title={t("users.editUser")}
+          description={selectedUser.email}
+          onClose={closeModal}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
+              <Button size="sm" onClick={saveEdit} loading={saving}>{t("users.saveChanges")}</Button>
+            </div>
+          }
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-title"
-            className="bg-surface rounded-xl border border-border shadow-xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("users.thaiInfo")}</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label={t("users.prefixTh")}>
+                <Input value={editForm.prefixTh} onChange={(e) => setEditForm({ ...editForm, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
+              </Field>
+              <Field label={t("users.firstNameTh")}>
+                <Input value={editForm.firstNameTh} onChange={(e) => setEditForm({ ...editForm, firstNameTh: e.target.value })} placeholder={t("users.firstNameThPlaceholder")} />
+              </Field>
+              <Field label={t("users.lastNameTh")}>
+                <Input value={editForm.lastNameTh} onChange={(e) => setEditForm({ ...editForm, lastNameTh: e.target.value })} placeholder={t("users.lastNameThPlaceholder")} />
+              </Field>
+            </div>
 
-            {/* Edit modal */}
-            {modalMode === "edit" && (
-              <>
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                  <div>
-                    <h3 id="modal-title" className="text-base font-semibold text-ink flex items-center gap-2">
-                      <Pencil className="h-4 w-4 text-brand-500" />{t("users.editUser")}
-                    </h3>
-                    <p className="text-sm text-ink-muted mt-0.5">{selectedUser.email}</p>
-                  </div>
-                  <button onClick={closeModal} className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-gray-100 transition-colors"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
-                  {/* Thai name fields */}
-                  <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.thaiInfo")}</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <Field label={t("users.prefixTh")}>
-                      <Input value={editForm.prefixTh} onChange={(e) => setEditForm({ ...editForm, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
-                    </Field>
-                    <Field label={t("users.firstNameTh")}>
-                      <Input value={editForm.firstNameTh} onChange={(e) => setEditForm({ ...editForm, firstNameTh: e.target.value })} placeholder={t("users.firstNameThPlaceholder")} />
-                    </Field>
-                    <Field label={t("users.lastNameTh")}>
-                      <Input value={editForm.lastNameTh} onChange={(e) => setEditForm({ ...editForm, lastNameTh: e.target.value })} placeholder={t("users.lastNameThPlaceholder")} />
-                    </Field>
-                  </div>
-                  {/* English name fields */}
-                  <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.englishInfo")}</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <Field label={t("users.prefixEn")}>
-                      <Input value={editForm.prefixEn} onChange={(e) => setEditForm({ ...editForm, prefixEn: e.target.value })} placeholder={t("users.prefixEnPlaceholder")} />
-                    </Field>
-                    <Field label={t("users.firstNameEn")}>
-                      <Input value={editForm.firstNameEn} onChange={(e) => setEditForm({ ...editForm, firstNameEn: e.target.value })} placeholder={t("users.firstNameEnPlaceholder")} />
-                    </Field>
-                    <Field label={t("users.lastNameEn")}>
-                      <Input value={editForm.lastNameEn} onChange={(e) => setEditForm({ ...editForm, lastNameEn: e.target.value })} placeholder={t("users.lastNameEnPlaceholder")} />
-                    </Field>
-                  </div>
-                  <Field label={t("users.affiliation")}>
-                    <Input value={editForm.affiliation} onChange={(e) => setEditForm({ ...editForm, affiliation: e.target.value })} placeholder={t("users.affiliationPlaceholder")} />
-                  </Field>
-                  <Field label={t("users.roles")}>
-                    <div className="flex flex-wrap gap-2">
-                      {ALL_ROLES.map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => toggleRole(r, editForm.roles, (roles) => setEditForm({ ...editForm, roles }))}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                            editForm.roles.includes(r)
-                              ? "bg-brand-50 border-brand-300 text-brand-700"
-                              : "bg-white border-border text-ink-muted hover:border-brand-200"
-                          }`}
-                        >
-                          {roleLabels[r]}
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
-                  <Field label={t("users.bioNotes")}>
-                    <Textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })} rows={3} placeholder={t("users.bioPlaceholder")} />
-                  </Field>
-                </div>
-                <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
-                  <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
-                  <Button size="sm" onClick={saveEdit} loading={saving}>{t("users.saveChanges")}</Button>
-                </div>
-              </>
-            )}
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("users.englishInfo")}</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label={t("users.prefixEn")}>
+                <Input value={editForm.prefixEn} onChange={(e) => setEditForm({ ...editForm, prefixEn: e.target.value })} placeholder={t("users.prefixEnPlaceholder")} />
+              </Field>
+              <Field label={t("users.firstNameEn")}>
+                <Input value={editForm.firstNameEn} onChange={(e) => setEditForm({ ...editForm, firstNameEn: e.target.value })} placeholder={t("users.firstNameEnPlaceholder")} />
+              </Field>
+              <Field label={t("users.lastNameEn")}>
+                <Input value={editForm.lastNameEn} onChange={(e) => setEditForm({ ...editForm, lastNameEn: e.target.value })} placeholder={t("users.lastNameEnPlaceholder")} />
+              </Field>
+            </div>
 
-            {/* Password modal */}
-            {modalMode === "password" && (
-              <>
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                  <div>
-                    <h3 id="modal-title" className="text-base font-semibold text-ink flex items-center gap-2">
-                      <KeyRound className="h-4 w-4 text-yellow-500" />{t("users.passwordTitle")}
-                    </h3>
-                    <p className="text-sm text-ink-muted mt-0.5">{displayNameTh(selectedUser)} — {selectedUser.email}</p>
-                  </div>
-                  <button onClick={closeModal} className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-gray-100 transition-colors"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="px-6 py-5 space-y-4">
-                  <Field label={t("users.newPassword")} hint={t("users.minPasswordLength")} required>
-                    <div className="relative">
-                      <Input type={showPw ? "text" : "password"} value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder={t("users.newPasswordPlaceholder")} autoFocus className="pr-10" />
-                      <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-2.5 text-ink-muted hover:text-ink">
-                        {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </Field>
-                  {resetPw && resetPw.length < 8 && (
-                    <p className="text-xs text-danger">{t("users.passwordLengthRemaining", { n: 8 - resetPw.length })}</p>
-                  )}
-                </div>
-                <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
-                  <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
-                  <Button size="sm" onClick={resetPassword} loading={saving} disabled={!resetPw || resetPw.length < 8}>{t("users.resetPassword")}</Button>
-                </div>
-              </>
-            )}
+            <Field label={t("users.affiliation")}>
+              <Input value={editForm.affiliation} onChange={(e) => setEditForm({ ...editForm, affiliation: e.target.value })} placeholder={t("users.affiliationPlaceholder")} />
+            </Field>
+            <Field label={t("users.roles")}>
+              <div className="flex flex-wrap gap-2">
+                {ALL_ROLES.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => toggleRole(r, editForm.roles, (roles) => setEditForm({ ...editForm, roles }))}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      editForm.roles.includes(r)
+                        ? "border-brand-300 bg-brand-50 text-brand-700"
+                        : "border-border bg-white text-ink-muted hover:border-brand-200"
+                    }`}
+                  >
+                    {roleLabels[r]}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label={t("users.bioNotes")}>
+              <Textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })} rows={3} placeholder={t("users.bioPlaceholder")} />
+            </Field>
+          </div>
+        </ModalShell>
+      )}
 
-            {/* Delete modal */}
-            {modalMode === "delete" && (
-              <>
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                  <h3 id="modal-title" className="text-base font-semibold text-ink flex items-center gap-2">
-                    <Trash2 className="h-4 w-4 text-danger" />{t("users.deleteTitle")}
-                  </h3>
-                  <button onClick={closeModal} className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-gray-100 transition-colors"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="px-6 py-5">
-                  <div className="flex items-center gap-4 rounded-xl bg-red-50 border border-red-200 p-5">
-                    <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                      <Trash2 className="h-6 w-6 text-danger" />
-                    </div>
-                    <div>
-                      <p className="text-base font-semibold text-ink">{displayNameTh(selectedUser)}</p>
-                      <p className="text-sm text-ink-muted">{selectedUser.email}{selectedUser.affiliation ? ` · ${selectedUser.affiliation}` : ""}</p>
-                      <p className="text-sm text-danger mt-2 font-medium">{t("users.deleteConfirm")}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
-                  <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
-                  <Button variant="danger" size="sm" onClick={deleteUser} loading={saving}>{t("users.confirmDelete")}</Button>
-                </div>
-              </>
+      {modalMode === "password" && selectedUser && (
+        <ModalShell
+          open
+          title={t("users.passwordTitle")}
+          description={`${displayNameTh(selectedUser)} — ${selectedUser.email}`}
+          onClose={closeModal}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
+              <Button size="sm" onClick={resetPassword} loading={saving} disabled={!resetPw || resetPw.length < 8}>{t("users.resetPassword")}</Button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <Field label={t("users.newPassword")} hint={t("users.minPasswordLength")} required>
+              <div className="relative">
+                <Input type={showPw ? "text" : "password"} value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder={t("users.newPasswordPlaceholder")} autoFocus className="pr-10" />
+                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-2.5 text-ink-muted hover:text-ink">
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </Field>
+            {resetPw && resetPw.length < 8 && (
+              <p className="text-xs text-danger">{t("users.passwordLengthRemaining", { n: 8 - resetPw.length })}</p>
             )}
           </div>
-        </div>
+        </ModalShell>
       )}
+
+      {modalMode === "delete" && selectedUser && (
+        <ModalShell
+          open
+          title={t("users.deleteTitle")}
+          onClose={closeModal}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
+              <Button variant="danger" size="sm" onClick={deleteUser} loading={saving}>{t("users.confirmDelete")}</Button>
+            </div>
+          }
+        >
+          <div className="flex items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100">
+              <Trash2 className="h-6 w-6 text-danger" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-ink">{displayNameTh(selectedUser)}</p>
+              <p className="text-sm text-ink-muted">{selectedUser.email}{selectedUser.affiliation ? ` · ${selectedUser.affiliation}` : ""}</p>
+              <p className="mt-2 text-sm font-medium text-danger">{t("users.deleteConfirm")}</p>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      <ConfirmDialog
+        open={bulkRemindOpen}
+        title={t("users.bulkRemindTitle")}
+        description={t("users.bulkRemindConfirm")}
+        confirmLabel={t("users.bulkRemind")}
+        cancelLabel={t("common.cancel")}
+        loading={reminding}
+        onCancel={() => {
+          if (!reminding) {
+            setBulkRemindOpen(false);
+          }
+        }}
+        onConfirm={() => {
+          void bulkRemind();
+        }}
+      />
     </div>
   );
 }

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { FileText, Download, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
+import { Alert } from "@/components/ui/alert";
 
 interface StoredFile {
   id: string;
@@ -31,10 +33,13 @@ function formatFileSize(bytes: number) {
 }
 
 export function FileList({ submissionId, files }: FileListProps) {
+  const { t } = useI18n();
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   async function handleDownload(fileId: string) {
     setDownloading(fileId);
+    setError("");
     try {
       const res = await fetch(`/api/submissions/${submissionId}/download/${fileId}`);
       if (!res.ok) throw new Error("Download failed");
@@ -42,7 +47,7 @@ export function FileList({ submissionId, files }: FileListProps) {
       // Open the presigned URL in a new tab
       window.open(url, "_blank");
     } catch {
-      alert("ไม่สามารถดาวน์โหลดไฟล์ได้");
+      setError(t("fileUpload.downloadFailed"));
     }
     setDownloading(null);
   }
@@ -55,10 +60,11 @@ export function FileList({ submissionId, files }: FileListProps) {
 
   return (
     <div className="space-y-2">
+      {error && <Alert tone="danger">{error}</Alert>}
       {files.map((file) => (
         <div
           key={file.id}
-          className="flex items-center justify-between gap-3 bg-surface-alt rounded-lg px-3 py-2.5"
+          className="flex flex-col gap-3 rounded-lg bg-surface-alt px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <FileText className="h-4 w-4 text-brand-500 shrink-0" />
@@ -74,7 +80,7 @@ export function FileList({ submissionId, files }: FileListProps) {
             onClick={() => handleDownload(file.id)}
             disabled={downloading === file.id}
             className={cn(
-              "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors shrink-0",
+              "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:w-auto sm:shrink-0",
               "text-brand-600 hover:bg-brand-50 active:bg-brand-100",
               "disabled:opacity-50 disabled:cursor-not-allowed"
             )}
@@ -84,7 +90,7 @@ export function FileList({ submissionId, files }: FileListProps) {
             ) : (
               <Download className="h-3.5 w-3.5" />
             )}
-            ดาวน์โหลด
+            {t("common.download")}
           </button>
         </div>
       ))}

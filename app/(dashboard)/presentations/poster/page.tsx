@@ -9,6 +9,8 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
+import { PageLoading } from "@/components/ui/page-loading";
+import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { formatDateTime, toDateTimeLocalValue } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { Image as ImageIcon, Calendar, Plus, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download } from "lucide-react";
@@ -118,6 +120,13 @@ export default function PosterPresentationPage() {
     return true;
   });
 
+  const trackCounts: Record<string, number> = {};
+  for (const presentation of presentations) {
+    if (presentation.submission.track?.id) {
+      trackCounts[presentation.submission.track.id] = (trackCounts[presentation.submission.track.id] || 0) + 1;
+    }
+  }
+
   const sortedPresentations = [...filteredPresentations].sort((a, b) => {
     const dir = sortDir === "asc" ? 1 : -1;
     switch (sortKey) {
@@ -154,16 +163,16 @@ export default function PosterPresentationPage() {
 
       if (res.ok) {
         setMessageTone("success");
-        setMessage(t("common.save"));
+        setMessage(t("presentations.scheduleSaved"));
         setEditingId(null);
         await reload();
       } else {
         setMessageTone("danger");
-        setMessage(data?.error || "ไม่สามารถบันทึกกำหนดการได้");
+        setMessage(data?.error || t("presentations.scheduleSaveError"));
       }
     } catch {
       setMessageTone("danger");
-      setMessage("ไม่สามารถบันทึกกำหนดการได้");
+      setMessage(t("presentations.scheduleSaveError"));
     }
     setSaving(false);
   }
@@ -187,9 +196,16 @@ export default function PosterPresentationPage() {
         setCriteria([...criteria, data.criterion]);
         setCriteriaForm({ name: "", description: "", maxScore: "10", weight: "1" });
         setShowAddCriteria(false);
-        setMessage(t("common.save"));
+        setMessageTone("success");
+        setMessage(t("presentations.criteriaSaved"));
+      } else {
+        setMessageTone("danger");
+        setMessage(t("presentations.criteriaSaveError"));
       }
-    } catch {}
+    } catch {
+      setMessageTone("danger");
+      setMessage(t("presentations.criteriaSaveError"));
+    }
     setAddingCriteria(false);
   }
 
@@ -202,20 +218,23 @@ export default function PosterPresentationPage() {
         body: JSON.stringify({ judgeIds: selectedJudges }),
       });
       if (res.ok) {
-        setMessage(t("presentations.selectedCount", { n: selectedJudges.length }));
+        setMessageTone("success");
+        setMessage(t("presentations.committeeAssigned"));
         setAssignPresId(null);
         setSelectedJudges([]);
+      } else {
+        setMessageTone("danger");
+        setMessage(t("presentations.committeeAssignError"));
       }
-    } catch {}
+    } catch {
+      setMessageTone("danger");
+      setMessage(t("presentations.committeeAssignError"));
+    }
     setAssigningSaving(false);
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-6 w-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageLoading label={t("presentations.loading")} />;
   }
 
   // Lazy-load scoring data when tab is first activated
@@ -258,36 +277,27 @@ export default function PosterPresentationPage() {
     <div className="space-y-6">
       <SectionTitle
         title={t("presentations.poster")}
-        subtitle={`${filteredPresentations.length}`}
+        subtitle={t("presentations.managementSubtitle", { n: filteredPresentations.length })}
       />
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 px-4 py-3">
-          <p className="text-2xl font-bold text-blue-700">{filteredPresentations.length}</p>
-          <p className="text-xs text-blue-600/70 font-medium">{t("presentations.total")}</p>
-        </div>
-        <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-100 px-4 py-3">
-          <p className="text-2xl font-bold text-emerald-700">{scheduledCount}</p>
-          <p className="text-xs text-emerald-600/70 font-medium">{t("presentations.scheduled")}</p>
-        </div>
-        <div className="rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 px-4 py-3">
-          <p className="text-2xl font-bold text-amber-700">{pendingCount}</p>
-          <p className="text-xs text-amber-600/70 font-medium">{t("presentations.pendingSchedule")}</p>
-        </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <SummaryStatCard label={t("presentations.total")} value={filteredPresentations.length} icon={<ImageIcon className="h-5 w-5" />} color="blue" />
+        <SummaryStatCard label={t("presentations.scheduled")} value={scheduledCount} icon={<Check className="h-5 w-5" />} color="emerald" />
+        <SummaryStatCard label={t("presentations.pendingSchedule")} value={pendingCount} icon={<Calendar className="h-5 w-5" />} color="amber" />
       </div>
 
-      <TrackFilter value={trackFilter} onChange={setTrackFilter} />
+      <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
 
       {/* Tabs */}
-      <div className="flex gap-0.5 border-b border-border/60">
+      <div className="flex gap-0.5 overflow-x-auto border-b border-border/60">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => handleTabChange(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 ${
+            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors duration-150 ${
               activeTab === tab.key
                 ? "border-brand-500 text-brand-600"
                 : "border-transparent text-ink-muted hover:text-ink hover:border-gray-200"
@@ -306,14 +316,85 @@ export default function PosterPresentationPage() {
         filteredPresentations.length === 0 ? (
           <EmptyState icon={<ImageIcon className="h-12 w-12" />} title={t("presentations.noPresentations")} body={t("presentations.autoCreated")} />
         ) : (
-          <Card>
+          <>
+            <div className="space-y-3 lg:hidden">
+              {sortedPresentations.map((p) => (
+                <Card key={p.id}>
+                  <CardBody className="space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-base font-semibold text-ink">{p.submission.title}</p>
+                        <p className="mt-1 text-sm text-ink-muted">{displayNameTh(p.submission.author)}</p>
+                      </div>
+                      <Badge tone={p.status === "SCHEDULED" ? "success" : "warning"} dot>
+                        {p.status === "SCHEDULED" ? t("presentations.statusScheduled") : t("presentations.statusPending")}
+                      </Badge>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {p.submission.track && <Badge tone="info">{p.submission.track.name}</Badge>}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 rounded-xl bg-surface-alt p-4 text-sm sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.dateTime")}</p>
+                        <p className="mt-1 text-ink">{p.scheduledAt ? formatDateTime(p.scheduledAt) : "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.room")}</p>
+                        <p className="mt-1 text-ink">{p.room || "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.minutes")}</p>
+                        <p className="mt-1 text-ink">{p.duration || "—"}</p>
+                      </div>
+                    </div>
+
+                    {editingId === p.id ? (
+                      <div className="space-y-3 rounded-xl border border-brand-200/50 bg-brand-50/40 p-4">
+                        <Field label={t("presentations.dateTime")}>
+                          <Input type="datetime-local" value={editForm.scheduledAt} onChange={(e) => setEditForm({ ...editForm, scheduledAt: e.target.value })} />
+                        </Field>
+                        <Field label={t("presentations.room")}>
+                          <Input value={editForm.room} onChange={(e) => setEditForm({ ...editForm, room: e.target.value })} placeholder={t("presentations.roomPlaceholder")} />
+                        </Field>
+                        <Field label={t("presentations.durationMinutes")}>
+                          <Input type="number" value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: e.target.value })} placeholder="15" />
+                        </Field>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                          <Button size="sm" onClick={() => handleSchedule(p.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>{t("common.cancel")}</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingId(p.id);
+                          setEditForm({
+                            scheduledAt: toDateTimeLocalValue(p.scheduledAt),
+                            room: p.room || "",
+                            duration: p.duration?.toString() || "",
+                          });
+                        }}
+                      >
+                        {p.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
+                      </Button>
+                    )}
+                  </CardBody>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="hidden lg:block">
             <CardBody className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-alt/80 border-b border-border/60">
                       <SortTh label={t("presentations.paper")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%] px-5" />
-                      <SortTh label="Track" sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                      <SortTh label={t("submissions.track")} sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                       <SortTh label={t("presentations.dateTime")} sortKey_="scheduledAt" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                       <SortTh label={t("presentations.room")} sortKey_="room" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                       <SortTh label={t("presentations.minutes")} sortKey_="duration" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
@@ -364,7 +445,7 @@ export default function PosterPresentationPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100"
                                 onClick={() => {
                                   setEditingId(p.id);
                                   setEditForm({
@@ -402,7 +483,8 @@ export default function PosterPresentationPage() {
                 </table>
               </div>
             </CardBody>
-          </Card>
+            </Card>
+          </>
         )
       )}
 
@@ -446,7 +528,30 @@ export default function PosterPresentationPage() {
             {criteria.length === 0 ? (
               <EmptyState icon={<ClipboardList className="h-10 w-10" />} title={t("presentations.noCriteria")} body={t("presentations.noCriteriaDesc")} />
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-border/60">
+              <>
+                <div className="space-y-3 lg:hidden">
+                  {criteria.map((c, i) => (
+                    <div key={c.id} className="rounded-xl border border-border/60 bg-surface-alt p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                            {t("presentations.order")} #{i + 1}
+                          </p>
+                          <p className="mt-1 text-base font-semibold text-ink">{c.name}</p>
+                        </div>
+                        <Badge tone="info">x{c.weight}</Badge>
+                      </div>
+                      {c.description && (
+                        <p className="mt-3 text-sm leading-relaxed text-ink-muted">{c.description}</p>
+                      )}
+                      <p className="mt-3 text-sm text-ink">
+                        {t("presentations.maxScore")}: <span className="font-semibold">{c.maxScore}</span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto rounded-lg border border-border/60 lg:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-alt/80">
@@ -469,7 +574,8 @@ export default function PosterPresentationPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             )}
           </CardBody>
         </Card>
@@ -482,14 +588,97 @@ export default function PosterPresentationPage() {
         filteredPresentations.length === 0 ? (
           <EmptyState icon={<Users className="h-12 w-12" />} title={t("presentations.noPresentations")} />
         ) : (
-          <Card>
+          <>
+            <div className="space-y-3 lg:hidden">
+              {filteredPresentations.map((p) => (
+                <Card key={p.id}>
+                  <CardBody className="space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-base font-semibold text-ink">{p.submission.title}</p>
+                        <p className="mt-1 text-sm text-ink-muted">{displayNameTh(p.submission.author)}</p>
+                      </div>
+                      {p.submission.track && <Badge tone="info">{p.submission.track.name}</Badge>}
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant={assignPresId === p.id ? "secondary" : "outline"}
+                      onClick={() => {
+                        if (assignPresId === p.id) {
+                          setAssignPresId(null);
+                          setSelectedJudges([]);
+                        } else {
+                          setAssignPresId(p.id);
+                          setSelectedJudges([]);
+                        }
+                      }}
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      {assignPresId === p.id ? t("common.cancel") : t("presentations.committee")}
+                    </Button>
+
+                    {assignPresId === p.id && (
+                      <div className="space-y-3 rounded-xl border border-blue-200/60 bg-blue-50/40 p-4">
+                        {committeeUsers.length === 0 ? (
+                          <p className="text-xs text-danger">{t("presentations.noCommittee")}</p>
+                        ) : (
+                          <>
+                            <p className="text-xs font-medium text-ink-light">{t("presentations.selectCommittee")}</p>
+                            <div className="grid grid-cols-1 gap-2">
+                              {committeeUsers.map((u) => {
+                                const isSelected = selectedJudges.includes(u.id);
+                                return (
+                                  <label
+                                    key={u.id}
+                                    className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
+                                      isSelected
+                                        ? "border-blue-300 bg-blue-50 shadow-sm"
+                                        : "border-transparent bg-white hover:bg-surface-hover"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) setSelectedJudges([...selectedJudges, u.id]);
+                                        else setSelectedJudges(selectedJudges.filter((id) => id !== u.id));
+                                      }}
+                                      className="rounded border-border text-brand-500 focus:ring-brand-500"
+                                    />
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-ink">{displayNameTh(u)}</p>
+                                      <p className="text-xs text-ink-muted">{u.email}</p>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {selectedJudges.length > 0 && (
+                              <div className="flex flex-col gap-2 border-t border-blue-200/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-xs text-ink-muted">{t("presentations.selectedCount", { n: selectedJudges.length })}</p>
+                                <Button size="sm" onClick={() => handleAssignCommittee(p.id)} loading={assigningSaving}>
+                                  <Check className="h-3.5 w-3.5" />{t("presentations.appoint")}
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="hidden lg:block">
             <CardBody className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-alt/80 border-b border-border/60">
                       <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-[50%]">{t("presentations.paper")}</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Track</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("submissions.track")}</th>
                       <th className="text-right px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider" />
                     </tr>
                   </thead>
@@ -574,7 +763,8 @@ export default function PosterPresentationPage() {
                 </table>
               </div>
             </CardBody>
-          </Card>
+            </Card>
+          </>
         )
       )}
       {/* ══════════════════════════════════════════════════════════════
@@ -594,13 +784,42 @@ export default function PosterPresentationPage() {
               </div>
             </CardHeader>
             <CardBody className="p-0">
-              <div className="overflow-x-auto">
+              <div className="space-y-3 p-5 lg:hidden">
+                {filteredScoring.map((p) => {
+                  const avg = avgScore(p.evaluations);
+                  return (
+                    <div key={p.id} className="rounded-xl border border-border/60 bg-surface-alt p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-base font-semibold text-ink">{p.submission.title}</p>
+                          <p className="mt-1 text-sm text-ink-muted">{displayNameTh(p.submission.author)}</p>
+                        </div>
+                        {p.submission.track && <Badge tone="info">{p.submission.track.name}</Badge>}
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Committee</p>
+                          <p className="mt-1 text-ink">{p.evaluations.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.avgScore")}</p>
+                          <p className={`mt-1 font-semibold ${avg ? Number(avg) >= 7 ? "text-green-600" : Number(avg) >= 5 ? "text-yellow-600" : "text-red-600" : "text-ink-muted"}`}>
+                            {avg || "—"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto lg:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-alt/80 border-b border-border/60">
                       <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-[35%]">{t("presentations.paper")}</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Author</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Track</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("reviews.author")}</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("submissions.track")}</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Committee</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("presentations.avgScore")}</th>
                     </tr>
