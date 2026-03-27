@@ -29,6 +29,22 @@ export function formatDateTime(date: Date | string | null | undefined, locale?: 
   });
 }
 
+export function toDateTimeLocalValue(
+  date: Date | string | null | undefined
+): string {
+  if (!date) return "";
+
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "";
+
+  const pad = (value: number) => value.toString().padStart(2, "0");
+
+  return [
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  ].join("T");
+}
+
 export function formatRelativeTime(date: Date | string, locale?: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   const now = new Date();

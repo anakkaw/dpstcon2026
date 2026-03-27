@@ -15,6 +15,19 @@ const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
+function parseScheduledAt(value: string | null | undefined) {
+  if (value == null || value === "") {
+    return { value: null as Date | null };
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return { error: "Invalid scheduledAt" as const };
+  }
+
+  return { value: parsed };
+}
+
 app.get("/", async (c) => {
   const typeFilter = c.req.query("type") as "ORAL" | "POSTER" | undefined;
   const presentations = await db.query.presentationAssignments.findMany({
@@ -59,23 +72,26 @@ app.post("/schedule", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
   const schema = z.object({
     submissionId: z.string().uuid(),
     type: z.enum(["POSTER", "ORAL"]),
-    scheduledAt: z.string().optional(),
-    room: z.string().optional(),
-    duration: z.number().optional(),
+    scheduledAt: z.string().nullable().optional(),
+    room: z.string().nullable().optional(),
+    duration: z.number().nullable().optional(),
   });
 
   const parsed = schema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const scheduledAt = parseScheduledAt(parsed.data.scheduledAt);
+  if ("error" in scheduledAt) return c.json({ error: scheduledAt.error }, 400);
 
   const [assignment] = await db
     .insert(presentationAssignments)
     .values({
       submissionId: parsed.data.submissionId,
       type: parsed.data.type,
-      scheduledAt: parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : undefined,
-      room: parsed.data.room,
-      duration: parsed.data.duration,
-      status: parsed.data.scheduledAt ? "SCHEDULED" : "PENDING",
+      scheduledAt: scheduledAt.value,
+      room: parsed.data.room ?? null,
+      duration: parsed.data.duration ?? null,
+      status: scheduledAt.value ? "SCHEDULED" : "PENDING",
     })
     .returning();
 
@@ -87,21 +103,24 @@ app.patch("/:id/schedule", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
   const body = await c.req.json();
 
   const schema = z.object({
-    scheduledAt: z.string().optional(),
-    room: z.string().optional(),
-    duration: z.number().optional(),
+    scheduledAt: z.string().nullable().optional(),
+    room: z.string().nullable().optional(),
+    duration: z.number().nullable().optional(),
   });
 
   const parsed = schema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
 
+  const scheduledAt = parseScheduledAt(parsed.data.scheduledAt);
+  if ("error" in scheduledAt) return c.json({ error: scheduledAt.error }, 400);
+
   const [updated] = await db
     .update(presentationAssignments)
     .set({
-      scheduledAt: parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : undefined,
-      room: parsed.data.room,
-      duration: parsed.data.duration,
-      status: parsed.data.scheduledAt ? "SCHEDULED" : "PENDING",
+      scheduledAt: scheduledAt.value,
+      room: parsed.data.room ?? null,
+      duration: parsed.data.duration ?? null,
+      status: scheduledAt.value ? "SCHEDULED" : "PENDING",
     })
     .where(eq(presentationAssignments.id, id))
     .returning();

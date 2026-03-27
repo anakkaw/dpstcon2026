@@ -13,6 +13,7 @@ import { exportRoutes } from "./routes/exports";
 import { trackMemberRoutes } from "./routes/track-members";
 import { activateRoutes } from "./routes/activate";
 import { emailLogRoutes } from "./routes/email-logs";
+import { settingsRoutes } from "./routes/settings";
 
 const app = new OpenAPIHono().basePath("/api");
 
@@ -59,6 +60,7 @@ app.route("/exports", exportRoutes);
 app.route("/track-members", trackMemberRoutes);
 app.route("/activate", activateRoutes);
 app.route("/email-logs", emailLogRoutes);
+app.route("/settings", settingsRoutes);
 
 app.get("/health", (c) => {
   return c.json({

@@ -9,9 +9,9 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, toDateTimeLocalValue } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-import { Image, Calendar, Save, Plus, Users, ClipboardList, X, Check, Clock, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download } from "lucide-react";
+import { Image as ImageIcon, Calendar, Plus, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download } from "lucide-react";
 import { TrackFilter } from "@/components/track-filter";
 import { displayNameTh } from "@/lib/display-name";
 
@@ -59,12 +59,13 @@ interface ScoringPresentation {
 }
 
 export default function PosterPresentationPage() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [presentations, setPresentations] = useState<PresentationData[]>([]);
   const [criteria, setCriteria] = useState<CriterionData[]>([]);
   const [committeeUsers, setCommitteeUsers] = useState<CommitteeUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
   const [activeTab, setActiveTab] = useState<"schedule" | "criteria" | "committee" | "scoring">("schedule");
   const [scoringData, setScoringData] = useState<ScoringPresentation[]>([]);
 
@@ -137,21 +138,33 @@ export default function PosterPresentationPage() {
   async function handleSchedule(presId: string) {
     setSaving(true);
     try {
+      const payload = {
+        scheduledAt: editForm.scheduledAt.trim() || null,
+        room: editForm.room.trim() || null,
+        duration: editForm.duration.trim() ? Number(editForm.duration) : null,
+      };
+
       const res = await fetch(`/api/presentations/${presId}/schedule`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scheduledAt: editForm.scheduledAt || undefined,
-          room: editForm.room || undefined,
-          duration: editForm.duration ? Number(editForm.duration) : undefined,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      const data = await res.json().catch(() => null);
+
       if (res.ok) {
+        setMessageTone("success");
         setMessage(t("common.save"));
         setEditingId(null);
         await reload();
+      } else {
+        setMessageTone("danger");
+        setMessage(data?.error || "ไม่สามารถบันทึกกำหนดการได้");
       }
-    } catch {}
+    } catch {
+      setMessageTone("danger");
+      setMessage("ไม่สามารถบันทึกกำหนดการได้");
+    }
     setSaving(false);
   }
 
@@ -266,7 +279,7 @@ export default function PosterPresentationPage() {
 
       <TrackFilter value={trackFilter} onChange={setTrackFilter} />
 
-      {message && <Alert tone="success">{message}</Alert>}
+      {message && <Alert tone={messageTone}>{message}</Alert>}
 
       {/* Tabs */}
       <div className="flex gap-0.5 border-b border-border/60">
@@ -291,7 +304,7 @@ export default function PosterPresentationPage() {
          ══════════════════════════════════════════════════════════════ */}
       {activeTab === "schedule" && (
         filteredPresentations.length === 0 ? (
-          <EmptyState icon={<Image className="h-12 w-12" />} title={t("presentations.noPresentations")} body={t("presentations.autoCreated")} />
+          <EmptyState icon={<ImageIcon className="h-12 w-12" />} title={t("presentations.noPresentations")} body={t("presentations.autoCreated")} />
         ) : (
           <Card>
             <CardBody className="p-0">
@@ -352,7 +365,14 @@ export default function PosterPresentationPage() {
                                 size="sm"
                                 variant="ghost"
                                 className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => { setEditingId(p.id); setEditForm({ scheduledAt: p.scheduledAt || "", room: p.room || "", duration: p.duration?.toString() || "" }); }}
+                                onClick={() => {
+                                  setEditingId(p.id);
+                                  setEditForm({
+                                    scheduledAt: toDateTimeLocalValue(p.scheduledAt),
+                                    room: p.room || "",
+                                    duration: p.duration?.toString() || "",
+                                  });
+                                }}
                               >
                                 {p.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
                               </Button>

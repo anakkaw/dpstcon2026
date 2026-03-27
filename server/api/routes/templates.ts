@@ -30,7 +30,11 @@ app.post("/", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
   const fileKey = `templates/${Date.now()}-${parsed.data.fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
   let uploadUrl = "";
-  try { uploadUrl = await getUploadUrl(fileKey, parsed.data.mimeType); } catch {}
+  try {
+    uploadUrl = await getUploadUrl(fileKey, parsed.data.mimeType);
+  } catch {
+    return c.json({ error: "File storage not configured" }, 503);
+  }
 
   const [template] = await db
     .insert(templates)

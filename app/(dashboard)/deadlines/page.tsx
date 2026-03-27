@@ -38,6 +38,13 @@ interface DeadlineSettings {
   notificationDateLabel?: string;
 }
 
+const DEADLINE_FALLBACKS: DeadlineSettings = {
+  submissionDeadline: "2026-06-30",
+  reviewDeadline: "2026-08-15",
+  cameraReadyDeadline: "2026-09-30",
+  notificationDate: "2026-08-31",
+};
+
 const DEADLINE_DEFAULTS = [
   { defaultLabel: "Paper Submission", key: "submissionDeadline" as const, labelKey: "submissionDeadlineLabel" as const, icon: FileText, step: 1 },
   { defaultLabel: "Review Deadline", key: "reviewDeadline" as const, labelKey: "reviewDeadlineLabel" as const, icon: Clock, step: 2 },
@@ -62,22 +69,23 @@ export default function DeadlinesPage() {
   // Template management (admin)
   const [showAddTemplate, setShowAddTemplate] = useState(false);
   const [templateForm, setTemplateForm] = useState({ name: "", description: "" });
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [addingTemplate, setAddingTemplate] = useState(false);
 
   useEffect(() => {
-    fetch("/api/templates")
-      .then((r) => r.json())
-      .catch(() => ({ templates: [] }))
-      .then((tmplData) => {
-        setTemplates(tmplData.templates || []);
-        const fallback: DeadlineSettings = {
-          submissionDeadline: "2026-06-30",
-          reviewDeadline: "2026-08-15",
-          cameraReadyDeadline: "2026-09-30",
-          notificationDate: "2026-08-31",
+    Promise.all([
+      fetch("/api/templates").then((r) => r.json()).catch(() => ({ templates: [] })),
+      fetch("/api/settings/deadlines").then((r) => r.json()).catch(() => ({ deadlines: {} })),
+    ])
+      .then(([tmplData, deadlineData]) => {
+        const mergedSettings = {
+          ...DEADLINE_FALLBACKS,
+          ...(deadlineData.deadlines || {}),
         };
-        setSettings(fallback);
-        setEditForm(fallback);
+
+        setTemplates(tmplData.templates || []);
+        setSettings(mergedSettings);
+        setEditForm(mergedSettings);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -91,16 +99,20 @@ export default function DeadlinesPage() {
         body: JSON.stringify(editForm),
       });
       if (res.ok) {
-        setSettings(editForm);
+        const data = await res.json().catch(() => ({ deadlines: editForm }));
+        const nextSettings = {
+          ...DEADLINE_FALLBACKS,
+          ...(data.deadlines || editForm),
+        };
+        setSettings(nextSettings);
+        setEditForm(nextSettings);
         setEditing(false);
         showMsg("Deadlines saved successfully");
       } else {
         showMsg("Failed to save", "danger");
       }
     } catch {
-      setSettings(editForm);
-      setEditing(false);
-      showMsg("Saved locally (this session only)");
+      showMsg("Failed to save", "danger");
     }
     setSaving(false);
   }
@@ -118,7 +130,7 @@ export default function DeadlinesPage() {
   }
 
   async function createTemplate() {
-    if (!templateForm.name.trim()) return;
+    if (!templateForm.name.trim() || !templateFile) return;
     setAddingTemplate(true);
     try {
       const res = await fetch("/api/templates", {
@@ -127,17 +139,44 @@ export default function DeadlinesPage() {
         body: JSON.stringify({
           name: templateForm.name,
           description: templateForm.description || undefined,
-          fileName: "template.docx",
-          mimeType: "application/octet-stream",
+          fileName: templateFile.name,
+          mimeType: templateFile.type || "application/octet-stream",
         }),
       });
-      if (res.ok) {
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        showMsg(data?.error || "Failed to create template", "danger");
+        setAddingTemplate(false);
+        return;
+      }
+
+      try {
+        const uploadRes = await fetch(data.uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": templateFile.type || "application/octet-stream",
+          },
+          body: templateFile,
+        });
+
+        if (!uploadRes.ok) {
+          await fetch(`/api/templates/${data.template.id}`, { method: "DELETE" }).catch(() => {});
+          throw new Error("Upload failed");
+        }
+
         setTemplateForm({ name: "", description: "" });
+        setTemplateFile(null);
         setShowAddTemplate(false);
         showMsg("Template added");
         loadTemplates();
+      } catch {
+        showMsg("Failed to upload file", "danger");
       }
-    } catch {}
+    } catch {
+      showMsg("Failed to create template", "danger");
+    }
     setAddingTemplate(false);
   }
 
@@ -275,22 +314,32 @@ export default function DeadlinesPage() {
         {/* Admin: Add template form */}
         {isAdmin && showAddTemplate && (
           <div className="px-5 pb-4 border-b border-border">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_auto] gap-3">
+              <div>
                 <Input
                   value={templateForm.name}
                   onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
                   placeholder="Template name (e.g. Full Paper Template)"
                 />
               </div>
-              <div className="flex-1">
+              <div>
                 <Input
                   value={templateForm.description}
                   onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
                   placeholder="Description (optional)"
                 />
               </div>
-              <Button size="sm" onClick={createTemplate} loading={addingTemplate} disabled={!templateForm.name.trim()}>
+              <div>
+                <Input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                  onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+                />
+                {templateFile && (
+                  <p className="mt-1 text-xs text-ink-muted truncate">{templateFile.name}</p>
+                )}
+              </div>
+              <Button size="sm" onClick={createTemplate} loading={addingTemplate} disabled={!templateForm.name.trim() || !templateFile}>
                 <Plus className="h-4 w-4" />{t("common.add")}
               </Button>
             </div>
