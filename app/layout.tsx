@@ -1,6 +1,21 @@
 import type { Metadata } from "next";
+import { Prompt, Sarabun } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
+
+const sarabun = Sarabun({
+  subsets: ["thai", "latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-dpst-body",
+});
+
+const prompt = Prompt({
+  subsets: ["thai", "latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-dpst-heading",
+});
 
 export const metadata: Metadata = {
   title: "DPSTCon — Conference Management System",
@@ -14,7 +29,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th" className="h-full">
+    <html
+      lang="th"
+      className={`${sarabun.variable} ${prompt.variable} h-full`}
+    >
       <body className="min-h-full flex flex-col antialiased">
         <I18nProvider>
           {children}
@@ -24,7 +42,7 @@ export default function RootLayout({
             __html: `
               // Auto-recover from ChunkLoadError by reloading the page
               window.addEventListener('error', function(e) {
-                if (e.message && (e.message.includes('ChunkLoadError') || e.message.includes('Loading chunk') || e.message.includes('Failed to fetch'))) {
+                if (e.message && (e.message.includes('ChunkLoadError') || e.message.includes('Loading chunk'))) {
                   console.warn('[DPSTCon] Chunk load error detected, reloading...');
                   window.location.reload();
                 }

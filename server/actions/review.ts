@@ -5,6 +5,7 @@ import { reviews, reviewAssignments, decisions, submissions, presentationAssignm
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireActiveServerAuthContext } from "@/server/auth-helpers";
+import { isDuplicateReviewRound } from "@/server/access-policies";
 
 export async function submitReview(data: {
   submissionId: string;
@@ -27,6 +28,34 @@ export async function submitReview(data: {
     throw new Error("คุณไม่ได้รับมอบหมายให้รีวิวบทความนี้");
   }
 
+  const assignmentIdToComplete = data.assignmentId || assignment?.id;
+  const existingReview = assignmentIdToComplete
+    ? await db.query.reviews.findFirst({
+        where: and(
+          eq(reviews.submissionId, data.submissionId),
+          eq(reviews.reviewerId, session.user.id),
+          eq(reviews.assignmentId, assignmentIdToComplete)
+        ),
+        columns: { id: true },
+      })
+    : await db.query.reviews.findFirst({
+        where: and(
+          eq(reviews.submissionId, data.submissionId),
+          eq(reviews.reviewerId, session.user.id)
+        ),
+        columns: { id: true },
+      });
+
+  if (
+    isDuplicateReviewRound({
+      hasExistingReview: !!existingReview,
+      assignmentStatus: assignment?.status,
+      isAdminOverride: user.roles.includes("ADMIN") && !assignmentIdToComplete,
+    })
+  ) {
+    throw new Error("มีรีวิวสำหรับรอบการพิจารณานี้แล้ว");
+  }
+
   const [review] = await db
     .insert(reviews)
     .values({
@@ -40,7 +69,6 @@ export async function submitReview(data: {
     })
     .returning();
 
-  const assignmentIdToComplete = data.assignmentId || assignment?.id;
   if (assignmentIdToComplete) {
     await db
       .update(reviewAssignments)
@@ -96,10 +124,24 @@ export async function makeDecision(data: {
     .where(eq(submissions.id, data.submissionId));
 
   if (data.outcome === "ACCEPT" || data.outcome === "CONDITIONAL_ACCEPT") {
-    await db.insert(presentationAssignments).values([
-      { submissionId: data.submissionId, type: "POSTER", status: "PENDING" },
-      { submissionId: data.submissionId, type: "ORAL", status: "PENDING" },
-    ]);
+    const existingPresentations = await db.query.presentationAssignments.findMany({
+      where: eq(presentationAssignments.submissionId, data.submissionId),
+      columns: { type: true },
+    });
+    const existingTypes = new Set(existingPresentations.map((row) => row.type));
+    const missingTypes = ["POSTER", "ORAL"].filter(
+      (type) => !existingTypes.has(type as "POSTER" | "ORAL")
+    );
+
+    if (missingTypes.length > 0) {
+      await db.insert(presentationAssignments).values(
+        missingTypes.map((type) => ({
+          submissionId: data.submissionId,
+          type: type as "POSTER" | "ORAL",
+          status: "PENDING" as const,
+        }))
+      );
+    }
   }
 
   revalidatePath("/submissions");

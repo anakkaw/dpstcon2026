@@ -212,6 +212,7 @@ export const trackMembers = pgTable(
   (table) => [
     index("track_members_track_idx").on(table.trackId),
     index("track_members_user_idx").on(table.userId),
+    uniqueIndex("track_members_track_user_unique").on(table.trackId, table.userId),
   ]
 );
 
@@ -231,6 +232,11 @@ export const userRoles = pgTable(
   (table) => [
     index("user_roles_user_idx").on(table.userId),
     index("user_roles_role_idx").on(table.role),
+    uniqueIndex("user_roles_user_role_track_unique").on(
+      table.userId,
+      table.role,
+      table.trackId
+    ),
   ]
 );
 
@@ -307,6 +313,10 @@ export const reviewAssignments = pgTable(
       table.reviewerId,
       table.status
     ),
+    uniqueIndex("review_assignments_submission_reviewer_unique").on(
+      table.submissionId,
+      table.reviewerId
+    ),
   ]
 );
 
@@ -349,7 +359,10 @@ export const decisions = pgTable(
     conditions: text("conditions"),
     decidedAt: timestamp("decided_at").defaultNow().notNull(),
   },
-  (table) => [index("decisions_submission_idx").on(table.submissionId)]
+  (table) => [
+    index("decisions_submission_idx").on(table.submissionId),
+    uniqueIndex("decisions_submission_unique").on(table.submissionId),
+  ]
 );
 
 export const conflicts = pgTable(
@@ -474,6 +487,10 @@ export const presentationAssignments = pgTable(
   (table) => [
     index("presentation_status_idx").on(table.status),
     index("presentation_submission_idx").on(table.submissionId),
+    uniqueIndex("presentation_submission_type_unique").on(
+      table.submissionId,
+      table.type
+    ),
   ]
 );
 
@@ -488,7 +505,13 @@ export const presentationCommitteeAssignments = pgTable(
       .references(() => user.id, { onDelete: "cascade" })
       .notNull(),
   },
-  (table) => [index("pres_committee_judge_idx").on(table.judgeId)]
+  (table) => [
+    index("pres_committee_judge_idx").on(table.judgeId),
+    uniqueIndex("pres_committee_presentation_judge_unique").on(
+      table.presentationId,
+      table.judgeId
+    ),
+  ]
 );
 
 export const presentationCriteria = pgTable("presentation_criteria", {
@@ -516,6 +539,10 @@ export const presentationEvaluations = pgTable(
   (table) => [
     index("pres_evaluations_presentation_idx").on(table.presentationId),
     index("pres_evaluations_judge_idx").on(table.judgeId),
+    uniqueIndex("pres_evaluations_presentation_judge_unique").on(
+      table.presentationId,
+      table.judgeId
+    ),
   ]
 );
 

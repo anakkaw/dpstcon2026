@@ -38,9 +38,9 @@
   --color-side-divider: rgba(255, 255, 255, 0.08);
 
   /* Typography */
-  --font-sans: "Sarabun", "Noto Sans Thai", "Prompt", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Prompt", "Sarabun", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Sarabun", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-dpst-body), "Noto Sans Thai", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-dpst-heading), var(--font-dpst-body), "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
+  --font-body: var(--font-dpst-body), "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
 
   /* Shadows */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);

@@ -1,10 +1,10 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
-import { submissions, reviews, reviewAssignments, userRoles } from "@/server/db/schema";
-import { eq, count } from "drizzle-orm";
+import { submissions, reviews, reviewAssignments, userRoles, tracks } from "@/server/db/schema";
+import { eq, count, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
-import { hasRole } from "@/lib/permissions";
+import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -51,17 +51,58 @@ app.get("/", async (c) => {
 
   // Admin/Chair/Committee stats — run all queries in parallel
   if (hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "COMMITTEE")) {
+    let scopeTrackIds: string[] | null = null;
+
+    if (!hasRole(currentUser, "ADMIN")) {
+      const chairedTracks = hasRole(currentUser, "PROGRAM_CHAIR")
+        ? await db
+            .select({ id: tracks.id })
+            .from(tracks)
+            .where(eq(tracks.headUserId, currentUser.id))
+        : [];
+
+      const committeeTrackIds = getTrackRoleIds(currentUser, "COMMITTEE");
+      scopeTrackIds = Array.from(
+        new Set([
+          ...chairedTracks.map((track) => track.id),
+          ...committeeTrackIds,
+        ])
+      );
+
+      if (scopeTrackIds.length === 0) {
+        return c.json({
+          roles: currentUser.roles,
+          stats,
+        });
+      }
+    }
+
     const [[subCount], statusBreakdown, [revCount], [reviewerCount]] = await Promise.all([
-      db.select({ total: count() }).from(submissions),
+      db
+        .select({ total: count() })
+        .from(submissions)
+        .where(scopeTrackIds ? inArray(submissions.trackId, scopeTrackIds) : undefined),
       db
         .select({ status: submissions.status, count: count() })
         .from(submissions)
+        .where(scopeTrackIds ? inArray(submissions.trackId, scopeTrackIds) : undefined)
         .groupBy(submissions.status),
-      db.select({ total: count() }).from(reviews),
+      db
+        .select({ total: count() })
+        .from(reviews)
+        .innerJoin(submissions, eq(reviews.submissionId, submissions.id))
+        .where(scopeTrackIds ? inArray(submissions.trackId, scopeTrackIds) : undefined),
       db
         .select({ total: count() })
         .from(userRoles)
-        .where(eq(userRoles.role, "REVIEWER")),
+        .where(
+          scopeTrackIds
+            ? and(
+                eq(userRoles.role, "REVIEWER"),
+                inArray(userRoles.trackId, scopeTrackIds)
+              )
+            : eq(userRoles.role, "REVIEWER")
+        ),
     ]);
 
     stats.admin = {

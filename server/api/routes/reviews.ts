@@ -5,23 +5,88 @@ import {
   reviewAssignments,
   submissions,
   decisions,
+  tracks,
 } from "@/server/db/schema";
-import { eq, and } from "drizzle-orm";
-import { authMiddleware, requireRole } from "../middleware/auth";
+import { eq, and, inArray } from "drizzle-orm";
+import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { hasRole } from "@/lib/permissions";
+import { isDuplicateReviewRound } from "@/server/access-policies";
 
 const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
+async function getChairedTrackIds(userId: string) {
+  const rows = await db
+    .select({ id: tracks.id })
+    .from(tracks)
+    .where(eq(tracks.headUserId, userId));
+
+  return rows.map((row) => row.id);
+}
+
+async function canManageSubmissionById(currentUser: AuthEnv["Variables"]["user"], submissionId: string) {
+  if (hasRole(currentUser, "ADMIN")) {
+    return true;
+  }
+
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, submissionId),
+    columns: { trackId: true },
+  });
+
+  if (!submission?.trackId) {
+    return false;
+  }
+
+  const track = await db.query.tracks.findFirst({
+    where: eq(tracks.id, submission.trackId),
+    columns: { headUserId: true },
+  });
+
+  return track?.headUserId === currentUser.id;
+}
+
 // GET /api/reviews/assignments
 app.get("/assignments", async (c) => {
   const currentUser = c.get("user");
-  const isAdmin = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const isAdmin = hasRole(currentUser, "ADMIN");
 
-  const whereClause = isAdmin ? undefined : eq(reviewAssignments.reviewerId, currentUser.id);
+  let whereClause = undefined;
+  if (!isAdmin) {
+    const assignmentIds = new Set<string>();
+
+    if (hasRole(currentUser, "REVIEWER")) {
+      const ownAssignments = await db
+        .select({ id: reviewAssignments.id })
+        .from(reviewAssignments)
+        .where(eq(reviewAssignments.reviewerId, currentUser.id));
+
+      ownAssignments.forEach((assignment) => assignmentIds.add(assignment.id));
+    }
+
+    const chairedTrackIds = await getChairedTrackIds(currentUser.id);
+    if (chairedTrackIds.length > 0) {
+      const managedAssignments = await db
+        .select({ id: reviewAssignments.id })
+        .from(reviewAssignments)
+        .innerJoin(
+          submissions,
+          eq(reviewAssignments.submissionId, submissions.id)
+        )
+        .where(inArray(submissions.trackId, chairedTrackIds));
+
+      managedAssignments.forEach((assignment) => assignmentIds.add(assignment.id));
+    }
+
+    if (assignmentIds.size === 0) {
+      return c.json({ assignments: [] });
+    }
+
+    whereClause = inArray(reviewAssignments.id, Array.from(assignmentIds));
+  }
 
   const assignments = await db.query.reviewAssignments.findMany({
     where: whereClause,
@@ -57,26 +122,8 @@ app.post("/assignments/manual", async (c) => {
 
   const { submissionId, reviewerId, dueDate } = parsed.data;
 
-  // Permission check: ADMIN, PROGRAM_CHAIR, or track head
-  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
-    const { tracks } = await import("@/server/db/schema");
-    const submission = await db.query.submissions.findFirst({
-      where: eq(submissions.id, submissionId),
-      columns: { trackId: true },
-    });
-
-    if (!submission?.trackId) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
-
-    const track = await db.query.tracks.findFirst({
-      where: eq(tracks.id, submission.trackId),
-      columns: { headUserId: true },
-    });
-
-    if (!track || track.headUserId !== currentUser.id) {
-      return c.json({ error: "Forbidden — คุณไม่ใช่ประธานสาขาของบทความนี้" }, 403);
-    }
+  if (!(await canManageSubmissionById(currentUser, submissionId))) {
+    return c.json({ error: "Forbidden — คุณไม่ใช่ผู้ดูแลบทความนี้" }, 403);
   }
 
   // Check if already assigned
@@ -142,10 +189,24 @@ app.post("/assignments/manual", async (c) => {
   return c.json({ assignment }, 201);
 });
 
-// DELETE /api/reviews/assignments/:id — remove assignment (ADMIN/PROGRAM_CHAIR)
-app.delete("/assignments/:id", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
+// DELETE /api/reviews/assignments/:id — remove assignment (ADMIN/track head only)
+app.delete("/assignments/:id", async (c) => {
+  const currentUser = c.get("user");
   const id = c.req.param("id");
-  const deleted = await db.delete(reviewAssignments).where(eq(reviewAssignments.id, id)).returning();
+  const assignment = await db.query.reviewAssignments.findFirst({
+    where: eq(reviewAssignments.id, id),
+    columns: { id: true, submissionId: true },
+  });
+
+  if (!assignment) return c.json({ error: "Assignment not found" }, 404);
+  if (!(await canManageSubmissionById(currentUser, assignment.submissionId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const deleted = await db
+    .delete(reviewAssignments)
+    .where(eq(reviewAssignments.id, id))
+    .returning();
   if (deleted.length === 0) return c.json({ error: "Assignment not found" }, 404);
   return c.json({ ok: true });
 });
@@ -182,6 +243,34 @@ app.post("/reviews", async (c) => {
     return c.json({ error: "คุณไม่ได้รับมอบหมายให้รีวิวบทความนี้" }, 403);
   }
 
+  const assignmentIdToComplete = data.assignmentId || assignment?.id;
+  const existingReview = assignmentIdToComplete
+    ? await db.query.reviews.findFirst({
+        where: and(
+          eq(reviews.submissionId, data.submissionId),
+          eq(reviews.reviewerId, currentUser.id),
+          eq(reviews.assignmentId, assignmentIdToComplete)
+        ),
+        columns: { id: true },
+      })
+    : await db.query.reviews.findFirst({
+        where: and(
+          eq(reviews.submissionId, data.submissionId),
+          eq(reviews.reviewerId, currentUser.id)
+        ),
+        columns: { id: true },
+      });
+
+  if (
+    isDuplicateReviewRound({
+      hasExistingReview: !!existingReview,
+      assignmentStatus: assignment?.status,
+      isAdminOverride: hasRole(currentUser, "ADMIN") && !assignmentIdToComplete,
+    })
+  ) {
+    return c.json({ error: "มีรีวิวสำหรับรอบการพิจารณานี้แล้ว" }, 409);
+  }
+
   const [review] = await db
     .insert(reviews)
     .values({
@@ -196,7 +285,6 @@ app.post("/reviews", async (c) => {
     .returning();
 
   // Mark assignment as completed
-  const assignmentIdToComplete = data.assignmentId || assignment?.id;
   if (assignmentIdToComplete) {
     await db
       .update(reviewAssignments)
@@ -207,8 +295,8 @@ app.post("/reviews", async (c) => {
   return c.json({ review }, 201);
 });
 
-// POST /api/reviews/decisions — make decision (ADMIN/PROGRAM_CHAIR only)
-app.post("/decisions", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
+// POST /api/reviews/decisions — make decision (ADMIN/track head only)
+app.post("/decisions", async (c) => {
   const currentUser = c.get("user");
   const body = await c.req.json();
 
@@ -225,6 +313,10 @@ app.post("/decisions", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
   }
 
   const data = parsed.data;
+
+  if (!(await canManageSubmissionById(currentUser, data.submissionId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
 
   // Check if decision already exists for this submission
   const existingDecision = await db.query.decisions.findFirst({
@@ -262,10 +354,24 @@ app.post("/decisions", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
   // Auto-create presentations when accepted
   if (data.outcome === "ACCEPT" || data.outcome === "CONDITIONAL_ACCEPT") {
     const { presentationAssignments } = await import("@/server/db/schema");
-    await db.insert(presentationAssignments).values([
-      { submissionId: data.submissionId, type: "POSTER", status: "PENDING" },
-      { submissionId: data.submissionId, type: "ORAL", status: "PENDING" },
-    ]);
+    const existingPresentations = await db.query.presentationAssignments.findMany({
+      where: eq(presentationAssignments.submissionId, data.submissionId),
+      columns: { type: true },
+    });
+    const existingTypes = new Set(existingPresentations.map((row) => row.type));
+    const missingTypes = ["POSTER", "ORAL"].filter(
+      (type) => !existingTypes.has(type as "POSTER" | "ORAL")
+    );
+
+    if (missingTypes.length > 0) {
+      await db.insert(presentationAssignments).values(
+        missingTypes.map((type) => ({
+          submissionId: data.submissionId,
+          type: type as "POSTER" | "ORAL",
+          status: "PENDING" as const,
+        }))
+      );
+    }
   }
 
   // Send decision email

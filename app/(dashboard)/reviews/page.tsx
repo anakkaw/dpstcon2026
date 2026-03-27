@@ -1,16 +1,54 @@
 import { redirect } from "next/navigation";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 import { hasRole } from "@/lib/permissions";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
-import { reviewAssignments, user, userRoles } from "@/server/db/schema";
+import { reviewAssignments, submissions, tracks, user, userRoles } from "@/server/db/schema";
 import { ReviewsPageClient, type AssignmentData, type ReviewerUser } from "./reviews-page-client";
 
 async function loadInitialAssignments(
   currentUser: NonNullable<Awaited<ReturnType<typeof getServerAuthContext>>>["user"]
 ): Promise<AssignmentData[]> {
-  const isAdmin = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
-  const whereClause = isAdmin ? undefined : eq(reviewAssignments.reviewerId, currentUser.id);
+  const isAdmin = hasRole(currentUser, "ADMIN");
+
+  let whereClause = undefined;
+  if (!isAdmin) {
+    const assignmentIds = new Set<string>();
+
+    if (hasRole(currentUser, "REVIEWER")) {
+      const ownAssignments = await db
+        .select({ id: reviewAssignments.id })
+        .from(reviewAssignments)
+        .where(eq(reviewAssignments.reviewerId, currentUser.id));
+
+      ownAssignments.forEach((assignment) => assignmentIds.add(assignment.id));
+    }
+
+    const chairedTracks = await db
+      .select({ id: tracks.id })
+      .from(tracks)
+      .where(eq(tracks.headUserId, currentUser.id));
+    const chairedTrackIds = chairedTracks.map((track) => track.id);
+
+    if (chairedTrackIds.length > 0) {
+      const managedAssignments = await db
+        .select({ id: reviewAssignments.id })
+        .from(reviewAssignments)
+        .innerJoin(
+          submissions,
+          eq(reviewAssignments.submissionId, submissions.id)
+        )
+        .where(inArray(submissions.trackId, chairedTrackIds));
+
+      managedAssignments.forEach((assignment) => assignmentIds.add(assignment.id));
+    }
+
+    if (assignmentIds.size === 0) {
+      return [];
+    }
+
+    whereClause = inArray(reviewAssignments.id, Array.from(assignmentIds));
+  }
 
   const assignments = await db.query.reviewAssignments.findMany({
     where: whereClause,
@@ -40,10 +78,34 @@ async function loadInitialReviewerUsers(
     return [];
   }
 
-  const reviewerRoleRows = await db
-    .select({ userId: userRoles.userId })
-    .from(userRoles)
-    .where(eq(userRoles.role, "REVIEWER"));
+  let reviewerRoleRows: { userId: string }[] = [];
+
+  if (hasRole(currentUser, "ADMIN")) {
+    reviewerRoleRows = await db
+      .select({ userId: userRoles.userId })
+      .from(userRoles)
+      .where(eq(userRoles.role, "REVIEWER"));
+  } else {
+    const chairedTracks = await db
+      .select({ id: tracks.id })
+      .from(tracks)
+      .where(eq(tracks.headUserId, currentUser.id));
+    const chairedTrackIds = chairedTracks.map((track) => track.id);
+
+    if (chairedTrackIds.length === 0) {
+      return [];
+    }
+
+    reviewerRoleRows = await db
+      .select({ userId: userRoles.userId })
+      .from(userRoles)
+      .where(
+        and(
+          eq(userRoles.role, "REVIEWER"),
+          inArray(userRoles.trackId, chairedTrackIds)
+        )
+      );
+  }
 
   const reviewerIds = Array.from(new Set(reviewerRoleRows.map((row) => row.userId)));
   if (reviewerIds.length === 0) {

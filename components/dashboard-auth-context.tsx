@@ -8,6 +8,7 @@ export type DashboardAuthUser = {
   email: string;
   role: string;
   roles: string[];
+  roleAssignments?: { role: string; trackId: string | null }[];
   prefixTh?: string | null;
   firstNameTh?: string | null;
   lastNameTh?: string | null;

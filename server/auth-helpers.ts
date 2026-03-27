@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "./auth";
 import { db } from "./db";
 import { user as userTable, userRoles } from "./db/schema";
+import type { RoleAssignment } from "@/lib/permissions";
 
 export type ServerAuthUser = {
   id: string;
@@ -11,6 +12,7 @@ export type ServerAuthUser = {
   email: string;
   role: string;
   roles: string[];
+  roleAssignments: RoleAssignment[];
   isActive: boolean;
 };
 
@@ -24,12 +26,17 @@ export const getServerAuthContext = cache(async function getServerAuthContext() 
       columns: { isActive: true },
     }),
     db
-      .select({ role: userRoles.role })
+      .select({ role: userRoles.role, trackId: userRoles.trackId })
       .from(userRoles)
       .where(eq(userRoles.userId, session.user.id)),
   ]);
 
   if (!userRecord) return null;
+
+  const roleAssignments = roleRows.map((row) => ({
+    role: row.role,
+    trackId: row.trackId,
+  }));
 
   return {
     session,
@@ -40,7 +47,11 @@ export const getServerAuthContext = cache(async function getServerAuthContext() 
         email: string;
         role: string;
       }),
-      roles: roleRows.length > 0 ? roleRows.map((row) => row.role) : [session.user.role as string],
+      roles:
+        roleAssignments.length > 0
+          ? Array.from(new Set(roleAssignments.map((row) => row.role)))
+          : [session.user.role as string],
+      roleAssignments,
       isActive: userRecord.isActive,
     } satisfies ServerAuthUser,
   };

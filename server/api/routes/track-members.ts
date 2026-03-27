@@ -85,7 +85,11 @@ app.post("/:trackId", async (c) => {
 
   // Add role to user_roles table (instead of overwriting global role)
   const existingRole = await db.query.userRoles.findFirst({
-    where: and(eq(userRoles.userId, userId), eq(userRoles.role, role)),
+    where: and(
+      eq(userRoles.userId, userId),
+      eq(userRoles.role, role),
+      eq(userRoles.trackId, trackId)
+    ),
   });
 
   if (!existingRole) {
@@ -133,6 +137,35 @@ app.delete("/:trackId/:memberId", async (c) => {
   if (!member) return c.json({ error: "Not found" }, 404);
 
   await db.delete(trackMembers).where(eq(trackMembers.id, memberId));
+
+  await db
+    .delete(userRoles)
+    .where(
+      and(
+        eq(userRoles.userId, member.userId),
+        eq(userRoles.role, member.role),
+        eq(userRoles.trackId, trackId)
+      )
+    );
+
+  const remainingRoles = await db
+    .select({ role: userRoles.role })
+    .from(userRoles)
+    .where(eq(userRoles.userId, member.userId));
+
+  await db
+    .update(user)
+    .set({
+      role: getPrimaryRole(remainingRoles.map((row) => row.role)) as
+        | "ADMIN"
+        | "PROGRAM_CHAIR"
+        | "REVIEWER"
+        | "COMMITTEE"
+        | "AUTHOR",
+      updatedAt: new Date(),
+    })
+    .where(eq(user.id, member.userId));
+
   return c.json({ ok: true });
 });
 

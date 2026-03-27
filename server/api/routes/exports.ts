@@ -1,15 +1,37 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
-import { authMiddleware, requireRole } from "../middleware/auth";
+import { authMiddleware } from "../middleware/auth";
+import type { AuthEnv } from "../middleware/auth";
+import { hasRole } from "@/lib/permissions";
+import { tracks, submissions } from "@/server/db/schema";
+import { eq, inArray } from "drizzle-orm";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
 
-app.get("/proceedings", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
+app.get("/proceedings", async (c) => {
+  const currentUser = c.get("user");
   const format = c.req.query("format") || "json";
 
+  let whereClause = undefined;
+
+  if (!hasRole(currentUser, "ADMIN")) {
+    const chairedTracks = await db
+      .select({ id: tracks.id })
+      .from(tracks)
+      .where(eq(tracks.headUserId, currentUser.id));
+    const chairedTrackIds = chairedTracks.map((track) => track.id);
+
+    if (chairedTrackIds.length === 0) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    whereClause = inArray(submissions.trackId, chairedTrackIds);
+  }
+
   const allSubmissions = await db.query.submissions.findMany({
+    where: whereClause,
     with: {
       author: { columns: { name: true, email: true, affiliation: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
       track: { columns: { name: true } },

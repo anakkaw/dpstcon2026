@@ -114,6 +114,7 @@ export async function submitPaper(id: string) {
       subject: emailContent.subject,
       html: emailContent.html,
       text: emailContent.text,
+      throwOnFailure: true,
     });
     emailSent = true;
   } catch (err) {

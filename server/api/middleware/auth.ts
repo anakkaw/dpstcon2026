@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { db } from "@/server/db";
 import { user as userTable, userRoles } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
+import type { RoleAssignment } from "@/lib/permissions";
 
 export type SessionUser = {
   id: string;
@@ -11,6 +12,7 @@ export type SessionUser = {
   email: string;
   role: string; // primary role (backward compat with Better Auth)
   roles: string[]; // all roles from user_roles table
+  roleAssignments: RoleAssignment[];
 };
 
 export type AuthEnv = {
@@ -36,7 +38,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
       columns: { isActive: true },
     }),
     db
-      .select({ role: userRoles.role })
+      .select({ role: userRoles.role, trackId: userRoles.trackId })
       .from(userRoles)
       .where(eq(userRoles.userId, session.user.id)),
   ]);
@@ -45,11 +47,16 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     throw new HTTPException(403, { message: "Account not activated" });
   }
 
-  const roles = roleRows.map((r) => r.role);
+  const roleAssignments = roleRows.map((row) => ({
+    role: row.role,
+    trackId: row.trackId,
+  }));
+  const roles = Array.from(new Set(roleAssignments.map((r) => r.role)));
 
   c.set("user", {
     ...(session.user as { id: string; name: string; email: string; role: string }),
     roles: roles.length > 0 ? roles : [session.user.role as string],
+    roleAssignments,
   });
   c.set("session", { id: session.session.id });
   await next();

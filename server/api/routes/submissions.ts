@@ -8,6 +8,11 @@ import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getUploadUrl, getDownloadUrl, generateFileKey } from "@/server/r2";
 import { hasRole } from "@/lib/permissions";
+import {
+  canRevealReviewerIdentity,
+  getAllowedDiscussionVisibilities,
+  type SubmissionAccessFlags,
+} from "@/server/access-policies";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -123,6 +128,44 @@ async function canAccessSubmission(
   return false;
 }
 
+async function getSubmissionAccessFlags(
+  currentUser: AuthEnv["Variables"]["user"],
+  submission: { id: string; authorId: string; trackId: string | null }
+): Promise<SubmissionAccessFlags> {
+  const isAdmin = hasRole(currentUser, "ADMIN");
+  const isAuthor = submission.authorId === currentUser.id;
+
+  let isAssignedReviewer = false;
+  if (hasRole(currentUser, "REVIEWER")) {
+    const assignment = await db.query.reviewAssignments.findFirst({
+      where: and(
+        eq(reviewAssignments.submissionId, submission.id),
+        eq(reviewAssignments.reviewerId, currentUser.id)
+      ),
+      columns: { id: true },
+    });
+
+    isAssignedReviewer = !!assignment;
+  }
+
+  let isTrackHead = false;
+  if (submission.trackId) {
+    const track = await db.query.tracks.findFirst({
+      where: eq(tracks.id, submission.trackId),
+      columns: { headUserId: true },
+    });
+
+    isTrackHead = track?.headUserId === currentUser.id;
+  }
+
+  return {
+    isAdmin,
+    isTrackHead,
+    isAssignedReviewer,
+    isAuthor,
+  };
+}
+
 app.use("/*", authMiddleware);
 
 // GET /api/submissions/tracks — list all tracks (for submission form)
@@ -227,6 +270,8 @@ app.get("/:id", async (c) => {
 
   if (!submission) return c.json({ error: "Not found" }, 404);
 
+  const access = await getSubmissionAccessFlags(currentUser, submission);
+
   if (!(await canAccessSubmission(currentUser, submission))) {
     return c.json({ error: "Forbidden" }, 403);
   }
@@ -235,11 +280,10 @@ app.get("/:id", async (c) => {
   let filteredReviews = submission.reviews;
 
   // If user is ONLY an author (not also reviewer/chair/admin for this submission)
-  const isOnlyAuthor =
-    submission.authorId === currentUser.id &&
-    !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "REVIEWER");
+  const shouldHideReviewerIdentity =
+    access.isAuthor && !canRevealReviewerIdentity(access);
 
-  if (isOnlyAuthor) {
+  if (shouldHideReviewerIdentity) {
     filteredDiscussions = submission.discussions.filter(
       (d) => d.visibility === "AUTHOR_VISIBLE"
     );
@@ -397,6 +441,7 @@ app.post("/:id/submit", async (c) => {
     subject: emailContent.subject,
     html: emailContent.html,
     text: emailContent.text,
+    throwOnFailure: true,
   });
 
   return c.json({ submission: updated });
@@ -765,6 +810,23 @@ app.post("/:id/discussion", async (c) => {
   });
   const parsed = discussionSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, id),
+    columns: { id: true, authorId: true, trackId: true },
+  });
+
+  if (!submission) return c.json({ error: "Not found" }, 404);
+
+  const access = await getSubmissionAccessFlags(currentUser, submission);
+  if (!Object.values(access).some(Boolean)) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const allowedVisibilities = getAllowedDiscussionVisibilities(access);
+  if (!allowedVisibilities.has(parsed.data.visibility)) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
 
   const { discussions } = await import("@/server/db/schema");
 

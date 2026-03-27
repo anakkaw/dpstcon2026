@@ -51,6 +51,7 @@ export async function queueEmail(opts: {
   subject: string;
   html: string;
   text: string;
+  throwOnFailure?: boolean;
 }) {
   // Save to outgoing_emails table
   const [record] = await db
@@ -86,6 +87,10 @@ export async function queueEmail(opts: {
       subject: opts.subject,
       error: err instanceof Error ? err.message : "Unknown error",
     });
+
+    if (opts.throwOnFailure) {
+      throw err;
+    }
   }
 
   return record;

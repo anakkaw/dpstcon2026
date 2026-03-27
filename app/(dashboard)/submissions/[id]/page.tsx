@@ -10,11 +10,13 @@ import {
   reviewAssignments,
   settings,
   tracks,
+  userRoles,
 } from "@/server/db/schema";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasRole } from "@/lib/permissions";
+import { canRevealReviewerIdentity } from "@/server/access-policies";
 
 export default async function SubmissionDetailPage({
   params,
@@ -26,8 +28,9 @@ export default async function SubmissionDetailPage({
   if (!authContext?.user.isActive) redirect("/login");
 
   const currentUser = authContext.user;
-  const canManageSubmission = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
-  const isAuthorOnly = currentUser.role === "AUTHOR";
+  let isAssignedReviewer = false;
+  let isTrackHead = false;
+  let canManageSubmission = hasRole(currentUser, "ADMIN");
 
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, id),
@@ -60,6 +63,7 @@ export default async function SubmissionDetailPage({
       ),
       columns: { id: true },
     });
+    isAssignedReviewer = !!assignment;
     hasAccess = !!assignment;
   }
 
@@ -68,7 +72,9 @@ export default async function SubmissionDetailPage({
       where: eq(tracks.id, submission.trackId),
       columns: { headUserId: true },
     });
-    hasAccess = track?.headUserId === currentUser.id;
+    isTrackHead = track?.headUserId === currentUser.id;
+    hasAccess = isTrackHead;
+    canManageSubmission = canManageSubmission || isTrackHead;
   }
 
   if (!hasAccess) {
@@ -78,7 +84,15 @@ export default async function SubmissionDetailPage({
   let filteredDiscussions = submission.discussions;
   let filteredReviews = submission.reviews;
 
-  if (isAuthorOnly) {
+  if (
+    submission.authorId === currentUser.id &&
+    !canRevealReviewerIdentity({
+      isAdmin: hasRole(currentUser, "ADMIN"),
+      isTrackHead,
+      isAssignedReviewer,
+      isAuthor: true,
+    })
+  ) {
     filteredDiscussions = submission.discussions.filter((d) => d.visibility === "AUTHOR_VISIBLE");
     filteredReviews = submission.reviews.map((r) => ({
       ...r,
@@ -91,7 +105,68 @@ export default async function SubmissionDetailPage({
   const [reviewers, files, assignmentRows, decision, presRows, criteria, deadlineRows] = await Promise.all([
     // Reviewers list (admin only)
     canManageSubmission
-      ? db.select({ id: user.id, name: user.name, email: user.email, prefixTh: user.prefixTh, firstNameTh: user.firstNameTh, lastNameTh: user.lastNameTh, prefixEn: user.prefixEn, firstNameEn: user.firstNameEn, lastNameEn: user.lastNameEn }).from(user).where(eq(user.role, "REVIEWER"))
+      ? (async () => {
+          if (hasRole(currentUser, "ADMIN")) {
+            const reviewerRoleRows = await db
+              .select({ userId: userRoles.userId })
+              .from(userRoles)
+              .where(eq(userRoles.role, "REVIEWER"));
+
+            const reviewerIds = Array.from(
+              new Set(reviewerRoleRows.map((row) => row.userId))
+            );
+
+            if (reviewerIds.length === 0) return [];
+
+            return db
+              .select({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                prefixTh: user.prefixTh,
+                firstNameTh: user.firstNameTh,
+                lastNameTh: user.lastNameTh,
+                prefixEn: user.prefixEn,
+                firstNameEn: user.firstNameEn,
+                lastNameEn: user.lastNameEn,
+              })
+              .from(user)
+              .where(inArray(user.id, reviewerIds));
+          }
+
+          if (!submission.trackId) return [];
+
+          const reviewerRoleRows = await db
+            .select({ userId: userRoles.userId })
+            .from(userRoles)
+            .where(
+              and(
+                eq(userRoles.role, "REVIEWER"),
+                eq(userRoles.trackId, submission.trackId)
+              )
+            );
+
+          const reviewerIds = Array.from(
+            new Set(reviewerRoleRows.map((row) => row.userId))
+          );
+
+          if (reviewerIds.length === 0) return [];
+
+          return db
+            .select({
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              prefixTh: user.prefixTh,
+              firstNameTh: user.firstNameTh,
+              lastNameTh: user.lastNameTh,
+              prefixEn: user.prefixEn,
+              firstNameEn: user.firstNameEn,
+              lastNameEn: user.lastNameEn,
+            })
+            .from(user)
+            .where(inArray(user.id, reviewerIds));
+        })()
       : Promise.resolve([]),
     // Uploaded files
     db.select().from(storedFiles).where(eq(storedFiles.submissionId, id)),
