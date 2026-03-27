@@ -118,6 +118,7 @@ export function SubmissionDetail({
   const [assigning, setAssigning] = useState(false);
   const [decisionOutcome, setDecisionOutcome] = useState("");
   const [decisionComments, setDecisionComments] = useState("");
+  const [decisionConditions, setDecisionConditions] = useState("");
   const [deciding, setDeciding] = useState(false);
   const [discussionMsg, setDiscussionMsg] = useState("");
   const [posting, setPosting] = useState(false);
@@ -188,7 +189,7 @@ export function SubmissionDetail({
       const res = await fetch("/api/reviews/decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId: submission.id, outcome: decisionOutcome, comments: decisionComments }),
+        body: JSON.stringify({ submissionId: submission.id, outcome: decisionOutcome, comments: decisionComments, conditions: decisionOutcome === "CONDITIONAL_ACCEPT" ? decisionConditions : undefined }),
       });
       if (res.ok) {
         setMessage("ตัดสินบทความสำเร็จ");
@@ -237,7 +238,6 @@ export function SubmissionDetail({
         </div>
         <div className="flex gap-2 shrink-0">
           {canSubmit && <Button onClick={handleSubmit} loading={loading} size="sm"><Send className="h-3.5 w-3.5" />ส่งบทความ</Button>}
-          {canResubmit && <Button onClick={handleResubmit} loading={loading} size="sm"><RotateCcw className="h-3.5 w-3.5" />ส่งฉบับแก้ไข</Button>}
           {canWithdraw && <Button onClick={handleWithdraw} variant="danger" loading={loading} size="sm">ถอนบทความ</Button>}
         </div>
       </div>
@@ -410,7 +410,7 @@ export function SubmissionDetail({
             />
           )}
 
-          {isOwner && ["DRAFT", "REVISION_REQUIRED"].includes(submission.status) && (
+          {isOwner && submission.status === "DRAFT" && (
             <FileUpload
               submissionId={submission.id}
               kind="SUPPLEMENTARY"
@@ -481,6 +481,49 @@ export function SubmissionDetail({
         </Card>
       )}
 
+      {/* Resubmit Section — shown when revision required */}
+      {canResubmit && (
+        <Card accent="warning">
+          <CardHeader>
+            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+              <RotateCcw className="h-4 w-4" />
+              ส่งบทความแก้ไข
+            </h3>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            <Alert tone="warning">
+              กรุณาแนบไฟล์ต้นฉบับบทความที่แก้ไขแล้วก่อนกดส่ง
+            </Alert>
+            <FileUpload
+              submissionId={submission.id}
+              kind="MANUSCRIPT"
+              label="อัปโหลดต้นฉบับบทความฉบับแก้ไข *"
+              hint="ไฟล์บทความที่แก้ไขตามเงื่อนไขแล้ว"
+              accept=".pdf,.doc,.docx"
+              onUploadComplete={() => router.refresh()}
+            />
+            <FileUpload
+              submissionId={submission.id}
+              kind="SUPPLEMENTARY"
+              label="อัปโหลดเอกสารเสริม (ไม่บังคับ)"
+              hint="เช่น ข้อมูลเพิ่มเติม ซอร์สโค้ด ฯลฯ"
+              accept=".pdf,.zip,.rar,.doc,.docx"
+              onUploadComplete={() => router.refresh()}
+            />
+          </CardBody>
+          <CardFooter className="flex justify-end">
+            <Button
+              onClick={handleResubmit}
+              loading={loading}
+              disabled={!files.some((f) => f.kind === "MANUSCRIPT")}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              ส่งฉบับแก้ไข
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+
       {/* Presentation Info (author view) */}
       {presentations && presentations.length > 0 && criteria && (
         <PresentationCard presentations={presentations} criteria={criteria} />
@@ -542,9 +585,20 @@ export function SubmissionDetail({
                 rows={3}
               />
             </Field>
+            {decisionOutcome === "CONDITIONAL_ACCEPT" && (
+              <Field label="เงื่อนไขการแก้ไข" htmlFor="decisionConditions" required>
+                <Textarea
+                  id="decisionConditions"
+                  value={decisionConditions}
+                  onChange={(e) => setDecisionConditions(e.target.value)}
+                  placeholder="ระบุเงื่อนไขที่ author ต้องแก้ไขก่อนตอบรับ..."
+                  rows={4}
+                />
+              </Field>
+            )}
           </CardBody>
           <CardFooter className="flex justify-end">
-            <Button onClick={handleDecision} loading={deciding} disabled={!decisionOutcome}>
+            <Button onClick={handleDecision} loading={deciding} disabled={!decisionOutcome || (decisionOutcome === "CONDITIONAL_ACCEPT" && !decisionConditions.trim())}>
               ยืนยันการตัดสิน
             </Button>
           </CardFooter>

@@ -135,6 +135,7 @@ app.post("/assignments/manual", async (c) => {
       to: reviewer.email,
       subject: emailContent.subject,
       html: emailContent.html,
+      text: emailContent.text,
     });
   }
 
@@ -281,12 +282,14 @@ app.post("/decisions", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
       paperTitle: submission.title,
       decision: data.outcome,
       comments: data.comments,
+      conditions: data.conditions,
       submissionUrl: `${appUrl}/submissions/${data.submissionId}`,
     });
     await queueEmail({
       to: submission.author.email,
       subject: emailContent.subject,
       html: emailContent.html,
+      text: emailContent.text,
     });
   }
 

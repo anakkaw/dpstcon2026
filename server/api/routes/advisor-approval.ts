@@ -185,6 +185,7 @@ app.post("/:token/respond", async (c) => {
         to: author.email,
         subject: emailContent.subject,
         html: emailContent.html,
+        text: emailContent.text,
       });
     }
   } catch (err) {

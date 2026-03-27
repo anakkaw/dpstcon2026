@@ -113,6 +113,7 @@ export async function submitPaper(id: string) {
       to: submission.advisorEmail,
       subject: emailContent.subject,
       html: emailContent.html,
+      text: emailContent.text,
     });
     emailSent = true;
   } catch (err) {

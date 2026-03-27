@@ -83,7 +83,7 @@ export async function makeDecision(data: {
   const statusMap: Record<string, string> = {
     ACCEPT: "CAMERA_READY_PENDING",
     REJECT: "REJECTED",
-    CONDITIONAL_ACCEPT: "ACCEPTED",
+    CONDITIONAL_ACCEPT: "REVISION_REQUIRED",
     DESK_REJECT: "DESK_REJECTED",
   };
 

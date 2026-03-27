@@ -13,8 +13,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { to, subject, html } = await req.json();
-    await queueEmail({ to, subject, html });
+    const { to, subject, html, text } = await req.json();
+    await queueEmail({ to, subject, html, text: text ?? html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() });
     return Response.json({ ok: true });
   } catch (error) {
     console.error("[send-email] Error:", error);

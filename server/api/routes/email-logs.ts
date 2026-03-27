@@ -38,6 +38,7 @@ app.post("/test", requireRole("ADMIN"), async (c) => {
           </p>
         </div>
       `,
+      text: `DPSTCon — ทดสอบอีเมล\n\nอีเมลนี้ส่งจากระบบ DPSTCon เพื่อทดสอบว่าการส่งอีเมลทำงานปกติ\nระบบส่งอีเมลทำงานปกติ\n\nส่งเมื่อ: ${new Date().toISOString()}`,
     });
     return c.json({ success: true, result });
   } catch (err) {
@@ -60,7 +61,7 @@ app.post("/:id/retry", requireRole("ADMIN"), async (c) => {
   if (!record) return c.json({ error: "Not found" }, 404);
 
   try {
-    await sendEmail({ to: record.to, subject: record.subject, html: record.html });
+    await sendEmail({ to: record.to, subject: record.subject, html: record.html, text: record.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() });
     await db
       .update(outgoingEmails)
       .set({ status: "SENT", sentAt: new Date(), error: null })

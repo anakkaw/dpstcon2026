@@ -259,7 +259,7 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
         activationUrl,
         expiresInHours: INVITE_EXPIRY_HOURS,
       });
-      emailsToSend.push({ to: u.email, subject: emailContent.subject, html: emailContent.html });
+      emailsToSend.push({ to: u.email, subject: emailContent.subject, html: emailContent.html, text: emailContent.text });
 
       results.push({ email: u.email, status: "invited" });
     } catch {
@@ -325,6 +325,7 @@ app.post("/bulk-remind", requireRole("ADMIN"), async (c) => {
         to: u.email,
         subject: emailContent.subject,
         html: emailContent.html,
+        text: emailContent.text,
       });
       sent++;
     } catch {
@@ -545,6 +546,7 @@ app.post("/", requireRole("ADMIN"), async (c) => {
     to: parsed.data.email,
     subject: emailContent.subject,
     html: emailContent.html,
+    text: emailContent.text,
   });
 
   return c.json(
@@ -588,6 +590,7 @@ app.post("/:id/resend-invite", requireRole("ADMIN"), async (c) => {
     to: found.email,
     subject: emailContent.subject,
     html: emailContent.html,
+    text: emailContent.text,
   });
 
   return c.json({ ok: true, message: "ส่งคำเชิญใหม่เรียบร้อยแล้ว" });
