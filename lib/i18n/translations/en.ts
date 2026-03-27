@@ -160,6 +160,10 @@ const en: Record<TranslationKey, string> = {
   "submissions.new.keywordsEn": "Keywords (English)",
   "submissions.new.keywordsThPlaceholder": "e.g. การเรียนรู้ของเครื่อง, การเรียนรู้เชิงลึก",
   "submissions.new.keywordsEnPlaceholder": "e.g. machine learning, deep learning, NLP",
+  "submissions.new.attachManuscript": "Attach Manuscript",
+  "submissions.new.attachManuscriptDesc": "Please attach your manuscript file (PDF, DOC, DOCX) before saving the draft.",
+  "submissions.new.requiredFile": "Please attach a manuscript file before saving the draft.",
+  "submissions.new.continueToDetail": "Go to Submission",
 
   // ─── Reviews ──────────────────────────────────────────
   "reviews.myReviewTasks": "My Review Tasks",

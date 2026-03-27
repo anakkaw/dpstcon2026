@@ -12,6 +12,7 @@ import { Card, CardBody, CardHeader, CardFooter } from "@/components/ui/card";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Alert } from "@/components/ui/alert";
+import { FileUpload } from "@/components/ui/file-upload";
 import { useI18n } from "@/lib/i18n";
 
 interface Track {
@@ -26,6 +27,10 @@ export default function NewSubmissionPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [tracks, setTracks] = useState<Track[]>([]);
+
+  // After form submit: hold the created submission id and wait for file upload
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [fileUploaded, setFileUploaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/submissions/tracks")
@@ -62,12 +67,25 @@ export default function NewSubmissionPage() {
     try {
       const result = await createSubmission(formData);
       if (result?.id) {
-        router.push(`/submissions/${result.id}`);
+        // Transition to file upload step on the same page
+        setSubmissionId(result.id);
+        setError("");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("login.genericError"));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // After file uploaded, navigate to submission detail
+  function handleUploadComplete() {
+    setFileUploaded(true);
+  }
+
+  function handleContinue() {
+    if (submissionId) {
+      router.push(`/submissions/${submissionId}`);
     }
   }
 
@@ -87,155 +105,188 @@ export default function NewSubmissionPage() {
 
       {error && <Alert tone="danger">{error}</Alert>}
 
-      <form action={handleSubmit}>
-        <Card className="mb-4">
-          <CardHeader>
-            <h3 className="text-sm font-semibold text-ink">{t("submissions.new.title")}</h3>
-          </CardHeader>
-          <CardBody className="space-y-4">
-            <Field
-              label={t("submissions.new.track")}
-              htmlFor="trackId"
-              required
-              hint={t("submissions.new.trackDesc")}
+      {/* ── Step 1: Form (hidden after draft is created) ── */}
+      {!submissionId && (
+        <form action={handleSubmit}>
+          <Card className="mb-4">
+            <CardHeader>
+              <h3 className="text-sm font-semibold text-ink">{t("submissions.new.title")}</h3>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <Field
+                label={t("submissions.new.track")}
+                htmlFor="trackId"
+                required
+                hint={t("submissions.new.trackDesc")}
+              >
+                <Select id="trackId" name="trackId" required>
+                  <option value="">{t("submissions.new.trackPlaceholder")}</option>
+                  {tracks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                      {t.description ? ` — ${t.description}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              {/* Paper Title — Bilingual */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label={t("submissions.new.paperTitleTh")} htmlFor="title" required>
+                  <Input
+                    id="title"
+                    name="title"
+                    placeholder={t("submissions.new.paperTitleThPlaceholder")}
+                    required
+                  />
+                </Field>
+                <Field label={t("submissions.new.paperTitleEn")} htmlFor="titleEn" required>
+                  <Input
+                    id="titleEn"
+                    name="titleEn"
+                    placeholder={t("submissions.new.paperTitleEnPlaceholder")}
+                    required
+                  />
+                </Field>
+              </div>
+
+              {/* Abstract — Bilingual */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field
+                  label={t("submissions.new.abstractTh")}
+                  htmlFor="abstract"
+                  required
+                  hint={t("submissions.new.abstractDesc")}
+                >
+                  <Textarea
+                    id="abstract"
+                    name="abstract"
+                    placeholder={t("submissions.new.abstractThPlaceholder")}
+                    rows={6}
+                    required
+                  />
+                </Field>
+                <Field
+                  label={t("submissions.new.abstractEn")}
+                  htmlFor="abstractEn"
+                  required
+                >
+                  <Textarea
+                    id="abstractEn"
+                    name="abstractEn"
+                    placeholder={t("submissions.new.abstractEnPlaceholder")}
+                    rows={6}
+                    required
+                  />
+                </Field>
+              </div>
+
+              {/* Keywords — Bilingual */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field
+                  label={t("submissions.new.keywordsTh")}
+                  htmlFor="keywords"
+                  hint={t("submissions.new.keywordsDesc")}
+                >
+                  <Input
+                    id="keywords"
+                    name="keywords"
+                    placeholder={t("submissions.new.keywordsThPlaceholder")}
+                  />
+                </Field>
+                <Field
+                  label={t("submissions.new.keywordsEn")}
+                  htmlFor="keywordsEn"
+                >
+                  <Input
+                    id="keywordsEn"
+                    name="keywordsEn"
+                    placeholder={t("submissions.new.keywordsEnPlaceholder")}
+                  />
+                </Field>
+              </div>
+            </CardBody>
+          </Card>
+
+          <Card className="mb-4">
+            <CardHeader>
+              <h3 className="text-sm font-semibold text-ink">{t("submissions.new.advisor")}</h3>
+              <p className="text-xs text-ink-muted mt-0.5">
+                {t("submissions.new.advisorDesc")}
+              </p>
+            </CardHeader>
+            <CardBody>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label={t("submissions.new.advisorName")} htmlFor="advisorName" required>
+                  <Input
+                    id="advisorName"
+                    name="advisorName"
+                    placeholder={t("submissions.new.advisorNamePlaceholder")}
+                    required
+                  />
+                </Field>
+                <Field
+                  label={t("submissions.new.advisorEmail")}
+                  htmlFor="advisorEmail"
+                  required
+                  hint={t("submissions.new.advisorEmailDesc")}
+                >
+                  <Input
+                    id="advisorEmail"
+                    name="advisorEmail"
+                    type="email"
+                    placeholder={t("submissions.new.advisorEmailPlaceholder")}
+                    required
+                  />
+                </Field>
+              </div>
+            </CardBody>
+          </Card>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => router.back()}
             >
-              <Select id="trackId" name="trackId" required>
-                <option value="">{t("submissions.new.trackPlaceholder")}</option>
-                {tracks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                    {t.description ? ` — ${t.description}` : ""}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" loading={loading}>
+              {t("submissions.new.saveDraft")}
+            </Button>
+          </div>
+        </form>
+      )}
 
-            {/* Paper Title — Bilingual */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label={t("submissions.new.paperTitleTh")} htmlFor="title" required>
-                <Input
-                  id="title"
-                  name="title"
-                  placeholder={t("submissions.new.paperTitleThPlaceholder")}
-                  required
-                />
-              </Field>
-              <Field label={t("submissions.new.paperTitleEn")} htmlFor="titleEn" required>
-                <Input
-                  id="titleEn"
-                  name="titleEn"
-                  placeholder={t("submissions.new.paperTitleEnPlaceholder")}
-                  required
-                />
-              </Field>
-            </div>
-
-            {/* Abstract — Bilingual */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field
-                label={t("submissions.new.abstractTh")}
-                htmlFor="abstract"
-                required
-                hint={t("submissions.new.abstractDesc")}
-              >
-                <Textarea
-                  id="abstract"
-                  name="abstract"
-                  placeholder={t("submissions.new.abstractThPlaceholder")}
-                  rows={6}
-                  required
-                />
-              </Field>
-              <Field
-                label={t("submissions.new.abstractEn")}
-                htmlFor="abstractEn"
-                required
-              >
-                <Textarea
-                  id="abstractEn"
-                  name="abstractEn"
-                  placeholder={t("submissions.new.abstractEnPlaceholder")}
-                  rows={6}
-                  required
-                />
-              </Field>
-            </div>
-
-            {/* Keywords — Bilingual */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field
-                label={t("submissions.new.keywordsTh")}
-                htmlFor="keywords"
-                hint={t("submissions.new.keywordsDesc")}
-              >
-                <Input
-                  id="keywords"
-                  name="keywords"
-                  placeholder={t("submissions.new.keywordsThPlaceholder")}
-                />
-              </Field>
-              <Field
-                label={t("submissions.new.keywordsEn")}
-                htmlFor="keywordsEn"
-              >
-                <Input
-                  id="keywordsEn"
-                  name="keywordsEn"
-                  placeholder={t("submissions.new.keywordsEnPlaceholder")}
-                />
-              </Field>
-            </div>
-          </CardBody>
-        </Card>
-
-        <Card className="mb-4">
+      {/* ── Step 2: File upload (shown after draft is created) ── */}
+      {submissionId && (
+        <Card>
           <CardHeader>
-            <h3 className="text-sm font-semibold text-ink">{t("submissions.new.advisor")}</h3>
+            <h3 className="text-sm font-semibold text-ink">{t("submissions.new.attachManuscript")}</h3>
             <p className="text-xs text-ink-muted mt-0.5">
-              {t("submissions.new.advisorDesc")}
+              {t("submissions.new.attachManuscriptDesc")}
             </p>
           </CardHeader>
           <CardBody>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label={t("submissions.new.advisorName")} htmlFor="advisorName" required>
-                <Input
-                  id="advisorName"
-                  name="advisorName"
-                  placeholder={t("submissions.new.advisorNamePlaceholder")}
-                  required
-                />
-              </Field>
-              <Field
-                label={t("submissions.new.advisorEmail")}
-                htmlFor="advisorEmail"
-                required
-                hint={t("submissions.new.advisorEmailDesc")}
-              >
-                <Input
-                  id="advisorEmail"
-                  name="advisorEmail"
-                  type="email"
-                  placeholder={t("submissions.new.advisorEmailPlaceholder")}
-                  required
-                />
-              </Field>
-            </div>
+            <FileUpload
+              submissionId={submissionId}
+              kind="MANUSCRIPT"
+              onUploadComplete={handleUploadComplete}
+            />
           </CardBody>
+          <CardFooter>
+            <div className="flex justify-end gap-3 w-full">
+              <Button
+                type="button"
+                onClick={handleContinue}
+                disabled={!fileUploaded}
+              >
+                {t("submissions.new.continueToDetail")}
+              </Button>
+            </div>
+          </CardFooter>
         </Card>
-
-        <div className="flex justify-end gap-3">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => router.back()}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" loading={loading}>
-            {t("submissions.new.saveDraft")}
-          </Button>
-        </div>
-      </form>
+      )}
     </div>
   );
 }

@@ -162,6 +162,10 @@ const th = {
   "submissions.new.keywordsEn": "คำสำคัญ (ภาษาอังกฤษ)",
   "submissions.new.keywordsThPlaceholder": "เช่น การเรียนรู้ของเครื่อง, การเรียนรู้เชิงลึก",
   "submissions.new.keywordsEnPlaceholder": "e.g. machine learning, deep learning, NLP",
+  "submissions.new.attachManuscript": "แนบไฟล์บทความ",
+  "submissions.new.attachManuscriptDesc": "กรุณาแนบไฟล์ต้นฉบับบทความ (PDF, DOC, DOCX) ก่อนบันทึกแบบร่าง",
+  "submissions.new.requiredFile": "กรุณาแนบไฟล์บทความก่อนบันทึกแบบร่าง",
+  "submissions.new.continueToDetail": "ไปหน้าบทความ",
 
   // ─── Reviews ──────────────────────────────────────────
   "reviews.myReviewTasks": "งานรีวิวของฉัน",
