@@ -332,7 +332,7 @@ export default function DeadlinesPage() {
               <div>
                 <Input
                   type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.svg,image/*"
                   onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
                 />
                 {templateFile && (
