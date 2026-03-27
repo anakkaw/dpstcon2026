@@ -23,18 +23,18 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
-
-  // Read from localStorage on mount
-  useEffect(() => {
+  const [locale, setLocaleState] = useState<Locale>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as Locale | null;
-      if (stored === "th" || stored === "en") {
-        setLocaleState(stored);
-        document.documentElement.lang = stored;
-      }
+      if (stored === "th" || stored === "en") return stored;
     } catch {}
-  }, []);
+
+    return DEFAULT_LOCALE;
+  });
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);

@@ -5,7 +5,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Collapsible } from "@/components/ui/collapsible";
 import { formatDateTime } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-import { Mic, Image, MapPin, Clock, Award } from "lucide-react";
+import { Mic, Image as ImageIcon, MapPin, Clock, Award } from "lucide-react";
 
 interface PresentationData {
   type: string;
@@ -47,7 +47,7 @@ export function PresentationCard({ presentations, criteria }: PresentationCardPr
               {pres.type === "ORAL" ? (
                 <Mic className="h-4 w-4 text-brand-500" />
               ) : (
-                <Image className="h-4 w-4 text-violet-500" />
+                <ImageIcon className="h-4 w-4 text-violet-500" />
               )}
             </div>
             <div className="flex-1 space-y-1.5">

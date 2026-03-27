@@ -1,26 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Prompt, Sarabun } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const prompt = Prompt({
-  variable: "--font-prompt",
-  subsets: ["thai", "latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  display: "swap",
-});
-
-const sarabun = Sarabun({
-  variable: "--font-sarabun",
-  subsets: ["thai", "latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "DPSTCon — Conference Management System",
@@ -34,10 +14,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th" className={`${geistSans.variable} ${prompt.variable} ${sarabun.variable} h-full`}>
+    <html lang="th" className="h-full">
       <body className="min-h-full flex flex-col antialiased">
         <I18nProvider>
-        {children}
+          {children}
         </I18nProvider>
         <script
           dangerouslySetInnerHTML={{

@@ -396,6 +396,7 @@ app.post("/:id/submit", async (c) => {
     to: submission.advisorEmail!,
     subject: emailContent.subject,
     html: emailContent.html,
+    text: emailContent.text,
   });
 
   return c.json({ submission: updated });

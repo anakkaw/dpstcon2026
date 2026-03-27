@@ -153,7 +153,7 @@ async function main() {
 
   // 7. Create notifications
   console.log("\n6. Creating notifications...");
-  for (const [email, uid] of Object.entries(userIds)) {
+  for (const [, uid] of Object.entries(userIds)) {
     await sql`INSERT INTO notifications (id, user_id, type, title, message, is_read, created_at)
       VALUES (gen_random_uuid(), ${uid}, 'SYSTEM', 'ยินดีต้อนรับสู่ DPSTCon 2026', 'ระบบพร้อมใช้งานแล้ว กรุณาตรวจสอบข้อมูลของท่าน', false, NOW())`;
   }

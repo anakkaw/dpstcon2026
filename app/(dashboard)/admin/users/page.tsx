@@ -13,11 +13,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getRoleLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { displayNameTh, displayNameEn } from "@/lib/display-name";
-import { formatDate } from "@/lib/utils";
 import {
   UserPlus, Upload, Search, Pencil, KeyRound, Trash2, X, Send, RefreshCw,
   Users, ShieldCheck, UserCheck, ChevronDown, ChevronUp,
-  GraduationCap, Eye, EyeOff, Bell, Download, CheckCircle, Clock, AlertTriangle,
+  GraduationCap, Eye, EyeOff, Bell, CheckCircle, Clock, AlertTriangle,
 } from "lucide-react";
 
 const ROLE_COLORS: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -25,6 +24,13 @@ const ROLE_COLORS: Record<string, "neutral" | "success" | "warning" | "danger" |
 };
 
 const ALL_ROLES = ["ADMIN", "PROGRAM_CHAIR", "REVIEWER", "COMMITTEE", "AUTHOR"] as const;
+type SortBy = "name" | "email" | "affiliation" | "createdAt";
+type SortDir = "asc" | "desc";
+
+function renderSortIcon(col: SortBy, sortBy: SortBy, sortDir: SortDir) {
+  if (sortBy !== col) return <ChevronDown className="h-3 w-3 opacity-30" />;
+  return sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />;
+}
 
 interface UserData {
   id: string;
@@ -53,14 +59,9 @@ interface RegistrationStats {
 }
 
 type ModalMode = null | "edit" | "password" | "delete";
-function getInviteStatus(u: UserData): { label: string; tone: "success" | "warning" | "danger" } {
-  if (u.isActive) return { label: "Active", tone: "success" };
-  if (u.inviteExpiresAt && new Date(u.inviteExpiresAt) > new Date()) return { label: "Pending", tone: "warning" };
-  return { label: "Expired", tone: "danger" };
-}
 
 export default function AdminUsersPage() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const roleLabels = getRoleLabels(t);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,25 +101,58 @@ export default function AdminUsersPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Sort
-  const [sortBy, setSortBy] = useState<"name" | "email" | "affiliation" | "createdAt">("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  useEffect(() => { loadUsers(); loadRegStats(); }, []);
+  const [sortBy, setSortBy] = useState<SortBy>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   async function loadUsers() {
     const res = await fetch("/api/users");
     const data = await res.json();
-    setUsers(data.users || []);
-    setLoading(false);
+    return data.users || [];
   }
 
   async function loadRegStats() {
     try {
       const res = await fetch("/api/users/registration-stats");
       const data = await res.json();
-      setRegStats(data);
+      return data;
     } catch { /* ignore */ }
+
+    return null;
   }
+
+  async function refreshUsers() {
+    const nextUsers = await loadUsers();
+    setUsers(nextUsers);
+    setLoading(false);
+  }
+
+  async function refreshRegStats() {
+    const nextStats = await loadRegStats();
+    if (nextStats) {
+      setRegStats(nextStats);
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true;
+
+    void loadUsers().then((nextUsers) => {
+      if (mounted) {
+        setUsers(nextUsers);
+        setLoading(false);
+      }
+    });
+
+    void loadRegStats().then((nextStats) => {
+      if (mounted && nextStats) {
+        setRegStats(nextStats);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   async function bulkRemind() {
     if (!confirm(t("users.bulkRemindConfirm"))) return;
@@ -128,12 +162,12 @@ export default function AdminUsersPage() {
       const data = await res.json();
       if (res.ok) {
         showMsg(t("users.bulkRemindSuccess").replace("{sent}", data.sent).replace("{total}", data.total));
-        loadUsers();
-        loadRegStats();
+        void refreshUsers();
+        void refreshRegStats();
       } else {
-        showMsg(data.error || "Failed", "danger");
+        showMsg(data.error || t("users.genericError"), "danger");
       }
-    } catch { showMsg("An error occurred", "danger"); }
+    } catch { showMsg(t("users.genericError"), "danger"); }
     setReminding(false);
   }
 
@@ -172,7 +206,7 @@ export default function AdminUsersPage() {
     }
   }
 
-  function toggleSort(col: typeof sortBy) {
+  function toggleSort(col: SortBy) {
     if (sortBy === col) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else { setSortBy(col); setSortDir("asc"); }
   }
@@ -186,18 +220,18 @@ export default function AdminUsersPage() {
         body: JSON.stringify(newUser),
       });
       if (res.ok) {
-        showMsg("Invitation sent successfully");
+        showMsg(t("users.invitationSent"));
         setNewUser({
           email: "", roles: ["AUTHOR"], affiliation: "",
           prefixTh: "", prefixEn: "", firstNameTh: "", lastNameTh: "", firstNameEn: "", lastNameEn: "",
         });
         setShowCreate(false);
-        loadUsers();
+        void refreshUsers();
       } else {
         const d = await res.json();
-        showMsg(d.error || "Failed to create user", "danger");
+        showMsg(d.error || t("users.failedToCreate"), "danger");
       }
-    } catch { showMsg("An error occurred", "danger"); }
+    } catch { showMsg(t("users.genericError"), "danger"); }
     setCreating(false);
   }
 
@@ -223,14 +257,14 @@ export default function AdminUsersPage() {
           body: JSON.stringify({ roles: editForm.roles }),
         });
       }
-      if (res.ok) { showMsg("Changes saved"); closeModal(); loadUsers(); }
-      else { showMsg("Failed to save", "danger"); }
-    } catch { showMsg("An error occurred", "danger"); }
+      if (res.ok) { showMsg(t("users.changesSaved")); closeModal(); void refreshUsers(); }
+      else { showMsg(t("users.failedToSave"), "danger"); }
+    } catch { showMsg(t("users.genericError"), "danger"); }
     setSaving(false);
   }
 
   async function resetPassword() {
-    if (!selectedUser || !resetPw || resetPw.length < 8) { showMsg("Password must be at least 8 characters", "danger"); return; }
+    if (!selectedUser || !resetPw || resetPw.length < 8) { showMsg(t("users.passwordPolicy"), "danger"); return; }
     setSaving(true);
     try {
       const res = await fetch(`/api/users/${selectedUser.id}/reset-password`, {
@@ -239,9 +273,9 @@ export default function AdminUsersPage() {
         body: JSON.stringify({ newPassword: resetPw }),
       });
       const data = await res.json();
-      if (res.ok) { showMsg("Password reset successful"); closeModal(); }
-      else { showMsg(data.error || "Reset failed", "danger"); }
-    } catch { showMsg("An error occurred", "danger"); }
+      if (res.ok) { showMsg(t("users.passwordResetSuccess")); closeModal(); }
+      else { showMsg(data.error || t("users.resetFailed"), "danger"); }
+    } catch { showMsg(t("users.genericError"), "danger"); }
     setSaving(false);
   }
 
@@ -250,16 +284,16 @@ export default function AdminUsersPage() {
     setSaving(true);
     const res = await fetch(`/api/users/${selectedUser.id}`, { method: "DELETE" });
     const data = await res.json();
-    if (res.ok) { showMsg("User deleted"); closeModal(); loadUsers(); }
-    else { showMsg(data.error || "Delete failed", "danger"); }
+    if (res.ok) { showMsg(t("users.userDeleted")); closeModal(); void refreshUsers(); }
+    else { showMsg(data.error || t("users.deleteFailed"), "danger"); }
     setSaving(false);
   }
 
   async function resendInvite(userId: string) {
     const res = await fetch(`/api/users/${userId}/resend-invite`, { method: "POST" });
     const data = await res.json();
-    if (res.ok) { showMsg("Invitation resent"); loadUsers(); }
-    else { showMsg(data.error || "Failed to resend", "danger"); }
+    if (res.ok) { showMsg(t("users.invitationResent")); void refreshUsers(); }
+    else { showMsg(data.error || t("users.failedToResend"), "danger"); }
   }
 
   async function handleBulkImport() {
@@ -289,10 +323,14 @@ export default function AdminUsersPage() {
       const data = await res.json();
       if (res.ok) {
         setBulkResults(data.results || []);
-        showMsg(`Imported ${data.invited || 0}, updated ${data.updated || 0} users`);
-        loadUsers();
-      } else { showMsg(data.error || "Import failed", "danger"); }
-    } catch { showMsg("An error occurred", "danger"); }
+        showMsg(
+          t("users.importSummary")
+            .replace("{invited}", String(data.invited || 0))
+            .replace("{updated}", String(data.updated || 0))
+        );
+        void refreshUsers();
+      } else { showMsg(data.error || t("users.importFailed"), "danger"); }
+    } catch { showMsg(t("users.genericError"), "danger"); }
     setImporting(false);
   }
 
@@ -306,7 +344,7 @@ export default function AdminUsersPage() {
 
   // Filtered & sorted
   const filtered = useMemo(() => {
-    let result = users.filter((u) => {
+    const result = users.filter((u) => {
       const q = search.toLowerCase();
       const nameThFull = displayNameTh(u);
       const nameEnFull = displayNameEn(u);
@@ -333,11 +371,6 @@ export default function AdminUsersPage() {
     );
   }
 
-  const SortIcon = ({ col }: { col: typeof sortBy }) => {
-    if (sortBy !== col) return <ChevronDown className="h-3 w-3 opacity-30" />;
-    return sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />;
-  };
-
   return (
     <div className="space-y-6">
       <SectionTitle title={t("users.title")} subtitle={t("users.usersInSystem", { n: users.length })}
@@ -355,21 +388,21 @@ export default function AdminUsersPage() {
             <CheckCircle className="h-5 w-5 text-emerald-600" />
             <div>
               <div className="text-2xl font-bold text-emerald-700">{regStats.active}</div>
-              <div className="text-xs text-emerald-600">Active</div>
+              <div className="text-xs text-emerald-600">{t("users.statusActive")}</div>
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
             <Clock className="h-5 w-5 text-amber-600" />
             <div>
               <div className="text-2xl font-bold text-amber-700">{regStats.pending}</div>
-              <div className="text-xs text-amber-600">Pending</div>
+              <div className="text-xs text-amber-600">{t("users.statusPending")}</div>
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
             <AlertTriangle className="h-5 w-5 text-red-600" />
             <div>
               <div className="text-2xl font-bold text-red-700">{regStats.expired}</div>
-              <div className="text-xs text-red-600">Expired</div>
+              <div className="text-xs text-red-600">{t("users.statusExpired")}</div>
             </div>
           </div>
         </div>
@@ -408,7 +441,7 @@ export default function AdminUsersPage() {
         })}
         {filterRole && (
           <button onClick={() => setFilterRole("")} className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm text-ink-muted hover:bg-gray-100 transition-colors">
-            <X className="h-3.5 w-3.5" /> Clear
+            <X className="h-3.5 w-3.5" /> {t("common.clear")}
           </button>
         )}
       </div>
@@ -416,7 +449,7 @@ export default function AdminUsersPage() {
       {/* Search bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted pointer-events-none" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, email, or affiliation..."
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("users.searchPlaceholder")}
           className="w-full rounded-xl border border-gray-200 bg-white pl-10 pr-8 py-2.5 text-sm text-ink placeholder:text-gray-400 transition-all duration-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500" />
         {search && (
           <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink">
@@ -439,10 +472,10 @@ export default function AdminUsersPage() {
                 <Input value={newUser.prefixTh} onChange={(e) => setNewUser({ ...newUser, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
               </Field>
               <Field label={t("users.firstNameTh")} required>
-                <Input value={newUser.firstNameTh} onChange={(e) => setNewUser({ ...newUser, firstNameTh: e.target.value })} placeholder="ชื่อ" />
+                <Input value={newUser.firstNameTh} onChange={(e) => setNewUser({ ...newUser, firstNameTh: e.target.value })} placeholder={t("users.firstNameThPlaceholder")} />
               </Field>
               <Field label={t("users.lastNameTh")} required>
-                <Input value={newUser.lastNameTh} onChange={(e) => setNewUser({ ...newUser, lastNameTh: e.target.value })} placeholder="นามสกุล" />
+                <Input value={newUser.lastNameTh} onChange={(e) => setNewUser({ ...newUser, lastNameTh: e.target.value })} placeholder={t("users.lastNameThPlaceholder")} />
               </Field>
             </div>
             {/* English name fields */}
@@ -452,16 +485,16 @@ export default function AdminUsersPage() {
                 <Input value={newUser.prefixEn} onChange={(e) => setNewUser({ ...newUser, prefixEn: e.target.value })} placeholder={t("users.prefixEnPlaceholder")} />
               </Field>
               <Field label={t("users.firstNameEn")}>
-                <Input value={newUser.firstNameEn} onChange={(e) => setNewUser({ ...newUser, firstNameEn: e.target.value })} placeholder="First Name" />
+                <Input value={newUser.firstNameEn} onChange={(e) => setNewUser({ ...newUser, firstNameEn: e.target.value })} placeholder={t("users.firstNameEnPlaceholder")} />
               </Field>
               <Field label={t("users.lastNameEn")}>
-                <Input value={newUser.lastNameEn} onChange={(e) => setNewUser({ ...newUser, lastNameEn: e.target.value })} placeholder="Last Name" />
+                <Input value={newUser.lastNameEn} onChange={(e) => setNewUser({ ...newUser, lastNameEn: e.target.value })} placeholder={t("users.lastNameEnPlaceholder")} />
               </Field>
             </div>
             {/* Email & Affiliation */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label={t("users.email")} required>
-                <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder="user@dpstcon.org" />
+                <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder={t("users.emailPlaceholder")} />
               </Field>
               <Field label={t("users.affiliation")}>
                 <Input value={newUser.affiliation} onChange={(e) => setNewUser({ ...newUser, affiliation: e.target.value })} placeholder={t("users.affiliationPlaceholder")} />
@@ -532,17 +565,17 @@ export default function AdminUsersPage() {
                 <tr className="border-b border-border/60 bg-surface-alt/80">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     <button onClick={() => toggleSort("name")} className="flex items-center gap-1 hover:text-ink transition-colors">
-                      {t("users.name")} <SortIcon col="name" />
+                      {t("users.name")} {renderSortIcon("name", sortBy, sortDir)}
                     </button>
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     <button onClick={() => toggleSort("email")} className="flex items-center gap-1 hover:text-ink transition-colors">
-                      {t("users.email")} <SortIcon col="email" />
+                      {t("users.email")} {renderSortIcon("email", sortBy, sortDir)}
                     </button>
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     <button onClick={() => toggleSort("affiliation")} className="flex items-center gap-1 hover:text-ink transition-colors">
-                      {t("users.affiliation")} <SortIcon col="affiliation" />
+                      {t("users.affiliation")} {renderSortIcon("affiliation", sortBy, sortDir)}
                     </button>
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.roles")}</th>
@@ -573,18 +606,18 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-0.5">
-                          <button onClick={() => openModal("edit", u)} className="p-1.5 rounded-lg text-ink-muted hover:text-brand-600 hover:bg-brand-50 transition-colors" title="Edit">
+                          <button onClick={() => openModal("edit", u)} className="p-1.5 rounded-lg text-ink-muted hover:text-brand-600 hover:bg-brand-50 transition-colors" title={t("users.editAction")}>
                             <Pencil className="h-4 w-4" />
                           </button>
-                          <button onClick={() => openModal("password", u)} className="p-1.5 rounded-lg text-ink-muted hover:text-yellow-600 hover:bg-yellow-50 transition-colors" title="Reset Password">
+                          <button onClick={() => openModal("password", u)} className="p-1.5 rounded-lg text-ink-muted hover:text-yellow-600 hover:bg-yellow-50 transition-colors" title={t("users.passwordAction")}>
                             <KeyRound className="h-4 w-4" />
                           </button>
                           {!u.isActive && (
-                            <button onClick={() => resendInvite(u.id)} className="p-1.5 rounded-lg text-ink-muted hover:text-brand-600 hover:bg-brand-50 transition-colors" title="Resend Invitation">
+                            <button onClick={() => resendInvite(u.id)} className="p-1.5 rounded-lg text-ink-muted hover:text-brand-600 hover:bg-brand-50 transition-colors" title={t("users.resendAction")}>
                               <RefreshCw className="h-4 w-4" />
                             </button>
                           )}
-                          <button onClick={() => openModal("delete", u)} className="p-1.5 rounded-lg text-ink-muted hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                          <button onClick={() => openModal("delete", u)} className="p-1.5 rounded-lg text-ink-muted hover:text-danger hover:bg-red-50 transition-colors" title={t("users.deleteAction")}>
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
@@ -646,10 +679,10 @@ export default function AdminUsersPage() {
                       <Input value={editForm.prefixTh} onChange={(e) => setEditForm({ ...editForm, prefixTh: e.target.value })} placeholder={t("users.prefixThPlaceholder")} />
                     </Field>
                     <Field label={t("users.firstNameTh")}>
-                      <Input value={editForm.firstNameTh} onChange={(e) => setEditForm({ ...editForm, firstNameTh: e.target.value })} placeholder="ชื่อ" />
+                      <Input value={editForm.firstNameTh} onChange={(e) => setEditForm({ ...editForm, firstNameTh: e.target.value })} placeholder={t("users.firstNameThPlaceholder")} />
                     </Field>
                     <Field label={t("users.lastNameTh")}>
-                      <Input value={editForm.lastNameTh} onChange={(e) => setEditForm({ ...editForm, lastNameTh: e.target.value })} placeholder="นามสกุล" />
+                      <Input value={editForm.lastNameTh} onChange={(e) => setEditForm({ ...editForm, lastNameTh: e.target.value })} placeholder={t("users.lastNameThPlaceholder")} />
                     </Field>
                   </div>
                   {/* English name fields */}
@@ -659,10 +692,10 @@ export default function AdminUsersPage() {
                       <Input value={editForm.prefixEn} onChange={(e) => setEditForm({ ...editForm, prefixEn: e.target.value })} placeholder={t("users.prefixEnPlaceholder")} />
                     </Field>
                     <Field label={t("users.firstNameEn")}>
-                      <Input value={editForm.firstNameEn} onChange={(e) => setEditForm({ ...editForm, firstNameEn: e.target.value })} placeholder="First Name" />
+                      <Input value={editForm.firstNameEn} onChange={(e) => setEditForm({ ...editForm, firstNameEn: e.target.value })} placeholder={t("users.firstNameEnPlaceholder")} />
                     </Field>
                     <Field label={t("users.lastNameEn")}>
-                      <Input value={editForm.lastNameEn} onChange={(e) => setEditForm({ ...editForm, lastNameEn: e.target.value })} placeholder="Last Name" />
+                      <Input value={editForm.lastNameEn} onChange={(e) => setEditForm({ ...editForm, lastNameEn: e.target.value })} placeholder={t("users.lastNameEnPlaceholder")} />
                     </Field>
                   </div>
                   <Field label={t("users.affiliation")}>
@@ -686,13 +719,13 @@ export default function AdminUsersPage() {
                       ))}
                     </div>
                   </Field>
-                  <Field label="Bio / Notes">
-                    <Textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })} rows={3} placeholder="Academic position, expertise, etc." />
+                  <Field label={t("users.bioNotes")}>
+                    <Textarea value={editForm.bio} onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })} rows={3} placeholder={t("users.bioPlaceholder")} />
                   </Field>
                 </div>
                 <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
                   <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
-                  <Button size="sm" onClick={saveEdit} loading={saving}>Save Changes</Button>
+                  <Button size="sm" onClick={saveEdit} loading={saving}>{t("users.saveChanges")}</Button>
                 </div>
               </>
             )}
@@ -703,28 +736,28 @@ export default function AdminUsersPage() {
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border">
                   <div>
                     <h3 id="modal-title" className="text-base font-semibold text-ink flex items-center gap-2">
-                      <KeyRound className="h-4 w-4 text-yellow-500" />Reset Password
+                      <KeyRound className="h-4 w-4 text-yellow-500" />{t("users.passwordTitle")}
                     </h3>
                     <p className="text-sm text-ink-muted mt-0.5">{displayNameTh(selectedUser)} — {selectedUser.email}</p>
                   </div>
                   <button onClick={closeModal} className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-gray-100 transition-colors"><X className="h-5 w-5" /></button>
                 </div>
                 <div className="px-6 py-5 space-y-4">
-                  <Field label="New Password" hint="Minimum 8 characters" required>
+                  <Field label={t("users.newPassword")} hint={t("users.minPasswordLength")} required>
                     <div className="relative">
-                      <Input type={showPw ? "text" : "password"} value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder="Enter new password" autoFocus className="pr-10" />
+                      <Input type={showPw ? "text" : "password"} value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder={t("users.newPasswordPlaceholder")} autoFocus className="pr-10" />
                       <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-2.5 text-ink-muted hover:text-ink">
                         {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                   </Field>
                   {resetPw && resetPw.length < 8 && (
-                    <p className="text-xs text-danger">Password must be at least 8 characters ({8 - resetPw.length} more needed)</p>
+                    <p className="text-xs text-danger">{t("users.passwordLengthRemaining", { n: 8 - resetPw.length })}</p>
                   )}
                 </div>
                 <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
                   <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
-                  <Button size="sm" onClick={resetPassword} loading={saving} disabled={!resetPw || resetPw.length < 8}>Reset Password</Button>
+                  <Button size="sm" onClick={resetPassword} loading={saving} disabled={!resetPw || resetPw.length < 8}>{t("users.resetPassword")}</Button>
                 </div>
               </>
             )}
@@ -734,7 +767,7 @@ export default function AdminUsersPage() {
               <>
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border">
                   <h3 id="modal-title" className="text-base font-semibold text-ink flex items-center gap-2">
-                    <Trash2 className="h-4 w-4 text-danger" />Delete User
+                    <Trash2 className="h-4 w-4 text-danger" />{t("users.deleteTitle")}
                   </h3>
                   <button onClick={closeModal} className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-gray-100 transition-colors"><X className="h-5 w-5" /></button>
                 </div>
@@ -746,13 +779,13 @@ export default function AdminUsersPage() {
                     <div>
                       <p className="text-base font-semibold text-ink">{displayNameTh(selectedUser)}</p>
                       <p className="text-sm text-ink-muted">{selectedUser.email}{selectedUser.affiliation ? ` · ${selectedUser.affiliation}` : ""}</p>
-                      <p className="text-sm text-danger mt-2 font-medium">This action cannot be undone.</p>
+                      <p className="text-sm text-danger mt-2 font-medium">{t("users.deleteConfirm")}</p>
                     </div>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 px-6 py-3 border-t border-border bg-surface-alt rounded-b-xl">
                   <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
-                  <Button variant="danger" size="sm" onClick={deleteUser} loading={saving}>Confirm Delete</Button>
+                  <Button variant="danger" size="sm" onClick={deleteUser} loading={saving}>{t("users.confirmDelete")}</Button>
                 </div>
               </>
             )}

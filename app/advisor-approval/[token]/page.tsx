@@ -61,7 +61,7 @@ export default function AdvisorApprovalPage() {
       })
       .catch(() => setError(t("advisor.loadError")))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, t]);
 
   async function handleDecision(decision: "APPROVED" | "REJECTED") {
     setSubmitting(true);

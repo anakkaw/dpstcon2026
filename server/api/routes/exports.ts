@@ -1,6 +1,5 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
-import { submissions } from "@/server/db/schema";
 import { authMiddleware, requireRole } from "../middleware/auth";
 
 const app = new OpenAPIHono();

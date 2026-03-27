@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardFooter } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
@@ -29,7 +28,7 @@ import { PresentationCard } from "@/components/author/presentation-card";
 import { getNextAction, getRelevantDeadlineKey, getDaysUntil } from "@/lib/author-utils";
 import { displayNameTh } from "@/lib/display-name";
 import {
-  UserPlus, Gavel, Send, RotateCcw, Paperclip, AlertTriangle,
+  UserPlus, Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
 } from "lucide-react";
 

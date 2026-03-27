@@ -179,7 +179,7 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
   const newUserInserts: typeof user.$inferInsert[] = [];
   const newAccountInserts: typeof accountTable.$inferInsert[] = [];
   const newRoleInserts: typeof userRoles.$inferInsert[] = [];
-  const emailsToSend: { to: string; subject: string; html: string }[] = [];
+  const emailsToSend: { to: string; subject: string; html: string; text: string }[] = [];
 
   for (const u of parsed.data.users) {
     try {

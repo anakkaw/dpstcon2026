@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { format, requestedBy } = await req.json();
+    const { format } = await req.json();
 
     const allSubmissions = await db.query.submissions.findMany({
       with: {

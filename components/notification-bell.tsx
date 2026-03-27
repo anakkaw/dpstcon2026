@@ -44,26 +44,42 @@ export function NotificationBell() {
     try {
       const res = await fetch("/api/notifications");
       const data = await res.json();
-      setNotifications(data.notifications || []);
-    } catch {}
+      return data.notifications || [];
+    } catch {
+      return [];
+    }
   }, []);
 
   useEffect(() => {
-    loadNotifications();
+    let mounted = true;
+
+    void loadNotifications().then((nextNotifications) => {
+      if (mounted) {
+        setNotifications(nextNotifications);
+      }
+    });
 
     let interval: ReturnType<typeof setInterval>;
 
     function startPolling() {
       interval = setInterval(() => {
         if (document.visibilityState === "visible") {
-          loadNotifications();
+          void loadNotifications().then((nextNotifications) => {
+            if (mounted) {
+              setNotifications(nextNotifications);
+            }
+          });
         }
       }, 30000);
     }
 
     function handleVisibility() {
       if (document.visibilityState === "visible") {
-        loadNotifications(); // Refresh immediately when tab becomes visible
+        void loadNotifications().then((nextNotifications) => {
+          if (mounted) {
+            setNotifications(nextNotifications);
+          }
+        });
       }
     }
 
@@ -71,6 +87,7 @@ export function NotificationBell() {
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
+      mounted = false;
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };

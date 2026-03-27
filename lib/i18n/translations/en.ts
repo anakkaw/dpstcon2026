@@ -22,6 +22,7 @@ const en: Record<TranslationKey, string> = {
   "common.close": "Close",
   "common.retry": "Retry",
   "common.noData": "No data",
+  "common.clear": "Clear",
   "common.showing": "Showing",
   "common.of": "of",
   "common.days": "days",
@@ -34,6 +35,7 @@ const en: Record<TranslationKey, string> = {
   "common.minutesAgo": "{n} minutes ago",
   "common.hoursAgo": "{n} hours ago",
   "common.daysAgo": "{n} days ago",
+  "common.unknownUser": "User",
 
   // ─── Navigation ───────────────────────────────────────
   "nav.dashboard": "Dashboard",
@@ -314,6 +316,39 @@ const en: Record<TranslationKey, string> = {
   "users.thaiInfo": "Thai Information",
   "users.englishInfo": "English Information",
   "users.exportStatus": "Export Status",
+  "users.statusActive": "Active",
+  "users.statusPending": "Pending",
+  "users.statusExpired": "Expired",
+  "users.searchPlaceholder": "Search by name, email, or affiliation...",
+  "users.firstNameThPlaceholder": "First name in Thai",
+  "users.lastNameThPlaceholder": "Last name in Thai",
+  "users.firstNameEnPlaceholder": "First Name",
+  "users.lastNameEnPlaceholder": "Last Name",
+  "users.emailPlaceholder": "user@dpstcon.org",
+  "users.invitationSent": "Invitation sent successfully",
+  "users.failedToCreate": "Failed to create user",
+  "users.genericError": "An error occurred",
+  "users.changesSaved": "Changes saved",
+  "users.failedToSave": "Failed to save changes",
+  "users.passwordResetSuccess": "Password reset successful",
+  "users.passwordPolicy": "Password must be at least 8 characters",
+  "users.passwordLengthRemaining": "Password must be at least 8 characters ({n} more needed)",
+  "users.resetFailed": "Password reset failed",
+  "users.userDeleted": "User deleted",
+  "users.deleteFailed": "Delete failed",
+  "users.invitationResent": "Invitation resent successfully",
+  "users.failedToResend": "Failed to resend invitation",
+  "users.importSummary": "Imported {invited} users and updated {updated} users",
+  "users.importFailed": "Import failed",
+  "users.editTitle": "Edit User Details",
+  "users.passwordTitle": "Reset Password",
+  "users.deleteTitle": "Delete User",
+  "users.newPassword": "New Password",
+  "users.newPasswordPlaceholder": "Enter new password",
+  "users.editAction": "Edit",
+  "users.passwordAction": "Reset Password",
+  "users.resendAction": "Resend Invitation",
+  "users.deleteAction": "Delete",
 
   // ─── Track Team ───────────────────────────────────────
   "trackTeam.title": "Track Team",
@@ -519,6 +554,9 @@ const en: Record<TranslationKey, string> = {
 
   // ─── App ──────────────────────────────────────────────
   "app.description": "Conference Paper Review Management System",
+  "app.shellSubtitle": "Conference workspace",
+  "language.switchToEnglish": "Switch to English",
+  "language.switchToThai": "Switch to Thai",
 };
 
 export default en;

@@ -79,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div>
             <h1 className="font-bold text-base text-white">DPSTCon2026</h1>
-            <p className="text-[11px] text-side-muted">Conference Management</p>
+            <p className="text-[11px] text-side-muted">{t("app.shellSubtitle")}</p>
           </div>
           <button
             className="ml-auto lg:hidden text-side-muted hover:text-white transition-colors"
@@ -144,7 +144,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   const f = user.firstNameTh || "";
                   const l = user.lastNameTh || "";
                   if (f || l) return `${user.prefixTh || ""}${f} ${l}`.trim();
-                  return user.name || "User";
+                  return user.name || t("common.unknownUser");
                 })()}
               </p>
               <p className="text-xs text-ink-muted leading-tight">

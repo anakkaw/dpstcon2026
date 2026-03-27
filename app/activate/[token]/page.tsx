@@ -39,7 +39,7 @@ export default function ActivatePage({ params }: { params: Promise<{ token: stri
         setErrorMsg(t("activate.linkCheckError"));
         setStatus("error");
       });
-  }, [token]);
+  }, [token, t]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -1,6 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
-import { submissions, storedFiles } from "@/server/db/schema";
+import { submissions, storedFiles, user as userTable } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { getDownloadUrl } from "@/server/r2";
@@ -168,7 +168,7 @@ app.post("/:token/respond", async (c) => {
 
     // Fetch author info
     const author = await db.query.user.findFirst({
-      where: eq(require("@/server/db/schema").user.id, submission.authorId),
+      where: eq(userTable.id, submission.authorId),
       columns: { name: true, email: true },
     });
 

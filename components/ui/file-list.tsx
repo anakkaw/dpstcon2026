@@ -33,7 +33,7 @@ function formatFileSize(bytes: number) {
 export function FileList({ submissionId, files }: FileListProps) {
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  async function handleDownload(fileId: string, fileName: string) {
+  async function handleDownload(fileId: string) {
     setDownloading(fileId);
     try {
       const res = await fetch(`/api/submissions/${submissionId}/download/${fileId}`);
@@ -71,7 +71,7 @@ export function FileList({ submissionId, files }: FileListProps) {
           </div>
           <button
             type="button"
-            onClick={() => handleDownload(file.id, file.originalName)}
+            onClick={() => handleDownload(file.id)}
             disabled={downloading === file.id}
             className={cn(
               "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors shrink-0",

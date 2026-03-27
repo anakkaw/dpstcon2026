@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { csrf } from "hono/csrf";
+import { HTTPException } from "hono/http-exception";
 import { logger } from "@/server/logger";
 import { submissionRoutes } from "./routes/submissions";
 import { reviewRoutes } from "./routes/reviews";
@@ -32,6 +33,10 @@ app.use("/*", async (c, next) => {
 
 // Global error handler
 app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    return c.json({ error: err.message }, err.status);
+  }
+
   logger.error("Unhandled API error", {
     method: c.req.method,
     path: c.req.path,

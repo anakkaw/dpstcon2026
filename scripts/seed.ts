@@ -1,7 +1,9 @@
 // Seed script — run with: npx tsx scripts/seed.ts
 import "dotenv/config";
+import { neon } from "@neondatabase/serverless";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const sql = neon(process.env.DATABASE_URL!);
 
 interface SeedUser {
   name: string;
@@ -41,15 +43,10 @@ async function createUser(u: SeedUser) {
 }
 
 async function updateRole(email: string, role: string, affiliation?: string) {
-  const { neon } = require("@neondatabase/serverless");
-  const sql = neon(process.env.DATABASE_URL!);
   await sql`UPDATE "user" SET role = ${role}, affiliation = ${affiliation || null}, updated_at = NOW() WHERE email = ${email}`;
 }
 
 async function createSubmissions(authorEmail: string) {
-  const { neon } = require("@neondatabase/serverless");
-  const sql = neon(process.env.DATABASE_URL!);
-
   const [author] = await sql`SELECT id FROM "user" WHERE email = ${authorEmail}`;
   if (!author) return;
 
@@ -82,9 +79,6 @@ async function createSubmissions(authorEmail: string) {
 }
 
 async function createReviewAssignments() {
-  const { neon } = require("@neondatabase/serverless");
-  const sql = neon(process.env.DATABASE_URL!);
-
   // Get the UNDER_REVIEW submission
   const [submission] = await sql`SELECT id FROM submissions WHERE status = 'UNDER_REVIEW' LIMIT 1`;
   if (!submission) return;
@@ -100,9 +94,6 @@ async function createReviewAssignments() {
 }
 
 async function createNotifications() {
-  const { neon } = require("@neondatabase/serverless");
-  const sql = neon(process.env.DATABASE_URL!);
-
   const users = await sql`SELECT id, role FROM "user"`;
 
   for (const u of users) {
@@ -113,9 +104,6 @@ async function createNotifications() {
 }
 
 async function createTracks() {
-  const { neon } = require("@neondatabase/serverless");
-  const sql = neon(process.env.DATABASE_URL!);
-
   const tracks = [
     { name: "Computer Science", description: "วิทยาการคอมพิวเตอร์และเทคโนโลยีสารสนเทศ" },
     { name: "Mathematics", description: "คณิตศาสตร์และสถิติ" },

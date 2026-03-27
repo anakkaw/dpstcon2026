@@ -20,6 +20,7 @@ const th = {
   "common.close": "ปิด",
   "common.retry": "ลองอีกครั้ง",
   "common.noData": "ไม่มีข้อมูล",
+  "common.clear": "ล้างตัวกรอง",
   "common.showing": "แสดง",
   "common.of": "จาก",
   "common.days": "วัน",
@@ -32,6 +33,7 @@ const th = {
   "common.minutesAgo": "{n} นาทีที่แล้ว",
   "common.hoursAgo": "{n} ชั่วโมงที่แล้ว",
   "common.daysAgo": "{n} วันที่แล้ว",
+  "common.unknownUser": "ผู้ใช้",
 
   // ─── Navigation ───────────────────────────────────────
   "nav.dashboard": "แดชบอร์ด",
@@ -316,6 +318,39 @@ const th = {
   "users.thaiInfo": "ข้อมูลภาษาไทย",
   "users.englishInfo": "ข้อมูลภาษาอังกฤษ",
   "users.exportStatus": "Export สถานะ",
+  "users.statusActive": "เปิดใช้งานแล้ว",
+  "users.statusPending": "รอดำเนินการ",
+  "users.statusExpired": "หมดอายุ",
+  "users.searchPlaceholder": "ค้นหาด้วยชื่อ อีเมล หรือสังกัด...",
+  "users.firstNameThPlaceholder": "ชื่อ",
+  "users.lastNameThPlaceholder": "นามสกุล",
+  "users.firstNameEnPlaceholder": "First Name",
+  "users.lastNameEnPlaceholder": "Last Name",
+  "users.emailPlaceholder": "user@dpstcon.org",
+  "users.invitationSent": "ส่งคำเชิญเรียบร้อยแล้ว",
+  "users.failedToCreate": "สร้างผู้ใช้ไม่สำเร็จ",
+  "users.genericError": "เกิดข้อผิดพลาด",
+  "users.changesSaved": "บันทึกการเปลี่ยนแปลงแล้ว",
+  "users.failedToSave": "บันทึกไม่สำเร็จ",
+  "users.passwordResetSuccess": "รีเซ็ตรหัสผ่านสำเร็จ",
+  "users.passwordPolicy": "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร",
+  "users.passwordLengthRemaining": "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร (เหลืออีก {n})",
+  "users.resetFailed": "รีเซ็ตรหัสผ่านไม่สำเร็จ",
+  "users.userDeleted": "ลบผู้ใช้เรียบร้อยแล้ว",
+  "users.deleteFailed": "ลบผู้ใช้ไม่สำเร็จ",
+  "users.invitationResent": "ส่งคำเชิญอีกครั้งเรียบร้อยแล้ว",
+  "users.failedToResend": "ส่งคำเชิญอีกครั้งไม่สำเร็จ",
+  "users.importSummary": "นำเข้า {invited} คน และอัปเดต {updated} คน",
+  "users.importFailed": "นำเข้าไม่สำเร็จ",
+  "users.editTitle": "แก้ไขข้อมูลผู้ใช้",
+  "users.passwordTitle": "รีเซ็ตรหัสผ่าน",
+  "users.deleteTitle": "ลบผู้ใช้",
+  "users.newPassword": "รหัสผ่านใหม่",
+  "users.newPasswordPlaceholder": "กรอกรหัสผ่านใหม่",
+  "users.editAction": "แก้ไข",
+  "users.passwordAction": "รีเซ็ตรหัสผ่าน",
+  "users.resendAction": "ส่งคำเชิญอีกครั้ง",
+  "users.deleteAction": "ลบ",
 
   // ─── Track Team ───────────────────────────────────────
   "trackTeam.title": "ทีมสาขาวิชา",
@@ -521,6 +556,9 @@ const th = {
 
   // ─── App ──────────────────────────────────────────────
   "app.description": "ระบบบริหารการพิจารณาบทความสำหรับการประชุมวิชาการ",
+  "app.shellSubtitle": "ระบบจัดการงานประชุม",
+  "language.switchToEnglish": "สลับเป็นภาษาอังกฤษ",
+  "language.switchToThai": "เปลี่ยนเป็นภาษาไทย",
 } as const;
 
 export type TranslationKey = keyof typeof th;
