@@ -183,8 +183,8 @@ export function SubmissionsPageClient({
 
       <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+        <div className="relative w-full lg:max-w-xl xl:max-w-2xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted pointer-events-none" />
           <input
             type="text"
@@ -199,7 +199,7 @@ export function SubmissionsPageClient({
             </button>
           )}
         </div>
-        <div className="flex w-full gap-1 overflow-x-auto pb-1 sm:flex-wrap">
+        <div className="flex w-full gap-1 overflow-x-auto pb-1 lg:flex-wrap">
           {statusTabs.map((tab) => (
             <button
               key={tab.key}
