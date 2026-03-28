@@ -14,7 +14,6 @@
     "@aws-sdk/s3-request-presigner": "^3.1014.0",
     "@hono/zod-openapi": "^1.2.3",
     "@neondatabase/serverless": "^1.0.2",
-    "@upstash/qstash": "^2.10.1",
     "better-auth": "^1.5.5",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",

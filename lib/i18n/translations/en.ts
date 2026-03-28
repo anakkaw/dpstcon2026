@@ -51,15 +51,14 @@ const en: Record<TranslationKey, string> = {
   "nav.scheduleAndDocs": "Schedule & Documents",
   "nav.userManagement": "User Management",
   "nav.trackTeam": "Track Team",
-  "nav.conferenceManagement": "Conference Settings",
 
   // ─── Landing Page ─────────────────────────────────────
-  "landing.title": "DPST Conference on Science and Technology",
-  "landing.subtitle": "Paper Review Management System for DPST Science & Technology Conference",
+  "landing.title": "DPST Science and Technology",
+  "landing.subtitle": "Paper submission and review management system for DPSTCon",
 
   // ─── Login Page ───────────────────────────────────────
   "login.title": "Sign In",
-  "login.subtitle": "DPSTCon Conference Management System",
+  "login.subtitle": "DPSTCon Submission Management System",
   "login.usernameOrEmail": "Username or Email",
   "login.usernamePlaceholder": "e.g. student001 or user@dpstcon.org",
   "login.password": "Password",
@@ -115,9 +114,9 @@ const en: Record<TranslationKey, string> = {
   "dashboard.priorityActions": "Priority actions",
   "dashboard.priorityActionsDesc": "Jump into the management areas that affect users, submissions, and key dates.",
   "dashboard.systemHealth": "System health",
-  "dashboard.systemHealthDesc": "See the current submission and review load across the conference.",
+  "dashboard.systemHealthDesc": "See the current submission and review load across the system.",
   "dashboard.trackLoad": "Track load",
-  "dashboard.trackLoadDesc": "Compare submission volume across conference tracks.",
+  "dashboard.trackLoadDesc": "Compare submission volume across tracks.",
   "dashboard.manageUsers": "Manage Users",
   "dashboard.manageUsersDesc": "Add / Edit / Import",
   "dashboard.managePapers": "Manage Papers",
@@ -457,28 +456,6 @@ const en: Record<TranslationKey, string> = {
   "users.loading": "Loading users",
 
   // ─── Conference ───────────────────────────────────────
-  "conference.settings": "Conference Settings",
-  "conference.subtitle": "Manage the core setup for {event} {year}",
-  "conference.noActive": "No active conference",
-  "conference.createNew": "Create a new conference to get started",
-  "conference.generalInfo": "General Information",
-  "conference.name": "Name",
-  "conference.year": "Year",
-  "conference.description": "Description",
-  "conference.tracks": "Tracks",
-  "conference.tracksCount": "{n} tracks",
-  "conference.noTracks": "No tracks yet",
-  "conference.addTrack": "Add New Track",
-  "conference.trackName": "Track Name",
-  "conference.trackDesc": "Description",
-  "conference.trackNamePlaceholder": "e.g. Computer Science",
-  "conference.trackDescPlaceholder": "Track description",
-  "conference.addTrackBtn": "Add Track",
-  "conference.phases": "Phases",
-  "conference.noPhases": "No phases yet",
-  "conference.inProgress": "In Progress",
-  "conference.notOpen": "Not Open",
-  "conference.trackAdded": "Track added successfully",
 
   // ─── Activate ─────────────────────────────────────────
   "activate.title": "Activate Account",
@@ -502,13 +479,12 @@ const en: Record<TranslationKey, string> = {
 
   // ─── Advisor Approval ─────────────────────────────────
   "advisor.title": "Paper Endorsement Request",
-  "advisor.subtitle": "DPSTCon Conference Management System",
+  "advisor.subtitle": "DPSTCon Submission Management System",
   "advisor.paperInfo": "Paper Information",
   "advisor.paperTitle": "Paper Title",
   "advisor.abstract": "Abstract",
   "advisor.keywords": "Keywords",
   "advisor.author": "Author",
-  "advisor.conference": "Conference",
   "advisor.track": "Track",
   "advisor.paperFiles": "Paper Files",
   "advisor.actionTitle": "Endorsement Action",
@@ -642,8 +618,8 @@ const en: Record<TranslationKey, string> = {
   "action.uploadCameraReadyDesc": "Upload the camera-ready file for publication",
 
   // ─── App ──────────────────────────────────────────────
-  "app.description": "Conference Paper Review Management System",
-  "app.shellSubtitle": "Conference workspace",
+  "app.description": "Submission and review management system",
+  "app.shellSubtitle": "Submission workspace",
   "language.switchToEnglish": "Switch to English",
   "language.switchToThai": "Switch to Thai",
 };

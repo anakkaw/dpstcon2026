@@ -49,15 +49,14 @@ const th = {
   "nav.scheduleAndDocs": "กำหนดการและเอกสาร",
   "nav.userManagement": "จัดการผู้ใช้",
   "nav.trackTeam": "ทีมสาขาวิชา",
-  "nav.conferenceManagement": "ตั้งค่าการประชุม",
 
   // ─── Landing Page ─────────────────────────────────────
-  "landing.title": "DPST Conference on Science and Technology",
-  "landing.subtitle": "ระบบบริหารการพิจารณาบทความสำหรับ งานประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท.",
+  "landing.title": "DPST Science and Technology",
+  "landing.subtitle": "ระบบบริหารการส่งและพิจารณาบทความสำหรับ DPSTCon",
 
   // ─── Login Page ───────────────────────────────────────
   "login.title": "เข้าสู่ระบบ",
-  "login.subtitle": "DPSTCon Conference Management System",
+  "login.subtitle": "DPSTCon Submission Management System",
   "login.usernameOrEmail": "ชื่อผู้ใช้หรืออีเมล",
   "login.usernamePlaceholder": "เช่น student001 หรือ user@dpstcon.org",
   "login.password": "รหัสผ่าน",
@@ -117,7 +116,7 @@ const th = {
   "dashboard.systemHealth": "ภาพรวมสถานะระบบ",
   "dashboard.systemHealthDesc": "ดูปริมาณบทความและภาระงานรีวิวในแต่ละสถานะ",
   "dashboard.trackLoad": "ปริมาณงานตามสาขา",
-  "dashboard.trackLoadDesc": "เปรียบเทียบจำนวนบทความในแต่ละสาขาวิชาของงานประชุม",
+  "dashboard.trackLoadDesc": "เปรียบเทียบจำนวนบทความในแต่ละสาขาวิชา",
   "dashboard.manageUsers": "จัดการผู้ใช้",
   "dashboard.manageUsersDesc": "เพิ่ม/แก้ไข/import",
   "dashboard.managePapers": "จัดการบทความ",
@@ -459,28 +458,6 @@ const th = {
   "users.loading": "กำลังโหลดข้อมูลผู้ใช้",
 
   // ─── Conference ───────────────────────────────────────
-  "conference.settings": "ตั้งค่าการประชุม",
-  "conference.subtitle": "จัดการข้อมูลหลักของงาน {event} {year}",
-  "conference.noActive": "ยังไม่มี Conference ที่ active",
-  "conference.createNew": "สร้าง Conference ใหม่เพื่อเริ่มต้น",
-  "conference.generalInfo": "ข้อมูลทั่วไป",
-  "conference.name": "ชื่อ",
-  "conference.year": "ปี",
-  "conference.description": "คำอธิบาย",
-  "conference.tracks": "สาขา (Tracks)",
-  "conference.tracksCount": "{n} สาขา",
-  "conference.noTracks": "ยังไม่มี track",
-  "conference.addTrack": "เพิ่ม Track ใหม่",
-  "conference.trackName": "ชื่อ Track",
-  "conference.trackDesc": "คำอธิบาย",
-  "conference.trackNamePlaceholder": "เช่น Computer Science",
-  "conference.trackDescPlaceholder": "คำอธิบายสาขา",
-  "conference.addTrackBtn": "เพิ่ม Track",
-  "conference.phases": "ระยะเวลา (Phases)",
-  "conference.noPhases": "ยังไม่มี phase",
-  "conference.inProgress": "กำลังดำเนินการ",
-  "conference.notOpen": "ยังไม่เปิด",
-  "conference.trackAdded": "เพิ่ม track สำเร็จ",
 
   // ─── Activate ─────────────────────────────────────────
   "activate.title": "เปิดใช้งานบัญชี",
@@ -504,13 +481,12 @@ const th = {
 
   // ─── Advisor Approval ─────────────────────────────────
   "advisor.title": "ขอรับรองบทความ",
-  "advisor.subtitle": "DPSTCon Conference Management System",
+  "advisor.subtitle": "DPSTCon Submission Management System",
   "advisor.paperInfo": "ข้อมูลบทความ",
   "advisor.paperTitle": "ชื่อบทความ",
   "advisor.abstract": "บทคัดย่อ",
   "advisor.keywords": "คำสำคัญ",
   "advisor.author": "Author",
-  "advisor.conference": "งานประชุม",
   "advisor.track": "สาขา",
   "advisor.paperFiles": "ไฟล์บทความ",
   "advisor.actionTitle": "ดำเนินการรับรอง",
@@ -644,8 +620,8 @@ const th = {
   "action.uploadCameraReadyDesc": "อัปโหลดไฟล์ Camera-Ready สำหรับตีพิมพ์",
 
   // ─── App ──────────────────────────────────────────────
-  "app.description": "ระบบบริหารการพิจารณาบทความสำหรับการประชุมวิชาการ",
-  "app.shellSubtitle": "ระบบจัดการงานประชุม",
+  "app.description": "ระบบบริหารการส่งและพิจารณาบทความ",
+  "app.shellSubtitle": "พื้นที่ทำงานจัดการบทความ",
   "language.switchToEnglish": "สลับเป็นภาษาอังกฤษ",
   "language.switchToThai": "เปลี่ยนเป็นภาษาไทย",
 } as const;

@@ -18,9 +18,9 @@ const prompt = Prompt({
 });
 
 export const metadata: Metadata = {
-  title: "DPSTCon — Conference Management System",
+  title: "DPSTCon — Submission Management System",
   description:
-    "ระบบบริหารการพิจารณาบทความสำหรับการประชุมวิชาการ DPSTCon",
+    "ระบบบริหารการส่งและพิจารณาบทความ DPSTCon",
 };
 
 export default function RootLayout({

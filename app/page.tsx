@@ -61,7 +61,7 @@ export default function HomePage() {
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-500/15 border border-brand-500/25 mb-6">
               <Sparkles className="h-4 w-4 text-brand-400" />
               <span className="text-sm font-medium text-brand-300">
-                DPST Conference on Science and Technology
+                DPST Science and Technology
               </span>
             </div>
 
