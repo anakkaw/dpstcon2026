@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { getRoleLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
-import { Sparkles } from "lucide-react";
 
 const AuthorDashboard = dynamic(() => import("./author-dashboard"));
 const ReviewerDashboard = dynamic(() => import("./reviewer-dashboard"));
@@ -22,22 +21,29 @@ export function DashboardClient({ role, userName, stats }: DashboardClientProps)
   const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(role);
 
   return (
-    <div className="max-w-6xl flex flex-col gap-8">
-      {/* Welcome banner */}
-      <div className="bg-welcome-gradient rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
-        {/* Decorative orbs */}
-        <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-20 blur-3xl bg-orb-brand" />
-        <div className="absolute -bottom-16 -left-16 w-56 h-56 rounded-full opacity-10 blur-2xl bg-orb-brand" />
-        {/* Content */}
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-4 w-4 text-amber-400" />
-            <p className="text-amber-300 text-sm font-medium">{roleLabels[role] || role} — DPSTCon 2026</p>
+    <div className="flex max-w-6xl flex-col gap-8">
+      <section className="space-y-3 border-b border-border pb-6">
+        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-ink-muted">
+          {roleLabels[role] || role}
+        </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-semibold tracking-tight text-ink">
+              {t("dashboard.workspaceTitle")}
+            </h1>
+            <p className="max-w-2xl text-sm text-ink-muted">
+              {t("dashboard.workspaceSubtitle", { name: userName, role: roleLabels[role] || role })}
+            </p>
           </div>
-          <h1 className="text-3xl font-bold">{t("dashboard.welcome", { name: userName })}</h1>
-          <p className="text-slate-400 text-sm mt-2">{t("dashboard.welcomeSubtitle")}</p>
+          <div className="rounded-2xl border border-border bg-white px-4 py-3 shadow-sm lg:min-w-[240px]">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted">
+              {t("dashboard.activeUser")}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-ink">{userName}</p>
+            <p className="mt-0.5 text-xs text-ink-muted">{roleLabels[role] || role}</p>
+          </div>
         </div>
-      </div>
+      </section>
 
       {role === "AUTHOR" && <AuthorDashboard stats={stats} />}
       {role === "REVIEWER" && <ReviewerDashboard stats={stats} />}

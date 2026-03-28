@@ -13,31 +13,36 @@ interface StatCardProps {
 }
 
 /* Full static class strings — Tailwind v4 scanner finds each one */
-const styles: Record<AccentColor, { card: string; icon: string; value: string }> = {
+const styles: Record<AccentColor, { card: string; icon: string; value: string; label: string }> = {
   brand: {
-    card: "bg-stat-brand border-brand-300",
-    icon: "bg-brand-500 shadow-brand-glow",
+    card: "border-brand-200/80 bg-white",
+    icon: "bg-brand-50 text-brand-600",
     value: "text-brand-700",
+    label: "text-brand-700/80",
   },
   info: {
-    card: "bg-stat-info border-blue-300",
-    icon: "bg-blue-500 shadow-blue-glow",
+    card: "border-blue-200/80 bg-white",
+    icon: "bg-blue-50 text-blue-600",
     value: "text-blue-800",
+    label: "text-blue-800/75",
   },
   success: {
-    card: "bg-stat-success border-emerald-300",
-    icon: "bg-emerald-500 shadow-emerald-glow",
+    card: "border-emerald-200/80 bg-white",
+    icon: "bg-emerald-50 text-emerald-600",
     value: "text-emerald-800",
+    label: "text-emerald-800/75",
   },
   warning: {
-    card: "bg-stat-warning border-amber-300",
-    icon: "bg-amber-500 shadow-amber-glow",
+    card: "border-amber-200/80 bg-white",
+    icon: "bg-amber-50 text-amber-600",
     value: "text-amber-800",
+    label: "text-amber-800/75",
   },
   danger: {
-    card: "bg-stat-danger border-red-300",
-    icon: "bg-red-500 shadow-red-glow",
+    card: "border-red-200/80 bg-white",
+    icon: "bg-red-50 text-red-600",
     value: "text-red-800",
+    label: "text-red-800/75",
   },
 };
 
@@ -55,7 +60,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border-2 p-5 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5",
+        "rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
         onClick && "cursor-pointer",
         s.card,
         className
@@ -63,15 +68,15 @@ export function StatCard({
       onClick={onClick}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className={cn("text-3xl font-extrabold tracking-tight mt-1", s.value)}>
+        <div className="min-w-0">
+          <p className={cn("text-xs font-medium uppercase tracking-[0.16em]", s.label)}>{label}</p>
+          <p className={cn("mt-2 text-2xl font-semibold tracking-tight sm:text-[1.75rem]", s.value)}>
             {value}
           </p>
-          {hint && <p className="text-xs text-slate-500 mt-1">{hint}</p>}
+          {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
         </div>
         {icon && (
-          <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center shrink-0 text-white", s.icon)}>
+          <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", s.icon)}>
             {icon}
           </div>
         )}
