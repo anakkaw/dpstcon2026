@@ -12,6 +12,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageLoading } from "@/components/ui/page-loading";
+import { SummaryStatCard } from "@/components/ui/summary-stat-card";
+import { WorkspaceSection, WorkspaceSurface } from "@/components/ui/workspace-section";
 import { formatDate } from "@/lib/utils";
 import { getDaysUntil } from "@/lib/author-utils";
 import { useI18n } from "@/lib/i18n";
@@ -192,8 +194,17 @@ export default function DeadlinesPage() {
     return <PageLoading label={t("deadlines.loading")} />;
   }
 
+  const completedCount = deadlineDefaults.filter((d) => {
+    const date = settings[d.key];
+    return date && new Date(date) <= new Date();
+  }).length;
+  const nextUpcoming = deadlineDefaults
+    .map((d) => ({ ...d, date: settings[d.key], daysLeft: settings[d.key] ? getDaysUntil(settings[d.key]!) : null }))
+    .filter((d) => d.date && d.daysLeft !== null && d.daysLeft >= 0)
+    .sort((a, b) => (a.daysLeft ?? 999) - (b.daysLeft ?? 999))[0];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <ConfirmDialog
         open={!!templateToDelete}
         title={t("deadlines.deleteTemplateTitle")}
@@ -227,142 +238,128 @@ export default function DeadlinesPage() {
 
       {message && <Alert tone={messageType}>{message}</Alert>}
 
-      {/* Admin: Edit deadlines inline */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SummaryStatCard label={t("common.total")} value={deadlineDefaults.length} color="blue" icon={<CalendarRangeIcon />} />
+        <SummaryStatCard label={t("deadlines.documentTemplates")} value={templates.length} color="indigo" icon={<FileText className="h-5 w-5" />} />
+        <SummaryStatCard label={t("deadlines.completed")} value={completedCount} color="emerald" icon={<CheckCircle2 className="h-5 w-5" />} />
+        <SummaryStatCard
+          label={nextUpcoming ? (settings[nextUpcoming.labelKey] || nextUpcoming.defaultLabel) : t("deadlines.notification")}
+          value={nextUpcoming ? t("common.daysLeft", { n: nextUpcoming.daysLeft }) : "—"}
+          color="amber"
+          icon={<Clock className="h-5 w-5" />}
+        />
+      </div>
+
       {isAdmin && editing && (
-        <Card accent="brand">
-          <CardHeader>
+        <WorkspaceSection title={t("deadlines.editSchedule")}>
+          <Card accent="brand">
+            <CardHeader>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-ink">{t("deadlines.editSchedule")}</h3>
               <button onClick={() => { setEditing(false); setEditForm(settings); }} className="text-ink-muted hover:text-ink">
                 <X className="h-4 w-4" />
               </button>
             </div>
-          </CardHeader>
-          <CardBody>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {deadlineDefaults.map((d) => (
-                <div key={d.key} className="space-y-2">
-                  <Field label={t("deadlines.label")}>
-                    <Input value={editForm[d.labelKey] || d.defaultLabel} onChange={(e) => setEditForm({ ...editForm, [d.labelKey]: e.target.value })} placeholder={d.defaultLabel} />
-                  </Field>
-                  <Field label={t("deadlines.date")}>
-                    <Input type="date" value={editForm[d.key] || ""} onChange={(e) => setEditForm({ ...editForm, [d.key]: e.target.value })} />
-                  </Field>
-                </div>
-              ))}
-            </div>
-          </CardBody>
-          <CardFooter className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => { setEditing(false); setEditForm(settings); }}>{t("common.cancel")}</Button>
-            <Button size="sm" onClick={handleSaveDeadlines} loading={saving}><Save className="h-4 w-4" />{t("common.save")}</Button>
-          </CardFooter>
-        </Card>
+            </CardHeader>
+            <CardBody>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {deadlineDefaults.map((d) => (
+                  <div key={d.key} className="space-y-2">
+                    <Field label={t("deadlines.label")}>
+                      <Input value={editForm[d.labelKey] || d.defaultLabel} onChange={(e) => setEditForm({ ...editForm, [d.labelKey]: e.target.value })} placeholder={d.defaultLabel} />
+                    </Field>
+                    <Field label={t("deadlines.date")}>
+                      <Input type="date" value={editForm[d.key] || ""} onChange={(e) => setEditForm({ ...editForm, [d.key]: e.target.value })} />
+                    </Field>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+            <CardFooter className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => { setEditing(false); setEditForm(settings); }}>{t("common.cancel")}</Button>
+              <Button size="sm" onClick={handleSaveDeadlines} loading={saving}><Save className="h-4 w-4" />{t("common.save")}</Button>
+            </CardFooter>
+          </Card>
+        </WorkspaceSection>
       )}
 
-      {/* ─── Timeline Cards ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {deadlineDefaults.map((d) => {
-          const date = settings[d.key];
-          if (!date) return null;
-          const isPast = new Date(date) <= new Date();
-          const daysLeft = getDaysUntil(date);
-          const Icon = d.icon;
+      <WorkspaceSection title={t("deadlines.title")}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {deadlineDefaults.map((d) => {
+            const date = settings[d.key];
+            if (!date) return null;
+            const isPast = new Date(date) <= new Date();
+            const daysLeft = getDaysUntil(date);
+            const Icon = d.icon;
+            const badgeTone: "success" | "warning" | "danger" | "info" | "neutral" =
+              isPast ? "success" : daysLeft <= 7 ? "danger" : daysLeft <= 30 ? "warning" : "info";
 
-          let borderColor = "border-blue-200";
-          let bgColor = "bg-blue-50/50";
-          let iconBg = "bg-blue-100 text-blue-600";
-          let badgeTone: "success" | "warning" | "danger" | "info" | "neutral" = "info";
-
-          if (isPast) {
-            borderColor = "border-emerald-200";
-            bgColor = "bg-emerald-50/50";
-            iconBg = "bg-emerald-100 text-emerald-600";
-            badgeTone = "success";
-          } else if (daysLeft <= 7) {
-            borderColor = "border-red-200";
-            bgColor = "bg-red-50/50";
-            iconBg = "bg-red-100 text-red-600";
-            badgeTone = "danger";
-          } else if (daysLeft <= 30) {
-            borderColor = "border-amber-200";
-            bgColor = "bg-amber-50/50";
-            iconBg = "bg-amber-100 text-amber-600";
-            badgeTone = "warning";
-          }
-
-          return (
-            <div key={d.key} className={`rounded-xl border-2 ${borderColor} ${bgColor} p-4 transition-all hover:shadow-md`}>
-              <div className="flex items-start gap-3">
-                <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
-                  <Icon className="h-5 w-5" />
+            return (
+              <WorkspaceSurface key={d.key} className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-alt text-ink">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted">{t("deadlines.step", { n: d.step })}</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">{settings[d.labelKey] || d.defaultLabel}</p>
+                    <p className="mt-1 text-sm text-ink-light">{formatDate(date, locale)}</p>
+                    <Badge tone={badgeTone} className="mt-3 text-xs">
+                      {isPast ? t("deadlines.completed") : t("deadlines.daysLeft", { n: daysLeft })}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-ink-muted uppercase tracking-wide">{t("deadlines.step", { n: d.step })}</p>
-                  <p className="text-sm font-semibold text-ink mt-0.5">{settings[d.labelKey] || d.defaultLabel}</p>
-                  <p className="text-sm text-ink-light mt-1">{formatDate(date, locale)}</p>
-                  <Badge tone={badgeTone} className="mt-2 text-xs">
-                    {isPast ? t("deadlines.completed") : t("deadlines.daysLeft", { n: daysLeft })}
-                  </Badge>
+              </WorkspaceSurface>
+            );
+          })}
+        </div>
+      </WorkspaceSection>
+
+      <WorkspaceSection
+        title={t("deadlines.documentTemplates")}
+        action={
+          isAdmin ? (
+            <Button size="sm" variant="outline" onClick={() => setShowAddTemplate(!showAddTemplate)}>
+              {showAddTemplate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {showAddTemplate ? t("common.cancel") : t("deadlines.addTemplate")}
+            </Button>
+          ) : null
+        }
+      >
+        <WorkspaceSurface className="overflow-hidden">
+          {isAdmin && showAddTemplate && (
+            <div className="border-b border-border-light bg-surface-alt/40 px-5 py-4">
+              <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                <div>
+                  <Input
+                    value={templateForm.name}
+                    onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                    placeholder={t("deadlines.templateNamePlaceholder")}
+                  />
                 </div>
+                <div>
+                  <Input
+                    value={templateForm.description}
+                    onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+                    placeholder={t("deadlines.templateDescriptionPlaceholder")}
+                  />
+                </div>
+                <div>
+                  <Input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.svg,image/*"
+                    onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+                  />
+                  {templateFile && (
+                    <p className="mt-1 text-xs text-ink-muted truncate">{templateFile.name}</p>
+                  )}
+                </div>
+                <Button size="sm" onClick={createTemplate} loading={addingTemplate} disabled={!templateForm.name.trim() || !templateFile}>
+                  <Plus className="h-4 w-4" />{t("common.add")}
+                </Button>
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* ─── Document Templates ─── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <FileText className="h-4 w-4" />{t("deadlines.documentTemplates")}
-              <Badge tone="neutral" className="text-xs">{templates.length}</Badge>
-            </h3>
-            {isAdmin && (
-              <Button size="sm" variant="outline" onClick={() => setShowAddTemplate(!showAddTemplate)}>
-                {showAddTemplate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                {showAddTemplate ? t("common.cancel") : t("deadlines.addTemplate")}
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-
-        {/* Admin: Add template form */}
-        {isAdmin && showAddTemplate && (
-          <div className="px-5 pb-4 border-b border-border">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_auto] gap-3">
-              <div>
-                <Input
-                  value={templateForm.name}
-                  onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                  placeholder={t("deadlines.templateNamePlaceholder")}
-                />
-              </div>
-              <div>
-                <Input
-                  value={templateForm.description}
-                  onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
-                  placeholder={t("deadlines.templateDescriptionPlaceholder")}
-                />
-              </div>
-              <div>
-                <Input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.svg,image/*"
-                  onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
-                />
-                {templateFile && (
-                  <p className="mt-1 text-xs text-ink-muted truncate">{templateFile.name}</p>
-                )}
-              </div>
-              <Button size="sm" onClick={createTemplate} loading={addingTemplate} disabled={!templateForm.name.trim() || !templateFile}>
-                <Plus className="h-4 w-4" />{t("common.add")}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        <CardBody className="p-0">
+          )}
           {templates.length === 0 ? (
             <div className="py-12">
               <EmptyState
@@ -372,7 +369,7 @@ export default function DeadlinesPage() {
               />
             </div>
           ) : (
-            <div className="divide-y divide-border/60">
+            <div className="divide-y divide-border-light">
               {templates.map((tmpl) => (
                 <div key={tmpl.id} className="flex flex-col gap-3 px-5 py-3.5 transition-colors hover:bg-surface-hover/50 sm:flex-row sm:items-center group">
                   <div className="h-9 w-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
@@ -402,8 +399,12 @@ export default function DeadlinesPage() {
               ))}
             </div>
           )}
-        </CardBody>
-      </Card>
+        </WorkspaceSurface>
+      </WorkspaceSection>
     </div>
   );
+}
+
+function CalendarRangeIcon() {
+  return <Clock className="h-5 w-5" />;
 }

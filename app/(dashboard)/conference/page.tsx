@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { SectionTitle } from "@/components/ui/section-title";
@@ -10,10 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Divider } from "@/components/ui/divider";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageLoading } from "@/components/ui/page-loading";
+import { SummaryStatCard } from "@/components/ui/summary-stat-card";
+import { WorkspaceSection, WorkspaceSurface } from "@/components/ui/workspace-section";
 import { getPhaseTypeLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { formatDate } from "@/lib/utils";
-import { Plus, Settings } from "lucide-react";
+import { CalendarRange, Layers3, Plus, Settings } from "lucide-react";
 
 interface EventData {
   id: string;
@@ -67,11 +69,7 @@ export default function ConferencePage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-6 w-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageLoading label={t("conference.settings")} />;
   }
 
   if (!event) {
@@ -88,7 +86,7 @@ export default function ConferencePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-8 max-w-5xl">
       <SectionTitle
         title={t("conference.settings")}
         subtitle={t("conference.subtitle", { event: event.name, year: event.year })}
@@ -96,122 +94,94 @@ export default function ConferencePage() {
 
       {message && <Alert tone="success">{message}</Alert>}
 
-      {/* Conference Info */}
-      <Card>
-        <CardHeader>
-          <h3 className="text-sm font-semibold text-ink">{t("conference.generalInfo")}</h3>
-        </CardHeader>
-        <CardBody className="space-y-3">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.name")}</p>
-              <p className="text-sm font-medium text-ink">{event.name}</p>
-            </div>
-            <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.year")}</p>
-              <p className="text-sm font-medium text-ink">{event.year}</p>
-            </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SummaryStatCard label={t("conference.year")} value={event.year} color="blue" icon={<CalendarRange className="h-5 w-5" />} />
+        <SummaryStatCard label={t("conference.tracks")} value={event.tracks.length} color="indigo" icon={<Layers3 className="h-5 w-5" />} />
+        <SummaryStatCard label={t("conference.phases")} value={event.phases.length} color="amber" icon={<CalendarRange className="h-5 w-5" />} />
+        <SummaryStatCard label={t("dashboard.submissionDeadline")} value={formatDate(event.submissionDeadline, locale)} color="gray" />
+      </div>
+
+      <WorkspaceSection title={t("conference.generalInfo")}>
+        <WorkspaceSurface className="p-5">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <InfoField label={t("conference.name")} value={event.name} />
+            <InfoField label={t("conference.year")} value={String(event.year)} />
+            <InfoField label={t("dashboard.reviewDeadline")} value={formatDate(event.reviewDeadline, locale)} />
+            <InfoField label={t("dashboard.cameraReadyDeadline")} value={formatDate(event.cameraReadyDeadline, locale)} />
           </div>
           {event.description && (
-            <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.description")}</p>
-              <p className="text-sm text-ink">{event.description}</p>
-            </div>
+            <>
+              <Divider className="my-5" />
+              <InfoField label={t("conference.description")} value={event.description} />
+            </>
           )}
-          <Divider />
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("dashboard.submissionDeadline")}</p>
-              <p className="text-sm text-ink">{formatDate(event.submissionDeadline, locale)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("dashboard.reviewDeadline")}</p>
-              <p className="text-sm text-ink">{formatDate(event.reviewDeadline, locale)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("dashboard.cameraReadyDeadline")}</p>
-              <p className="text-sm text-ink">{formatDate(event.cameraReadyDeadline, locale)}</p>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
+        </WorkspaceSurface>
+      </WorkspaceSection>
 
-      {/* Tracks */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink">{t("conference.tracks")}</h3>
-            <Badge>{t("conference.tracksCount", { n: event.tracks.length })}</Badge>
-          </div>
-        </CardHeader>
-        <CardBody className="space-y-3">
+      <WorkspaceSection
+        title={t("conference.tracks")}
+        action={<Badge>{t("conference.tracksCount", { n: event.tracks.length })}</Badge>}
+      >
+        <WorkspaceSurface className="overflow-hidden">
           {event.tracks.length === 0 ? (
-            <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.noTracks")}</p>
+            <div className="px-5 py-6 text-sm text-ink-muted">{t("conference.noTracks")}</div>
           ) : (
-            <div className="space-y-2">
-              {event.tracks.map((track) => (
-                <div
-                  key={track.id}
-                  className="flex items-center justify-between rounded-lg bg-surface-alt px-4 py-2"
-                >
+            <div className="divide-y divide-border-light">
+              {event.tracks.map((track, index) => (
+                <div key={track.id} className={`px-5 py-4 ${index === 0 ? "" : ""}`}>
                   <div>
-                    <p className="text-sm font-medium text-ink">{track.name}</p>
+                    <p className="text-sm font-semibold text-ink">{track.name}</p>
                     {track.description && (
-                      <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{track.description}</p>
+                      <p className="mt-1 text-xs text-ink-muted">{track.description}</p>
                     )}
                   </div>
                 </div>
               ))}
             </div>
           )}
-
-          <Divider label={t("conference.addTrack")} />
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={t("conference.trackName")} htmlFor="trackName">
-              <Input
-                id="trackName"
-                value={trackName}
-                onChange={(e) => setTrackName(e.target.value)}
-                placeholder={t("conference.trackNamePlaceholder")}
-              />
-            </Field>
-            <Field label={t("conference.trackDesc")} htmlFor="trackDesc">
-              <Input
-                id="trackDesc"
-                value={trackDesc}
-                onChange={(e) => setTrackDesc(e.target.value)}
-                placeholder={t("conference.trackDescPlaceholder")}
-              />
-            </Field>
+          <div className="border-t border-border-light bg-surface-alt/40 px-5 py-4">
+            <p className="mb-3 text-sm font-semibold text-ink">{t("conference.addTrack")}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("conference.trackName")} htmlFor="trackName">
+                <Input
+                  id="trackName"
+                  value={trackName}
+                  onChange={(e) => setTrackName(e.target.value)}
+                  placeholder={t("conference.trackNamePlaceholder")}
+                />
+              </Field>
+              <Field label={t("conference.trackDesc")} htmlFor="trackDesc">
+                <Input
+                  id="trackDesc"
+                  value={trackDesc}
+                  onChange={(e) => setTrackDesc(e.target.value)}
+                  placeholder={t("conference.trackDescPlaceholder")}
+                />
+              </Field>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button size="sm" onClick={addTrack} loading={saving} disabled={!trackName.trim()}>
+                <Plus className="h-4 w-4" />
+                {t("conference.addTrackBtn")}
+              </Button>
+            </div>
           </div>
-          <Button size="sm" onClick={addTrack} loading={saving} disabled={!trackName.trim()}>
-            <Plus className="h-4 w-4" />
-            {t("conference.addTrackBtn")}
-          </Button>
-        </CardBody>
-      </Card>
+        </WorkspaceSurface>
+      </WorkspaceSection>
 
-      {/* Phases */}
-      <Card>
-        <CardHeader>
-          <h3 className="text-sm font-semibold text-ink">{t("conference.phases")}</h3>
-        </CardHeader>
-        <CardBody>
+      <WorkspaceSection title={t("conference.phases")}>
+        <WorkspaceSurface className="overflow-hidden">
           {event.phases.length === 0 ? (
-            <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">{t("conference.noPhases")}</p>
+            <div className="px-5 py-6 text-sm text-ink-muted">{t("conference.noPhases")}</div>
           ) : (
-            <div className="space-y-2">
+            <div className="divide-y divide-border-light">
               {event.phases.map((phase) => (
-                <div
-                  key={phase.id}
-                  className="flex items-center justify-between rounded-lg bg-surface-alt px-4 py-2"
-                >
+                <div key={phase.id} className="flex items-center justify-between gap-4 px-5 py-4">
                   <div>
-                    <p className="text-sm font-medium text-ink">
+                    <p className="text-sm font-semibold text-ink">
                       {phaseLabels[phase.type] || phase.name}
                     </p>
-                    <p className="text-xs text-ink-muted uppercase tracking-wider font-medium">
+                    <p className="mt-1 text-xs text-ink-muted">
                       {formatDate(phase.startDate, locale)} — {formatDate(phase.endDate, locale)}
                     </p>
                   </div>
@@ -222,8 +192,17 @@ export default function ConferencePage() {
               ))}
             </div>
           )}
-        </CardBody>
-      </Card>
+        </WorkspaceSurface>
+      </WorkspaceSection>
+    </div>
+  );
+}
+
+function InfoField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted">{label}</p>
+      <p className="text-sm font-medium text-ink">{value}</p>
     </div>
   );
 }

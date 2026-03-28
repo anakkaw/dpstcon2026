@@ -8,11 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
-import { Card, CardBody, CardHeader, CardFooter } from "@/components/ui/card";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Alert } from "@/components/ui/alert";
 import { FileUpload } from "@/components/ui/file-upload";
+import { WorkspaceSection, WorkspaceSurface } from "@/components/ui/workspace-section";
 import { useI18n } from "@/lib/i18n";
 
 interface Track {
@@ -139,12 +139,9 @@ export default function NewSubmissionPage() {
 
       {/* ── Step 1: Form (hidden after draft is created) ── */}
       {!submissionId && (
-        <form action={handleSubmit}>
-          <Card className="mb-4">
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-ink">{t("submissions.new.title")}</h3>
-            </CardHeader>
-            <CardBody className="space-y-4">
+        <form action={handleSubmit} className="space-y-6">
+          <WorkspaceSection title={t("submissions.new.stepDetailsTitle")} description={t("submissions.new.stepDetailsDesc")}>
+            <WorkspaceSurface className="p-5">
               <Field
                 label={t("submissions.new.track")}
                 htmlFor="trackId"
@@ -237,17 +234,12 @@ export default function NewSubmissionPage() {
                   />
                 </Field>
               </div>
-            </CardBody>
-          </Card>
+            </WorkspaceSurface>
+          </WorkspaceSection>
 
-          <Card className="mb-4">
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-ink">{t("submissions.new.advisor")}</h3>
-              <p className="text-xs text-ink-muted mt-0.5">
-                {t("submissions.new.advisorDesc")}
-              </p>
-            </CardHeader>
-            <CardBody>
+          <WorkspaceSection title={t("submissions.new.advisor")} description={t("submissions.new.advisorDesc")}>
+            <WorkspaceSurface className="overflow-hidden">
+              <div className="p-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label={t("submissions.new.advisorName")} htmlFor="advisorName" required>
                   <Input
@@ -272,20 +264,21 @@ export default function NewSubmissionPage() {
                   />
                 </Field>
               </div>
-            </CardBody>
-            <CardFooter className="flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => router.back()}
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button type="submit" loading={loading}>
-                {t("submissions.new.saveDraft")}
-              </Button>
-            </CardFooter>
-          </Card>
+              </div>
+              <div className="flex justify-end gap-3 border-t border-border-light bg-surface-alt/40 px-5 py-4">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => router.back()}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button type="submit" loading={loading}>
+                  {t("submissions.new.saveDraft")}
+                </Button>
+              </div>
+            </WorkspaceSurface>
+          </WorkspaceSection>
         </form>
       )}
 
@@ -295,65 +288,57 @@ export default function NewSubmissionPage() {
           <Alert tone="success">{t("submissions.new.draftSavedNotice")}</Alert>
 
           {draftSummary && (
-            <Card accent="info">
-              <CardHeader>
-                <h3 className="text-sm font-semibold text-ink">{t("submissions.new.savedDraftTitle")}</h3>
-                <p className="mt-0.5 text-xs text-ink-muted">
-                  {t("submissions.new.savedDraftDesc")}
-                </p>
-              </CardHeader>
-              <CardBody className="grid gap-4 sm:grid-cols-2">
-                <SummaryField label={t("submissions.new.track")} value={draftSummary.trackName} />
-                <SummaryField label={t("submissions.new.advisorName")} value={draftSummary.advisorName} />
-                <SummaryField label={t("submissions.new.paperTitleTh")} value={draftSummary.title} />
-                <SummaryField label={t("submissions.new.advisorEmail")} value={draftSummary.advisorEmail} />
-                <div className="sm:col-span-2">
-                  <SummaryField label={t("submissions.new.paperTitleEn")} value={draftSummary.titleEn} />
+            <WorkspaceSection title={t("submissions.new.savedDraftTitle")} description={t("submissions.new.savedDraftDesc")}>
+              <WorkspaceSurface className="p-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SummaryField label={t("submissions.new.track")} value={draftSummary.trackName} />
+                  <SummaryField label={t("submissions.new.advisorName")} value={draftSummary.advisorName} />
+                  <SummaryField label={t("submissions.new.paperTitleTh")} value={draftSummary.title} />
+                  <SummaryField label={t("submissions.new.advisorEmail")} value={draftSummary.advisorEmail} />
+                  <div className="sm:col-span-2">
+                    <SummaryField label={t("submissions.new.paperTitleEn")} value={draftSummary.titleEn} />
+                  </div>
                 </div>
-              </CardBody>
-            </Card>
+              </WorkspaceSurface>
+            </WorkspaceSection>
           )}
 
-          <Card>
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-ink">{t("submissions.new.attachManuscript")}</h3>
-              <p className="text-xs text-ink-muted mt-0.5">
-                {t("submissions.new.attachManuscriptDesc")}
-              </p>
-            </CardHeader>
-            <CardBody>
+          <WorkspaceSection title={t("submissions.new.attachManuscript")} description={t("submissions.new.attachManuscriptDesc")}>
+            <WorkspaceSurface className="overflow-hidden">
+              <div className="p-5">
               <FileUpload
                 submissionId={submissionId}
                 kind="MANUSCRIPT"
                 onUploadComplete={handleUploadComplete}
               />
-            </CardBody>
-            <CardFooter>
-              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-ink-muted">
-                  {fileUploaded
-                    ? t("submissions.new.fileUploadedReady")
-                    : t("submissions.new.uploadRequired")}
-                </p>
-                <div className="flex w-full justify-end gap-3 sm:w-auto">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => router.push("/submissions")}
-                  >
-                    {t("nav.papers")}
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={handleContinue}
-                    disabled={!fileUploaded}
-                  >
-                    {t("submissions.new.continueToDetail")}
-                  </Button>
+              </div>
+              <div className="border-t border-border-light bg-surface-alt/40 px-5 py-4">
+                <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-ink-muted">
+                    {fileUploaded
+                      ? t("submissions.new.fileUploadedReady")
+                      : t("submissions.new.uploadRequired")}
+                  </p>
+                  <div className="flex w-full justify-end gap-3 sm:w-auto">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => router.push("/submissions")}
+                    >
+                      {t("nav.papers")}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleContinue}
+                      disabled={!fileUploaded}
+                    >
+                      {t("submissions.new.continueToDetail")}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </CardFooter>
-          </Card>
+            </WorkspaceSurface>
+          </WorkspaceSection>
         </div>
       )}
     </div>
