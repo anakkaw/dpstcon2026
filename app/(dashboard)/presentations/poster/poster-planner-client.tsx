@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { formatDateTime } from "@/lib/utils";
 import type {
   PosterPlannerGroup,
   PosterPlannerPaper,
+  PosterPlannerSessionSettings,
 } from "@/server/poster-planner-data";
 import {
   CalendarRange,
@@ -77,6 +78,7 @@ type CommitteePosterGroup = {
 
 interface PosterPlannerClientProps {
   mode: "admin" | "author" | "committee";
+  initialSessionSettings?: PosterPlannerSessionSettings;
   initialGroups?: PosterPlannerGroup[];
   initialUngroupedPosters?: PosterPlannerPaper[];
   initialCommitteeUsers?: AdminCommitteeUser[];
@@ -88,22 +90,27 @@ type MessageTone = "success" | "danger";
 
 export function PosterPlannerClient({
   mode,
+  initialSessionSettings = { room: "", slotTemplates: [] },
   initialGroups = [],
   initialUngroupedPosters = [],
   initialCommitteeUsers = [],
   authorGroups = [],
   committeeGroups = [],
 }: PosterPlannerClientProps) {
+  const plannerId = useId();
   const [groups, setGroups] = useState(initialGroups);
+  const [sessionSettings, setSessionSettings] = useState(initialSessionSettings);
   const [ungroupedPosters, setUngroupedPosters] = useState(initialUngroupedPosters);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("success");
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [groupDrafts, setGroupDrafts] = useState<Record<string, { name: string; room: string }>>(
+  const [groupDrafts, setGroupDrafts] = useState<Record<string, { name: string }>>(
     Object.fromEntries(
-      initialGroups.map((group) => [group.id, { name: group.name, room: group.room ?? "" }])
+      initialGroups.map((group) => [group.id, { name: group.name }])
     )
   );
+  const [sessionDraft, setSessionDraft] = useState<PosterPlannerSessionSettings>(initialSessionSettings);
+  const [slotTemplateDraft, setSlotTemplateDraft] = useState({ startsAt: "", endsAt: "" });
   const [newGroupNameByTrack, setNewGroupNameByTrack] = useState<Record<string, string>>({});
   const [selectedGroupByTrack, setSelectedGroupByTrack] = useState<Record<string, string>>({});
   const [selectedPosterIdsByTrack, setSelectedPosterIdsByTrack] = useState<Record<string, string[]>>(
@@ -118,12 +125,12 @@ export function PosterPlannerClient({
     )
   );
   const [slotDrafts, setSlotDrafts] = useState<
-    Record<string, { startsAt: string; endsAt: string; judgeId: string; status: string }>
+    Record<string, { templateId: string; judgeId: string; status: string }>
   >(
     Object.fromEntries(
       initialGroups.map((group) => [
         group.id,
-        { startsAt: "", endsAt: "", judgeId: "", status: "PLANNED" },
+        { templateId: "", judgeId: "", status: "PLANNED" },
       ])
     )
   );
@@ -146,16 +153,15 @@ export function PosterPlannerClient({
   const plannerStats = useMemo(() => {
     const readyGroups = groups.filter((group) => group.members.length > 0 && group.judges.length === 3 && group.slots.length > 0).length;
     const incompleteGroups = groups.length - readyGroups;
-    const totalSlots = groups.reduce((sum, group) => sum + group.slots.length, 0);
 
     return {
       totalGroups: groups.length,
       readyGroups,
       incompleteGroups,
       ungroupedPosters: ungroupedPosters.length,
-      totalSlots,
+      sharedSlots: sessionSettings.slotTemplates.length,
     };
-  }, [groups, ungroupedPosters]);
+  }, [groups, sessionSettings.slotTemplates.length, ungroupedPosters]);
 
   function getGroupTone(group: PosterPlannerGroup) {
     if (group.members.length === 0) return "neutral";
@@ -173,13 +179,15 @@ export function PosterPlannerClient({
   async function refreshPlanner() {
     const response = await fetch("/api/presentations/poster-planner");
     const data = await response.json();
+    setSessionSettings(data.sessionSettings || { room: "", slotTemplates: [] });
+    setSessionDraft(data.sessionSettings || { room: "", slotTemplates: [] });
     setGroups(data.groups || []);
     setUngroupedPosters(data.ungroupedPosters || []);
     setGroupDrafts(
       Object.fromEntries(
         (data.groups || []).map((group: PosterPlannerGroup) => [
           group.id,
-          { name: group.name, room: group.room ?? "" },
+          { name: group.name },
         ])
       )
     );
@@ -197,7 +205,7 @@ export function PosterPlannerClient({
       Object.fromEntries(
         (data.groups || []).map((group: PosterPlannerGroup) => [
           group.id,
-          { startsAt: "", endsAt: "", judgeId: "", status: "PLANNED" },
+          { templateId: "", judgeId: "", status: "PLANNED" },
         ])
       )
     );
@@ -233,6 +241,78 @@ export function PosterPlannerClient({
       await refreshPlanner();
       setMessage("Poster group updated");
     });
+  }
+
+  async function saveSessionSettings() {
+    await runAction("session-settings", async () => {
+      const response = await fetch("/api/presentations/poster-session", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          room: sessionDraft.room.trim(),
+          slotTemplates: sessionDraft.slotTemplates.map((slot) => ({
+            startsAt: slot.startsAt,
+            endsAt: slot.endsAt,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Unable to save poster session");
+      }
+
+      await refreshPlanner();
+      setSlotTemplateDraft({ startsAt: "", endsAt: "" });
+      setMessage("Poster session settings updated");
+    });
+  }
+
+  function addSessionSlotTemplate() {
+    if (!slotTemplateDraft.startsAt || !slotTemplateDraft.endsAt) {
+      setMessageTone("danger");
+      setMessage("Start and end time are required for a shared slot");
+      return;
+    }
+
+    const startsAt = new Date(slotTemplateDraft.startsAt);
+    const endsAt = new Date(slotTemplateDraft.endsAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || startsAt >= endsAt) {
+      setMessageTone("danger");
+      setMessage("Shared slot times must be valid and end after start");
+      return;
+    }
+
+    const startsAtIso = startsAt.toISOString();
+    const endsAtIso = endsAt.toISOString();
+    const id = `${startsAtIso}__${endsAtIso}`;
+    const duplicate = sessionDraft.slotTemplates.some((slot) => slot.id === id);
+    if (duplicate) {
+      setMessageTone("danger");
+      setMessage("This shared slot already exists");
+      return;
+    }
+
+    setSessionDraft((prev) => ({
+      ...prev,
+      slotTemplates: [...prev.slotTemplates, { id, startsAt: startsAtIso, endsAt: endsAtIso }].sort(
+        (a, b) =>
+          new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() ||
+          new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime()
+      ),
+    }));
+    setSlotTemplateDraft({ startsAt: "", endsAt: "" });
+    setMessageTone("success");
+    setMessage("Shared slot added. Save poster session to publish it.");
+  }
+
+  function removeSessionSlotTemplate(slotId: string) {
+    setSessionDraft((prev) => ({
+      ...prev,
+      slotTemplates: prev.slotTemplates.filter((slot) => slot.id !== slotId),
+    }));
+    setMessageTone("success");
+    setMessage("Shared slot removed. Save poster session to publish it.");
   }
 
   async function createGroup(trackId: string) {
@@ -328,16 +408,17 @@ export function PosterPlannerClient({
   async function addSlot(groupId: string) {
     await runAction(`slot-${groupId}`, async () => {
       const draft = slotDrafts[groupId];
-      if (!draft?.startsAt || !draft?.endsAt) {
-        throw new Error("Start and end time are required");
+      const template = sessionSettings.slotTemplates.find((slot) => slot.id === draft?.templateId);
+      if (!template) {
+        throw new Error("Select one shared slot");
       }
 
       const response = await fetch(`/api/presentations/poster-groups/${groupId}/slots`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          startsAt: draft.startsAt,
-          endsAt: draft.endsAt,
+          startsAt: template.startsAt,
+          endsAt: template.endsAt,
           judgeId: draft.judgeId || null,
           status: draft.status,
         }),
@@ -368,6 +449,10 @@ export function PosterPlannerClient({
       setMessage("Slot deleted");
     });
   }
+
+  const sessionRoomId = `${plannerId}-session-room`;
+  const sessionStartTimeId = `${plannerId}-session-start-time`;
+  const sessionEndTimeId = `${plannerId}-session-end-time`;
 
   if (mode === "author") {
     return (
@@ -478,7 +563,7 @@ export function PosterPlannerClient({
     <div className="space-y-6">
       <SectionTitle
         title="Poster Group Planner"
-        subtitle="Set up poster groups by track, assign three judges per group, and plan flexible time slots without losing track of ungrouped papers."
+        subtitle="Configure one shared poster room and slot plan first, then group papers by track, assign three judges, and reuse those shared slots across every group."
       />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
@@ -509,8 +594,8 @@ export function PosterPlannerClient({
           color="red"
         />
         <SummaryStatCard
-          label="Planned slots"
-          value={plannerStats.totalSlots}
+          label="Shared slots"
+          value={plannerStats.sharedSlots}
           icon={<CalendarRange className="h-5 w-5" />}
           color="indigo"
         />
@@ -518,6 +603,116 @@ export function PosterPlannerClient({
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)]">
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="space-y-1">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <MapPin className="h-4 w-4 text-ink-muted" />
+                  Step 0: Configure the shared poster session
+                </h3>
+                <p className="text-sm text-ink-muted">
+                  Set the room and reusable time slots once. Every poster group will pick from this shared session plan.
+                </p>
+              </div>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <Field label="Shared room" htmlFor={sessionRoomId}>
+                <Input
+                  id={sessionRoomId}
+                  value={sessionDraft.room}
+                  onChange={(event) =>
+                    setSessionDraft((prev) => ({
+                      ...prev,
+                      room: event.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Poster Hall A…"
+                  name="sharedRoom"
+                  autoComplete="off"
+                />
+              </Field>
+
+              <div className="space-y-3 rounded-2xl border border-border/60 p-4">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-ink">Shared time slots</h4>
+                  <p className="text-sm text-ink-muted">
+                    Add all time windows here first, then reuse them across groups.
+                  </p>
+                </div>
+
+                {sessionDraft.slotTemplates.length === 0 ? (
+                  <p className="text-sm text-ink-muted">No shared slots yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {sessionDraft.slotTemplates.map((slot) => (
+                      <div
+                        key={slot.id}
+                        className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-surface-alt p-3"
+                      >
+                        <p className="text-sm font-medium text-ink">
+                          {formatDateTime(slot.startsAt)} - {formatDateTime(slot.endsAt)}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removeSessionSlotTemplate(slot.id)}
+                          aria-label={`Remove shared slot ${formatDateTime(slot.startsAt)} to ${formatDateTime(slot.endsAt)}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Field label="Start time" htmlFor={sessionStartTimeId}>
+                    <Input
+                      id={sessionStartTimeId}
+                      type="datetime-local"
+                      value={slotTemplateDraft.startsAt}
+                      onChange={(event) =>
+                        setSlotTemplateDraft((prev) => ({
+                          ...prev,
+                          startsAt: event.target.value,
+                        }))
+                      }
+                      name="sharedSlotStartTime"
+                    />
+                  </Field>
+                  <Field label="End time" htmlFor={sessionEndTimeId}>
+                    <Input
+                      id={sessionEndTimeId}
+                      type="datetime-local"
+                      value={slotTemplateDraft.endsAt}
+                      onChange={(event) =>
+                        setSlotTemplateDraft((prev) => ({
+                          ...prev,
+                          endsAt: event.target.value,
+                        }))
+                      }
+                      name="sharedSlotEndTime"
+                    />
+                  </Field>
+                </div>
+
+                <div className="flex justify-between gap-3">
+                  <Button size="sm" variant="outline" onClick={addSessionSlotTemplate}>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add shared slot
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={saveSessionSettings}
+                    loading={savingKey === "session-settings"}
+                  >
+                    Save poster session
+                  </Button>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="space-y-1">
@@ -551,6 +746,7 @@ export function PosterPlannerClient({
                       <div className="space-y-4 rounded-2xl border border-border/60 p-4">
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                           <Input
+                            id={`${plannerId}-new-group-${track.id}`}
                             value={newGroupNameByTrack[track.id] || ""}
                             onChange={(event) =>
                               setNewGroupNameByTrack((prev) => ({
@@ -558,14 +754,17 @@ export function PosterPlannerClient({
                                 [track.id]: event.target.value,
                               }))
                             }
-                            placeholder={`Create a new ${track.name} group`}
+                            placeholder={`Create a new ${track.name} group…`}
+                            aria-label={`Create a new group for ${track.name}`}
+                            name={`newGroup-${track.id}`}
+                            autoComplete="off"
                           />
                           <Button
                             size="sm"
                             onClick={() => createGroup(track.id)}
                             loading={savingKey === `create-${track.id}`}
                           >
-                            <Plus className="h-3.5 w-3.5" />
+                            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                             Create group
                           </Button>
                         </div>
@@ -586,8 +785,9 @@ export function PosterPlannerClient({
                           <p className="text-sm text-ink-muted">All accepted papers in this track are already grouped.</p>
                         ) : (
                           <>
-                            <Field label="Move selected papers to">
+                            <Field label="Move selected papers to" htmlFor={`${plannerId}-target-group-${track.id}`}>
                               <Select
+                                id={`${plannerId}-target-group-${track.id}`}
                                 value={selectedGroupByTrack[track.id] || ""}
                                 onChange={(event) =>
                                   setSelectedGroupByTrack((prev) => ({
@@ -595,6 +795,7 @@ export function PosterPlannerClient({
                                     [track.id]: event.target.value,
                                   }))
                                 }
+                                name={`targetGroup-${track.id}`}
                               >
                                 <option value="">Select a group</option>
                                 {trackGroups.map((group) => (
@@ -651,7 +852,7 @@ export function PosterPlannerClient({
                                 onClick={() => addSelectedPosters(track.id)}
                                 loading={savingKey === `members-${track.id}`}
                               >
-                                <Check className="h-3.5 w-3.5" />
+                                <Check className="h-3.5 w-3.5" aria-hidden="true" />
                                 Add selected papers
                               </Button>
                             </div>
@@ -703,7 +904,7 @@ export function PosterPlannerClient({
                           <span>{group.slots.length} slot(s)</span>
                           <span className="inline-flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
-                            {group.room || "Room not set"}
+                            {sessionSettings.room || group.room || "Room not set"}
                           </span>
                         </div>
                       </div>
@@ -727,11 +928,14 @@ export function PosterPlannerClient({
                     <section className="space-y-3 rounded-2xl border border-border/60 p-4">
                       <div className="space-y-1">
                         <h4 className="text-sm font-semibold text-ink">Step 2: Group setup</h4>
-                        <p className="text-sm text-ink-muted">Name the group clearly and set the room before assigning judges.</p>
+                        <p className="text-sm text-ink-muted">
+                          Name the group clearly. Room comes from the shared poster session above.
+                        </p>
                       </div>
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <Field label="Group name">
+                        <Field label="Group name" htmlFor={`${plannerId}-group-name-${group.id}`}>
                           <Input
+                            id={`${plannerId}-group-name-${group.id}`}
                             value={groupDrafts[group.id]?.name || ""}
                             onChange={(event) =>
                               setGroupDrafts((prev) => ({
@@ -742,21 +946,16 @@ export function PosterPlannerClient({
                                 },
                               }))
                             }
+                            name={`groupName-${group.id}`}
+                            autoComplete="off"
                           />
                         </Field>
-                        <Field label="Room">
+                        <Field label="Shared room" htmlFor={`${plannerId}-shared-room-${group.id}`}>
                           <Input
-                            value={groupDrafts[group.id]?.room || ""}
-                            onChange={(event) =>
-                              setGroupDrafts((prev) => ({
-                                ...prev,
-                                [group.id]: {
-                                  ...prev[group.id],
-                                  room: event.target.value,
-                                },
-                              }))
-                            }
-                            placeholder="e.g. Poster Hall A"
+                            id={`${plannerId}-shared-room-${group.id}`}
+                            value={sessionSettings.room || "Not set yet"}
+                            disabled
+                            name={`sharedRoom-${group.id}`}
                           />
                         </Field>
                       </div>
@@ -798,8 +997,9 @@ export function PosterPlannerClient({
                                 variant="ghost"
                                 onClick={() => removeMember(group.id, member.id)}
                                 loading={savingKey === `remove-member-${member.id}`}
+                                aria-label={`Remove paper ${member.paperCode || member.title} from ${group.name}`}
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                               </Button>
                             </div>
                           ))}
@@ -814,8 +1014,13 @@ export function PosterPlannerClient({
                       </div>
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         {[0, 1, 2].map((index) => (
-                          <Field key={index} label={`Judge ${index + 1}`}>
+                          <Field
+                            key={index}
+                            label={`Judge ${index + 1}`}
+                            htmlFor={`${plannerId}-judge-${group.id}-${index + 1}`}
+                          >
                             <Select
+                              id={`${plannerId}-judge-${group.id}-${index + 1}`}
                               value={judgeDraft[index] || ""}
                               onChange={(event) =>
                                 setJudgeDrafts((prev) => {
@@ -824,6 +1029,7 @@ export function PosterPlannerClient({
                                   return { ...prev, [group.id]: current };
                                 })
                               }
+                              name={`judge-${group.id}-${index + 1}`}
                             >
                               <option value="">Select judge</option>
                               {availableCommitteeUsers.map((committeeUser) => (
@@ -852,8 +1058,15 @@ export function PosterPlannerClient({
                           <CalendarRange className="h-4 w-4 text-ink-muted" />
                           <h4 className="text-sm font-semibold text-ink">Step 5: Plan time slots</h4>
                         </div>
-                        <p className="text-sm text-ink-muted">Add as many slots as this group needs. You can attach a specific judge per slot or leave it unassigned first.</p>
+                        <p className="text-sm text-ink-muted">
+                          Reuse the shared slots from the poster session. You can attach a specific judge per slot or leave it unassigned first.
+                        </p>
                       </div>
+                      {sessionSettings.slotTemplates.length === 0 ? (
+                        <Alert tone="danger">
+                          Add shared poster slots in Step 0 before assigning slots to groups.
+                        </Alert>
+                      ) : null}
                       {group.slots.length === 0 ? (
                         <p className="text-sm text-ink-muted">No slots added for this group yet.</p>
                       ) : (
@@ -881,8 +1094,9 @@ export function PosterPlannerClient({
                                 variant="ghost"
                                 onClick={() => deleteSlot(group.id, slot.id)}
                                 loading={savingKey === `delete-slot-${slot.id}`}
+                                aria-label={`Delete slot ${formatDateTime(slot.startsAt)} to ${formatDateTime(slot.endsAt)} from ${group.name}`}
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                               </Button>
                             </div>
                           ))}
@@ -890,32 +1104,38 @@ export function PosterPlannerClient({
                       )}
 
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <Field label="Start time">
-                          <Input
-                            type="datetime-local"
-                            value={slotDraft.startsAt}
-                            onChange={(event) =>
-                              setSlotDrafts((prev) => ({
-                                ...prev,
-                                [group.id]: { ...slotDraft, startsAt: event.target.value },
-                              }))
-                            }
-                          />
-                        </Field>
-                        <Field label="End time">
-                          <Input
-                            type="datetime-local"
-                            value={slotDraft.endsAt}
-                            onChange={(event) =>
-                              setSlotDrafts((prev) => ({
-                                ...prev,
-                                [group.id]: { ...slotDraft, endsAt: event.target.value },
-                              }))
-                            }
-                          />
-                        </Field>
-                        <Field label="Judge for this slot">
+                        <Field label="Shared slot" htmlFor={`${plannerId}-slot-template-${group.id}`}>
                           <Select
+                            id={`${plannerId}-slot-template-${group.id}`}
+                            value={slotDraft.templateId}
+                            onChange={(event) =>
+                              setSlotDrafts((prev) => ({
+                                ...prev,
+                                [group.id]: { ...slotDraft, templateId: event.target.value },
+                              }))
+                            }
+                            name={`slotTemplate-${group.id}`}
+                          >
+                            <option value="">Select a shared slot</option>
+                            {sessionSettings.slotTemplates.map((slot) => {
+                              const alreadyUsed = group.slots.some(
+                                (groupSlot) =>
+                                  groupSlot.startsAt === slot.startsAt &&
+                                  groupSlot.endsAt === slot.endsAt
+                              );
+
+                              return (
+                                <option key={slot.id} value={slot.id} disabled={alreadyUsed}>
+                                  {formatDateTime(slot.startsAt)} - {formatDateTime(slot.endsAt)}
+                                  {alreadyUsed ? " (already used)" : ""}
+                                </option>
+                              );
+                            })}
+                          </Select>
+                        </Field>
+                        <Field label="Judge for this slot" htmlFor={`${plannerId}-slot-judge-${group.id}`}>
+                          <Select
+                            id={`${plannerId}-slot-judge-${group.id}`}
                             value={slotDraft.judgeId}
                             onChange={(event) =>
                               setSlotDrafts((prev) => ({
@@ -923,6 +1143,7 @@ export function PosterPlannerClient({
                                 [group.id]: { ...slotDraft, judgeId: event.target.value },
                               }))
                             }
+                            name={`slotJudge-${group.id}`}
                           >
                             <option value="">Unassigned</option>
                             {group.judges.map((judge) => (
@@ -932,8 +1153,9 @@ export function PosterPlannerClient({
                             ))}
                           </Select>
                         </Field>
-                        <Field label="Slot status">
+                        <Field label="Slot status" htmlFor={`${plannerId}-slot-status-${group.id}`}>
                           <Select
+                            id={`${plannerId}-slot-status-${group.id}`}
                             value={slotDraft.status}
                             onChange={(event) =>
                               setSlotDrafts((prev) => ({
@@ -941,6 +1163,7 @@ export function PosterPlannerClient({
                                 [group.id]: { ...slotDraft, status: event.target.value },
                               }))
                             }
+                            name={`slotStatus-${group.id}`}
                           >
                             <option value="PLANNED">Planned</option>
                             <option value="CONFIRMED">Confirmed</option>
@@ -953,9 +1176,10 @@ export function PosterPlannerClient({
                           size="sm"
                           onClick={() => addSlot(group.id)}
                           loading={savingKey === `slot-${group.id}`}
+                          disabled={sessionSettings.slotTemplates.length === 0}
                         >
-                          <Plus className="h-3.5 w-3.5" />
-                          Add slot
+                          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                          Use shared slot
                         </Button>
                       </div>
                     </section>

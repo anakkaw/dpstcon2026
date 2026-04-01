@@ -6,10 +6,25 @@ import {
   posterGroupJudges,
   posterPresentationGroups,
   presentationAssignments,
+  settings,
   tracks,
   user,
   userRoles,
 } from "@/server/db/schema";
+
+const POSTER_SESSION_ROOM_KEY = "posterSessionRoom";
+const POSTER_SESSION_SLOTS_KEY = "posterSessionSlotTemplates";
+
+export interface PosterSessionSlotTemplate {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface PosterPlannerSessionSettings {
+  room: string;
+  slotTemplates: PosterSessionSlotTemplate[];
+}
 
 export interface PosterPlannerGroup {
   id: string;
@@ -48,6 +63,62 @@ export interface PosterPlannerPaper {
   author: { id: string; name: string };
 }
 
+function createSlotTemplateId(startsAt: string, endsAt: string) {
+  return `${startsAt}__${endsAt}`;
+}
+
+export async function getPosterSessionSettings(): Promise<PosterPlannerSessionSettings> {
+  const rows = await db
+    .select({
+      key: settings.key,
+      value: settings.value,
+    })
+    .from(settings)
+    .where(inArray(settings.key, [POSTER_SESSION_ROOM_KEY, POSTER_SESSION_SLOTS_KEY]));
+
+  const roomRow = rows.find((row) => row.key === POSTER_SESSION_ROOM_KEY);
+  const slotRow = rows.find((row) => row.key === POSTER_SESSION_SLOTS_KEY);
+
+  const room = typeof roomRow?.value === "string" ? roomRow.value : "";
+  const slotTemplates = Array.isArray(slotRow?.value)
+    ? slotRow.value
+        .map((item) => {
+          if (
+            !item ||
+            typeof item !== "object" ||
+            typeof item.startsAt !== "string" ||
+            typeof item.endsAt !== "string"
+          ) {
+            return null;
+          }
+
+          const startsAt = new Date(item.startsAt);
+          const endsAt = new Date(item.endsAt);
+          if (
+            Number.isNaN(startsAt.getTime()) ||
+            Number.isNaN(endsAt.getTime()) ||
+            startsAt >= endsAt
+          ) {
+            return null;
+          }
+
+          return {
+            id: createSlotTemplateId(item.startsAt, item.endsAt),
+            startsAt: item.startsAt,
+            endsAt: item.endsAt,
+          };
+        })
+        .filter((item): item is PosterSessionSlotTemplate => item !== null)
+        .sort(
+          (a, b) =>
+            new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() ||
+            new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime()
+        )
+    : [];
+
+  return { room, slotTemplates };
+}
+
 async function getScopedTrackIds(currentUser: ServerAuthUser) {
   if (hasRole(currentUser, "ADMIN")) {
     return null;
@@ -68,6 +139,7 @@ async function getScopedTrackIds(currentUser: ServerAuthUser) {
 
 export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
   const scopedTrackIds = await getScopedTrackIds(currentUser);
+  const sessionSettings = await getPosterSessionSettings();
 
   const groupWhere =
     scopedTrackIds === null
@@ -201,6 +273,7 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
   }));
 
   return {
+    sessionSettings,
     groups: mappedGroups,
     ungroupedPosters,
     committeeUsers,
@@ -208,6 +281,7 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
 }
 
 export async function getPosterGroupsForAuthor(authorId: string) {
+  const sessionSettings = await getPosterSessionSettings();
   const memberships = await db.query.posterGroupMembers.findMany({
     with: {
       group: {
@@ -245,7 +319,7 @@ export async function getPosterGroupsForAuthor(authorId: string) {
       paperCode: membership.submission.paperCode,
       groupId: membership.group.id,
       groupName: membership.group.name,
-      room: membership.group.room,
+      room: sessionSettings.room || membership.group.room,
       trackName: membership.group.track.name,
       judges: membership.group.judges
         .sort((a, b) => a.judgeOrder - b.judgeOrder)
@@ -263,6 +337,7 @@ export async function getPosterGroupsForAuthor(authorId: string) {
 }
 
 export async function getPosterGroupsForCommittee(committeeId: string) {
+  const sessionSettings = await getPosterSessionSettings();
   const judgeRows = await db.query.posterGroupJudges.findMany({
     where: eq(posterGroupJudges.judgeId, committeeId),
     with: {
@@ -296,7 +371,7 @@ export async function getPosterGroupsForCommittee(committeeId: string) {
   return judgeRows.map((row) => ({
     groupId: row.group.id,
     groupName: row.group.name,
-    room: row.group.room,
+    room: sessionSettings.room || row.group.room,
     trackName: row.group.track.name,
     judgeOrder: row.judgeOrder,
     members: row.group.members.map((member) => ({

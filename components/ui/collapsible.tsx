@@ -33,7 +33,7 @@ export function Collapsible({
         aria-controls={contentId}
         className={cn(
           "flex w-full items-center justify-between px-5 py-3.5 text-left text-sm font-semibold text-ink",
-          "hover:bg-gray-50 transition-colors duration-200",
+          "hover:bg-gray-50 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-inset",
           open && "bg-brand-50/50"
         )}
       >

@@ -9,6 +9,7 @@ import {
   posterGroupMembers,
   posterGroupSlots,
   posterPresentationGroups,
+  settings,
   submissions,
   tracks,
   user,
@@ -19,10 +20,16 @@ import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { hasRole } from "@/lib/permissions";
-import { getPosterPlannerPageData } from "@/server/poster-planner-data";
+import {
+  getPosterPlannerPageData,
+  getPosterSessionSettings,
+} from "@/server/poster-planner-data";
 import type { ServerAuthUser } from "@/server/auth-helpers";
 
 const app = new OpenAPIHono<AuthEnv>();
+
+const POSTER_SESSION_ROOM_KEY = "posterSessionRoom";
+const POSTER_SESSION_SLOTS_KEY = "posterSessionSlotTemplates";
 
 app.use("/*", authMiddleware);
 
@@ -96,6 +103,87 @@ function parseScheduledAt(value: string | null | undefined) {
   }
 
   return { value: parsed };
+}
+
+const posterSlotTemplateSchema = z.object({
+  startsAt: z.string(),
+  endsAt: z.string(),
+});
+
+const posterSessionSchema = z.object({
+  room: z.string().trim().max(100).nullable().optional(),
+  slotTemplates: z.array(posterSlotTemplateSchema).default([]),
+});
+
+function normalizePosterSlotTemplates(
+  templates: Array<{ startsAt: string; endsAt: string }>
+) {
+  return templates
+    .map((template) => {
+      const startsAt = new Date(template.startsAt);
+      const endsAt = new Date(template.endsAt);
+      if (
+        Number.isNaN(startsAt.getTime()) ||
+        Number.isNaN(endsAt.getTime()) ||
+        startsAt >= endsAt
+      ) {
+        return null;
+      }
+
+      return {
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+      };
+    })
+    .filter((template): template is { startsAt: string; endsAt: string } => template !== null)
+    .sort(
+      (a, b) =>
+        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() ||
+        new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime()
+    )
+    .filter((template, index, array) => {
+      if (index === 0) return true;
+      const previous = array[index - 1];
+      return (
+        previous.startsAt !== template.startsAt || previous.endsAt !== template.endsAt
+      );
+    });
+}
+
+async function savePosterSessionSettings(input: {
+  room?: string | null;
+  slotTemplates?: Array<{ startsAt: string; endsAt: string }>;
+}) {
+  const now = new Date();
+  const slotTemplates = normalizePosterSlotTemplates(input.slotTemplates ?? []);
+  const room = input.room?.trim() ?? "";
+
+  await Promise.all([
+    db
+      .insert(settings)
+      .values({
+        key: POSTER_SESSION_ROOM_KEY,
+        value: room,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: room, updatedAt: now },
+      }),
+    db
+      .insert(settings)
+      .values({
+        key: POSTER_SESSION_SLOTS_KEY,
+        value: slotTemplates,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: slotTemplates, updatedAt: now },
+      }),
+  ]);
+
+  return getPosterSessionSettings();
 }
 
 app.get("/", async (c) => {
@@ -392,13 +480,35 @@ app.get("/poster-planner", async (c) => {
   return c.json(data);
 });
 
+app.put("/poster-session", async (c) => {
+  const currentUser = c.get("user");
+  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const body = await c.req.json();
+  const parsed = posterSessionSchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const normalized = normalizePosterSlotTemplates(parsed.data.slotTemplates);
+  if (normalized.length !== parsed.data.slotTemplates.length) {
+    return c.json({ error: "Invalid slot template range" }, 400);
+  }
+
+  const sessionSettings = await savePosterSessionSettings({
+    room: parsed.data.room ?? "",
+    slotTemplates: parsed.data.slotTemplates,
+  });
+
+  return c.json({ sessionSettings });
+});
+
 app.post("/poster-groups", async (c) => {
   const currentUser = c.get("user");
   const body = await c.req.json();
   const schema = z.object({
     trackId: z.string().uuid(),
     name: z.string().trim().min(1).max(255),
-    room: z.string().trim().max(100).optional().nullable(),
   });
 
   const parsed = schema.safeParse(body);
@@ -413,7 +523,6 @@ app.post("/poster-groups", async (c) => {
     .values({
       trackId: parsed.data.trackId,
       name: parsed.data.name,
-      room: parsed.data.room ?? null,
     })
     .returning();
 
@@ -426,7 +535,6 @@ app.patch("/poster-groups/:groupId", async (c) => {
   const body = await c.req.json();
   const schema = z.object({
     name: z.string().trim().min(1).max(255).optional(),
-    room: z.string().trim().max(100).nullable().optional(),
   });
 
   const parsed = schema.safeParse(body);
@@ -603,6 +711,14 @@ app.post("/poster-groups/:groupId/slots", async (c) => {
     return c.json({ error: "Invalid slot range" }, 400);
   }
 
+  const sessionSettings = await getPosterSessionSettings();
+  const matchesTemplate = sessionSettings.slotTemplates.some(
+    (slot) => slot.startsAt === startsAt.toISOString() && slot.endsAt === endsAt.toISOString()
+  );
+  if (!matchesTemplate) {
+    return c.json({ error: "Slot must come from the shared poster session plan" }, 400);
+  }
+
   const group = await db.query.posterPresentationGroups.findFirst({
     where: eq(posterPresentationGroups.id, groupId),
     columns: { trackId: true },
@@ -624,6 +740,18 @@ app.post("/poster-groups/:groupId/slots", async (c) => {
     if (!assignedJudge) {
       return c.json({ error: "Judge must belong to the group" }, 400);
     }
+  }
+
+  const duplicateSlot = await db.query.posterGroupSlots.findFirst({
+    where: and(
+      eq(posterGroupSlots.groupId, groupId),
+      eq(posterGroupSlots.startsAt, startsAt),
+      eq(posterGroupSlots.endsAt, endsAt)
+    ),
+    columns: { id: true },
+  });
+  if (duplicateSlot) {
+    return c.json({ error: "This shared slot is already assigned to the group" }, 400);
   }
 
   const [lastSlot] = await db
@@ -683,6 +811,14 @@ app.patch("/poster-groups/:groupId/slots/:slotId", async (c) => {
     return c.json({ error: "Invalid slot range" }, 400);
   }
 
+  const sessionSettings = await getPosterSessionSettings();
+  const matchesTemplate = sessionSettings.slotTemplates.some(
+    (slot) => slot.startsAt === startsAt.toISOString() && slot.endsAt === endsAt.toISOString()
+  );
+  if (!matchesTemplate) {
+    return c.json({ error: "Slot must come from the shared poster session plan" }, 400);
+  }
+
   if (parsed.data.judgeId) {
     const assignedJudge = await db.query.posterGroupJudges.findFirst({
       where: and(
@@ -695,6 +831,18 @@ app.patch("/poster-groups/:groupId/slots/:slotId", async (c) => {
     if (!assignedJudge) {
       return c.json({ error: "Judge must belong to the group" }, 400);
     }
+  }
+
+  const duplicateSlot = await db.query.posterGroupSlots.findFirst({
+    where: and(
+      eq(posterGroupSlots.groupId, groupId),
+      eq(posterGroupSlots.startsAt, startsAt),
+      eq(posterGroupSlots.endsAt, endsAt)
+    ),
+    columns: { id: true },
+  });
+  if (duplicateSlot && duplicateSlot.id !== slotId) {
+    return c.json({ error: "This shared slot is already assigned to the group" }, 400);
   }
 
   const [updated] = await db

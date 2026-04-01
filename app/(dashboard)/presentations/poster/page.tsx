@@ -23,6 +23,7 @@ export default async function PosterPresentationPage() {
     return (
       <PosterPlannerClient
         mode="admin"
+        initialSessionSettings={data.sessionSettings}
         initialGroups={data.groups}
         initialUngroupedPosters={data.ungroupedPosters}
         initialCommitteeUsers={data.committeeUsers}

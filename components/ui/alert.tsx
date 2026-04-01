@@ -43,9 +43,10 @@ export function Alert({ tone = "info", title, children, className }: AlertProps)
         className
       )}
       role="alert"
+      aria-live="polite"
     >
       <div className="shrink-0 mt-0.5">
-        <Icon className={cn("h-5 w-5", iconStyles[tone])} />
+        <Icon className={cn("h-5 w-5", iconStyles[tone])} aria-hidden="true" />
       </div>
       <div>
         {title && <p className="font-semibold mb-0.5">{title}</p>}
