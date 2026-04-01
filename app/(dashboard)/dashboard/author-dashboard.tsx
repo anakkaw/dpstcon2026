@@ -21,6 +21,7 @@ import { formatDate } from "@/lib/utils";
 interface AuthorSubmission {
   id: string;
   title: string;
+  paperCode?: string | null;
   status: string;
   hasFile: boolean;
   trackName: string | null;
@@ -30,6 +31,7 @@ interface AuthorSubmission {
 
 interface AuthorPresentation {
   submissionId: string;
+  paperCode?: string | null;
   type: string;
   status: string;
   scheduledAt: string | null;
@@ -76,6 +78,7 @@ export default function AuthorDashboard({ stats }: { stats: Record<string, unkno
   const presWithTitle = presentations.map((p) => ({
     ...p,
     title: subs.find((s) => s.id === p.submissionId)?.title || "",
+    paperCode: p.paperCode || subs.find((s) => s.id === p.submissionId)?.paperCode || null,
   }));
 
   return (
@@ -155,6 +158,7 @@ export default function AuthorDashboard({ stats }: { stats: Record<string, unkno
               >
                 <div>
                   <p className="text-sm font-semibold text-ink">{p.title}</p>
+                  {p.paperCode && <p className="mt-1 font-mono text-xs text-brand-600">{p.paperCode}</p>}
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <Badge tone={p.type === "ORAL" ? "info" : "neutral"}>
                       {p.type === "ORAL" ? t("dashboard.oralPresentation") : t("dashboard.poster")}

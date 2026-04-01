@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -140,7 +140,7 @@ export function AdminTracksClient({
     return displayNameEn(u) || u.name || u.email;
   }
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     if (!search) return tracks;
     const q = search.toLowerCase();
     return tracks.filter(
@@ -149,7 +149,7 @@ export function AdminTracksClient({
         (track.description?.toLowerCase().includes(q)) ||
         (track.head && displayUser(track.head).toLowerCase().includes(q))
     );
-  }, [tracks, search, locale]);
+  })();
 
   return (
     <div className="space-y-6">

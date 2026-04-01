@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
-import { PresentationsClient } from "@/app/(dashboard)/presentations/presentations-client";
+import { PosterPlannerClient } from "@/app/(dashboard)/presentations/poster/poster-planner-client";
 import { getServerAuthContext } from "@/server/auth-helpers";
-import { getPresentationPageData } from "@/server/presentation-data";
+import {
+  getPosterGroupsForAuthor,
+  getPosterGroupsForCommittee,
+  getPosterPlannerPageData,
+} from "@/server/poster-planner-data";
+import { hasRole } from "@/lib/permissions";
 
 export default async function PosterPresentationPage() {
   const authContext = await getServerAuthContext();
@@ -10,14 +15,30 @@ export default async function PosterPresentationPage() {
     redirect("/login");
   }
 
-  const data = await getPresentationPageData(authContext.user, "POSTER");
+  const currentUser = authContext.user;
 
-  return (
-    <PresentationsClient
-      type="POSTER"
-      initialPresentations={data.presentations}
-      initialCriteria={data.criteria}
-      initialCommitteeUsers={data.committeeUsers}
-    />
-  );
+  if (hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+    const data = await getPosterPlannerPageData(currentUser);
+
+    return (
+      <PosterPlannerClient
+        mode="admin"
+        initialGroups={data.groups}
+        initialUngroupedPosters={data.ungroupedPosters}
+        initialCommitteeUsers={data.committeeUsers}
+      />
+    );
+  }
+
+  if (hasRole(currentUser, "AUTHOR")) {
+    const authorGroups = await getPosterGroupsForAuthor(currentUser.id);
+    return <PosterPlannerClient mode="author" authorGroups={authorGroups} />;
+  }
+
+  if (hasRole(currentUser, "COMMITTEE")) {
+    const committeeGroups = await getPosterGroupsForCommittee(currentUser.id);
+    return <PosterPlannerClient mode="committee" committeeGroups={committeeGroups} />;
+  }
+
+  redirect("/presentations/oral");
 }

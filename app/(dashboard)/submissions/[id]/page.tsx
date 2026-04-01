@@ -216,6 +216,7 @@ export default async function SubmissionDetailPage({
       presentations={presRows.map((p) => ({
         type: p.type,
         status: p.status,
+        paperCode: submission.paperCode,
         scheduledAt: p.scheduledAt?.toISOString() || null,
         room: p.room,
         duration: p.duration,

@@ -104,6 +104,12 @@ export const presentationAssignmentStatusEnum = pgEnum(
   ["PENDING", "SCHEDULED", "COMPLETED"]
 );
 
+export const posterSlotStatusEnum = pgEnum("poster_slot_status", [
+  "PLANNED",
+  "CONFIRMED",
+  "COMPLETED",
+]);
+
 export const outgoingEmailStatusEnum = pgEnum("outgoing_email_status", [
   "PENDING",
   "SENT",
@@ -254,6 +260,7 @@ export const submissions = pgTable(
     keywords: varchar("keywords", { length: 500 }),
     keywordsEn: varchar("keywords_en", { length: 500 }),
     status: submissionStatusEnum("status").default("DRAFT").notNull(),
+    paperCode: varchar("paper_code", { length: 32 }),
     fileUrl: varchar("file_url", { length: 1000 }),
     cameraReadyUrl: varchar("camera_ready_url", { length: 1000 }),
     trackId: uuid("track_id").references(() => tracks.id),
@@ -274,6 +281,7 @@ export const submissions = pgTable(
     index("submissions_author_idx").on(table.authorId),
     index("submissions_track_idx").on(table.trackId),
     index("submissions_advisor_token_idx").on(table.advisorApprovalToken),
+    uniqueIndex("submissions_paper_code_unique").on(table.paperCode),
   ]
 );
 
@@ -514,6 +522,95 @@ export const presentationCommitteeAssignments = pgTable(
   ]
 );
 
+export const posterPresentationGroups = pgTable(
+  "poster_presentation_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    trackId: uuid("track_id")
+      .references(() => tracks.id, { onDelete: "cascade" })
+      .notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    room: varchar("room", { length: 100 }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("poster_groups_track_idx").on(table.trackId),
+    uniqueIndex("poster_groups_track_name_unique").on(table.trackId, table.name),
+  ]
+);
+
+export const posterGroupMembers = pgTable(
+  "poster_group_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .references(() => posterPresentationGroups.id, { onDelete: "cascade" })
+      .notNull(),
+    submissionId: uuid("submission_id")
+      .references(() => submissions.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("poster_group_members_group_idx").on(table.groupId),
+    uniqueIndex("poster_group_members_submission_unique").on(table.submissionId),
+    uniqueIndex("poster_group_members_group_submission_unique").on(
+      table.groupId,
+      table.submissionId
+    ),
+  ]
+);
+
+export const posterGroupJudges = pgTable(
+  "poster_group_judges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .references(() => posterPresentationGroups.id, { onDelete: "cascade" })
+      .notNull(),
+    judgeId: text("judge_id")
+      .references(() => user.id, { onDelete: "cascade" })
+      .notNull(),
+    judgeOrder: integer("judge_order").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("poster_group_judges_group_idx").on(table.groupId),
+    index("poster_group_judges_judge_idx").on(table.judgeId),
+    uniqueIndex("poster_group_judges_group_judge_unique").on(
+      table.groupId,
+      table.judgeId
+    ),
+    uniqueIndex("poster_group_judges_group_order_unique").on(
+      table.groupId,
+      table.judgeOrder
+    ),
+  ]
+);
+
+export const posterGroupSlots = pgTable(
+  "poster_group_slots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .references(() => posterPresentationGroups.id, { onDelete: "cascade" })
+      .notNull(),
+    judgeId: text("judge_id").references(() => user.id, { onDelete: "set null" }),
+    startsAt: timestamp("starts_at").notNull(),
+    endsAt: timestamp("ends_at").notNull(),
+    status: posterSlotStatusEnum("status").default("PLANNED").notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("poster_group_slots_group_idx").on(table.groupId),
+    index("poster_group_slots_judge_idx").on(table.judgeId),
+  ]
+);
+
 export const presentationCriteria = pgTable("presentation_criteria", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -633,6 +730,7 @@ export const submissionsRelations = relations(
     reviewAssignments: many(reviewAssignments),
     discussions: many(discussions),
     files: many(storedFiles),
+    posterGroupMemberships: many(posterGroupMembers),
   })
 );
 
@@ -711,6 +809,61 @@ export const presentationCommitteeRelations = relations(
     }),
     judge: one(user, {
       fields: [presentationCommitteeAssignments.judgeId],
+      references: [user.id],
+    }),
+  })
+);
+
+export const posterPresentationGroupsRelations = relations(
+  posterPresentationGroups,
+  ({ one, many }) => ({
+    track: one(tracks, {
+      fields: [posterPresentationGroups.trackId],
+      references: [tracks.id],
+    }),
+    members: many(posterGroupMembers),
+    judges: many(posterGroupJudges),
+    slots: many(posterGroupSlots),
+  })
+);
+
+export const posterGroupMembersRelations = relations(
+  posterGroupMembers,
+  ({ one }) => ({
+    group: one(posterPresentationGroups, {
+      fields: [posterGroupMembers.groupId],
+      references: [posterPresentationGroups.id],
+    }),
+    submission: one(submissions, {
+      fields: [posterGroupMembers.submissionId],
+      references: [submissions.id],
+    }),
+  })
+);
+
+export const posterGroupJudgesRelations = relations(
+  posterGroupJudges,
+  ({ one }) => ({
+    group: one(posterPresentationGroups, {
+      fields: [posterGroupJudges.groupId],
+      references: [posterPresentationGroups.id],
+    }),
+    judge: one(user, {
+      fields: [posterGroupJudges.judgeId],
+      references: [user.id],
+    }),
+  })
+);
+
+export const posterGroupSlotsRelations = relations(
+  posterGroupSlots,
+  ({ one }) => ({
+    group: one(posterPresentationGroups, {
+      fields: [posterGroupSlots.groupId],
+      references: [posterPresentationGroups.id],
+    }),
+    judge: one(user, {
+      fields: [posterGroupSlots.judgeId],
       references: [user.id],
     }),
   })

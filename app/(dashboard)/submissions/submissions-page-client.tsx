@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
 import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { TrackFilter } from "@/components/track-filter";
+import { Alert } from "@/components/ui/alert";
 import { getSubmissionStatusLabels, SUBMISSION_STATUS_COLORS } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { formatDate, truncate } from "@/lib/utils";
@@ -24,6 +26,7 @@ import { getNextAction } from "@/lib/author-utils";
 
 export interface SubmissionData {
   id: string;
+  paperCode?: string | null;
   title: string;
   abstract: string | null;
   status: string;
@@ -46,10 +49,16 @@ export function SubmissionsPageClient({
   const { roles } = useDashboardAuth();
   const isAdmin = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
 
-  const [submissions] = useState<SubmissionData[]>(initialSubmissions);
+  const [submissions, setSubmissions] = useState<SubmissionData[]>(initialSubmissions);
   const [trackFilter, setTrackFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
+  const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
+  const [paperCodeDraft, setPaperCodeDraft] = useState("");
+  const [savingPaperCode, setSavingPaperCode] = useState(false);
+  const [generatingCodes, setGeneratingCodes] = useState(false);
 
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -57,6 +66,72 @@ export function SubmissionsPageClient({
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
+  }
+
+  async function savePaperCode(submissionId: string) {
+    setSavingPaperCode(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/submissions/${submissionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paperCode: paperCodeDraft.toUpperCase() }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessageTone("danger");
+        setMessage(data?.error || "Unable to save Paper ID");
+        return;
+      }
+
+      setSubmissions((prev) =>
+        prev.map((submission) =>
+          submission.id === submissionId
+            ? { ...submission, paperCode: data.submission.paperCode }
+            : submission
+        )
+      );
+      setEditingPaperId(null);
+      setPaperCodeDraft("");
+      setMessageTone("success");
+      setMessage("Paper ID updated");
+    } finally {
+      setSavingPaperCode(false);
+    }
+  }
+
+  async function generatePaperCodes() {
+    setGeneratingCodes(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/submissions/paper-codes/generate", {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessageTone("danger");
+        setMessage(data?.error || "Unable to generate Paper IDs");
+        return;
+      }
+
+      if (Array.isArray(data?.updated)) {
+        const updatedMap = new Map<string, string>(
+          data.updated.map((row: { id: string; paperCode: string }) => [row.id, row.paperCode])
+        );
+        setSubmissions((prev) =>
+          prev.map((submission) => ({
+            ...submission,
+            paperCode: updatedMap.get(submission.id) || submission.paperCode,
+          }))
+        );
+      }
+
+      setMessageTone("success");
+      setMessage(`Generated ${data?.count || 0} Paper ID(s)`);
+    } finally {
+      setGeneratingCodes(false);
+    }
   }
 
   const statusCounts: Record<string, number> = {};
@@ -167,11 +242,18 @@ export function SubmissionsPageClient({
         title={t("submissions.submissions")}
         subtitle={t("submissions.managementSubtitle", { n: totalFiltered })}
         action={
-          <a href="/api/exports/proceedings?format=csv" download>
-            <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />{t("common.exportCSV")}</Button>
-          </a>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={generatePaperCodes} loading={generatingCodes}>
+              <CheckCircle2 className="h-3.5 w-3.5" />Generate Paper IDs
+            </Button>
+            <a href="/api/exports/proceedings?format=csv" download>
+              <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />{t("common.exportCSV")}</Button>
+            </a>
+          </div>
         }
       />
+
+      {message && <Alert tone={messageTone}>{message}</Alert>}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <SummaryStatCard label={t("common.total")} value={totalFiltered} icon={<FileText className="h-5 w-5" />} color="blue" />
@@ -254,6 +336,7 @@ export function SubmissionsPageClient({
                       </div>
 
                       <div className="flex flex-wrap gap-2">
+                        {sub.paperCode && <Badge>{sub.paperCode}</Badge>}
                         {sub.track && <Badge tone="info">{sub.track.name}</Badge>}
                         <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"} dot>
                           {statusLabels[sub.status] || sub.status}
@@ -307,6 +390,7 @@ export function SubmissionsPageClient({
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-border/60">
                     <th className="w-12 px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">#</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">Paper ID</th>
                     <SortTh label={t("submissions.title")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%]" />
                     <SortTh label={t("submissions.author")} sortKey_="author" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                     <SortTh label={t("submissions.track")} sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
@@ -323,6 +407,34 @@ export function SubmissionsPageClient({
                     return (
                       <tr key={sub.id} className="border-t border-border/40 hover:bg-blue-50/30 transition-colors group">
                         <td className="px-4 py-3.5 text-xs text-ink-muted font-medium">{idx + 1}</td>
+                        <td className="px-4 py-3.5">
+                          {editingPaperId === sub.id ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={paperCodeDraft}
+                                onChange={(event) => setPaperCodeDraft(event.target.value.toUpperCase())}
+                                className="min-w-[120px]"
+                              />
+                              <Button size="sm" onClick={() => savePaperCode(sub.id)} loading={savingPaperCode}>
+                                Save
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingPaperId(null)}>
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="font-mono text-xs font-semibold text-brand-700 hover:text-brand-800"
+                              onClick={() => {
+                                setEditingPaperId(sub.id);
+                                setPaperCodeDraft(sub.paperCode || "");
+                              }}
+                            >
+                              {sub.paperCode || "Set ID"}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-4 py-3.5">
                           <Link href={`/submissions/${sub.id}`} className="group/link">
                             <p className="font-medium text-ink leading-snug line-clamp-2 group-hover/link:text-brand-600 transition-colors">{sub.title}</p>

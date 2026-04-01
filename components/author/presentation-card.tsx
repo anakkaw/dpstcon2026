@@ -10,6 +10,7 @@ import { Mic, Image as ImageIcon, MapPin, Clock, Award } from "lucide-react";
 interface PresentationData {
   type: string;
   status: string;
+  paperCode?: string | null;
   scheduledAt?: string | null;
   room?: string | null;
   duration?: number | null;
@@ -55,6 +56,7 @@ export function PresentationCard({ presentations, criteria }: PresentationCardPr
                 <Badge tone={pres.type === "ORAL" ? "info" : "neutral"}>
                   {pres.type === "ORAL" ? t("presentations.oral") : t("presentations.poster")}
                 </Badge>
+                {pres.paperCode && <Badge>{pres.paperCode}</Badge>}
                 <Badge tone={pres.status === "SCHEDULED" ? "success" : "warning"}>
                   {pres.status === "SCHEDULED" ? t("presentations.statusScheduled") : pres.status === "COMPLETED" ? t("presentations.completedStatus") : t("presentations.statusPending")}
                 </Badge>

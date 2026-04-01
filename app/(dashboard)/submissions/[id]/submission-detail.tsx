@@ -36,6 +36,7 @@ import {
 interface Props {
   submission: {
     id: string;
+    paperCode?: string | null;
     title: string;
     abstract: string | null;
     keywords: string | null;
@@ -86,6 +87,7 @@ interface Props {
   presentations?: {
     type: string;
     status: string;
+    paperCode?: string | null;
     scheduledAt: string | null;
     room: string | null;
     duration: number | null;
@@ -257,6 +259,7 @@ export function SubmissionDetail({
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-ink tracking-tight">{submission.title}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2.5">
+            {submission.paperCode && <Badge>{submission.paperCode}</Badge>}
             <Badge tone={SUBMISSION_STATUS_COLORS[submission.status] || "neutral"}>
               {SUBMISSION_STATUS_LABELS[submission.status] || submission.status}
             </Badge>

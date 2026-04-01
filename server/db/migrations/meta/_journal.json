@@ -43,6 +43,13 @@
       "when": 1774601763134,
       "tag": "0005_overconfident_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1775054623871,
+      "tag": "0006_glossy_morph",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,7 @@ interface ScoringPresentation {
   status: string;
   submission: {
     id: string;
+    paperCode?: string | null;
     title: string;
     author: {
       name: string;
@@ -84,6 +85,8 @@ export function PresentationsClient({
 
   const title = type === "ORAL" ? t("presentations.oral") : t("presentations.poster");
   const TitleIcon = type === "ORAL" ? Mic : ImageIcon;
+  const presentationLabel = (presentation: PresentationData | ScoringPresentation) =>
+    `${presentation.submission.paperCode || "NO-CODE"} · ${presentation.submission.title}`;
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -322,7 +325,7 @@ export function PresentationsClient({
                   <CardBody className="space-y-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-base font-semibold text-ink">{presentation.submission.title}</p>
+                        <p className="text-base font-semibold text-ink">{presentationLabel(presentation)}</p>
                         <p className="mt-1 text-sm text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
                       </div>
                       <Badge tone={presentation.status === "SCHEDULED" ? "success" : "warning"} dot>
@@ -406,7 +409,7 @@ export function PresentationsClient({
                         <Fragment key={presentation.id}>
                           <tr className="group border-t border-border/40 transition-colors hover:bg-surface-hover/50">
                             <td className="px-5 py-3.5">
-                              <p className="leading-snug font-medium text-ink">{presentation.submission.title}</p>
+                              <p className="leading-snug font-medium text-ink">{presentationLabel(presentation)}</p>
                               <p className="mt-0.5 text-xs text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
                             </td>
                             <td className="px-4 py-3.5">
@@ -588,7 +591,7 @@ export function PresentationsClient({
                   <CardBody className="space-y-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-base font-semibold text-ink">{presentation.submission.title}</p>
+                        <p className="text-base font-semibold text-ink">{presentationLabel(presentation)}</p>
                         <p className="mt-1 text-sm text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
                       </div>
                       {presentation.submission.track && <Badge tone="info">{presentation.submission.track.name}</Badge>}
@@ -680,7 +683,7 @@ export function PresentationsClient({
                         <Fragment key={presentation.id}>
                           <tr className="group border-t border-border/40 transition-colors hover:bg-surface-hover/50">
                             <td className="px-5 py-3.5">
-                              <p className="leading-snug font-medium text-ink">{presentation.submission.title}</p>
+                              <p className="leading-snug font-medium text-ink">{presentationLabel(presentation)}</p>
                               <p className="mt-0.5 text-xs text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
                             </td>
                             <td className="px-4 py-3.5">
@@ -787,7 +790,7 @@ export function PresentationsClient({
                     <div key={presentation.id} className="rounded-xl border border-border/60 bg-surface-alt p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-base font-semibold text-ink">{presentation.submission.title}</p>
+                          <p className="text-base font-semibold text-ink">{presentationLabel(presentation)}</p>
                           <p className="mt-1 text-sm text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
                         </div>
                         {presentation.submission.track && <Badge tone="info">{presentation.submission.track.name}</Badge>}
@@ -825,7 +828,7 @@ export function PresentationsClient({
                       const average = avgScore(presentation.evaluations);
                       return (
                         <tr key={presentation.id} className="border-t border-border/40 transition-colors hover:bg-surface-hover/50">
-                          <td className="px-5 py-3.5 font-medium text-ink">{presentation.submission.title}</td>
+                          <td className="px-5 py-3.5 font-medium text-ink">{presentationLabel(presentation)}</td>
                           <td className="px-4 py-3.5 text-ink-light">{displayNameTh(presentation.submission.author)}</td>
                           <td className="px-4 py-3.5">
                             {presentation.submission.track ? <Badge tone="info">{presentation.submission.track.name}</Badge> : <span className="text-ink-muted">—</span>}

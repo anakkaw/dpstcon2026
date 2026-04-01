@@ -13,6 +13,7 @@ import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { hasRole } from "@/lib/permissions";
 import { isDuplicateReviewRound } from "@/server/access-policies";
+import { ensureSubmissionPaperCode } from "@/server/paper-code-service";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -350,6 +351,10 @@ app.post("/decisions", async (c) => {
     .update(submissions)
     .set({ status: newStatus as typeof submissions.$inferInsert.status, updatedAt: new Date() })
     .where(eq(submissions.id, data.submissionId));
+
+  if (newStatus === "CAMERA_READY_PENDING") {
+    await ensureSubmissionPaperCode(data.submissionId);
+  }
 
   // Auto-create presentations when accepted
   if (data.outcome === "ACCEPT" || data.outcome === "CONDITIONAL_ACCEPT") {

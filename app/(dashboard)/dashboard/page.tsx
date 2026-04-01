@@ -29,6 +29,7 @@ export default async function DashboardPage() {
         where: eq(submissions.authorId, currentUser.id),
         columns: {
           id: true,
+          paperCode: true,
           title: true,
           status: true,
           fileUrl: true,
@@ -75,8 +76,10 @@ export default async function DashboardPage() {
               scheduledAt: presentationAssignments.scheduledAt,
               room: presentationAssignments.room,
               duration: presentationAssignments.duration,
+              paperCode: submissions.paperCode,
             })
             .from(presentationAssignments)
+            .innerJoin(submissions, eq(presentationAssignments.submissionId, submissions.id))
             .where(sql`${presentationAssignments.submissionId} IN ${subIds}`),
         ])
       : [[], []] as [typeof decisions.$inferSelect[], typeof presentationAssignments.$inferSelect[]];
@@ -102,6 +105,7 @@ export default async function DashboardPage() {
       byStatus,
       submissions: mySubmissions.map((s) => ({
         id: s.id,
+        paperCode: s.paperCode,
         title: s.title,
         status: s.status,
         hasFile: !!s.fileUrl,

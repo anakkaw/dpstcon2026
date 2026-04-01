@@ -13,6 +13,11 @@ import {
   getAllowedDiscussionVisibilities,
   type SubmissionAccessFlags,
 } from "@/server/access-policies";
+import {
+  ensureSubmissionPaperCode,
+  generateMissingPaperCodes,
+  isPaperCodeAvailable,
+} from "@/server/paper-code-service";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -370,6 +375,7 @@ app.patch("/:id", async (c) => {
     trackId: z.string().uuid().optional(),
     advisorEmail: z.string().email().optional(),
     advisorName: z.string().optional(),
+    paperCode: z.string().trim().min(1).max(32).optional(),
     status: z.enum([
       "DRAFT", "ADVISOR_APPROVAL_PENDING", "SUBMITTED", "UNDER_REVIEW",
       "REVISION_REQUIRED", "REBUTTAL", "ACCEPTED", "REJECTED",
@@ -390,14 +396,44 @@ app.patch("/:id", async (c) => {
   if (parsed.data.status && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
     return c.json({ error: "Forbidden — only chairs can change status" }, 403);
   }
+  if (parsed.data.paperCode && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+    return c.json({ error: "Forbidden — only chairs can change Paper ID" }, 403);
+  }
+
+  const normalizedPaperCode = parsed.data.paperCode?.toUpperCase();
+  if (normalizedPaperCode) {
+    const isAvailable = await isPaperCodeAvailable(normalizedPaperCode, id);
+    if (!isAvailable) {
+      return c.json({ error: "Paper ID นี้ถูกใช้งานแล้ว" }, 409);
+    }
+  }
 
   const [updated] = await db
     .update(submissions)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...parsed.data, paperCode: normalizedPaperCode, updatedAt: new Date() })
     .where(eq(submissions.id, id))
     .returning();
 
+  if (
+    updated &&
+    ["ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"].includes(updated.status) &&
+    !updated.paperCode
+  ) {
+    updated.paperCode = await ensureSubmissionPaperCode(updated.id);
+  }
+
   return c.json({ submission: updated });
+});
+
+app.post("/paper-codes/generate", async (c) => {
+  const currentUser = c.get("user");
+
+  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const updated = await generateMissingPaperCodes();
+  return c.json({ updated, count: updated.length });
 });
 
 // POST /api/submissions/:id/submit

@@ -5,8 +5,13 @@ import {
   presentationCommitteeAssignments,
   presentationCriteria,
   presentationEvaluations,
+  posterGroupJudges,
+  posterGroupMembers,
+  posterGroupSlots,
+  posterPresentationGroups,
   submissions,
   tracks,
+  user,
   userRoles,
 } from "@/server/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
@@ -14,6 +19,8 @@ import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { hasRole } from "@/lib/permissions";
+import { getPosterPlannerPageData } from "@/server/poster-planner-data";
+import type { ServerAuthUser } from "@/server/auth-helpers";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -62,6 +69,20 @@ async function canManagePresentation(
 
   if (!presentation) return false;
   return canManageSubmissionPresentation(currentUser, presentation.submissionId);
+}
+
+async function canManageTrack(
+  currentUser: AuthEnv["Variables"]["user"],
+  trackId: string
+) {
+  if (hasRole(currentUser, "ADMIN")) return true;
+
+  const track = await db.query.tracks.findFirst({
+    where: eq(tracks.id, trackId),
+    columns: { headUserId: true },
+  });
+
+  return track?.headUserId === currentUser.id;
 }
 
 function parseScheduledAt(value: string | null | undefined) {
@@ -165,7 +186,7 @@ app.get("/", async (c) => {
     where: whereClause,
     with: {
       submission: {
-        columns: { id: true, title: true },
+        columns: { id: true, paperCode: true, title: true },
         with: {
           author: { columns: { id: true, name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
           track: { columns: { id: true, name: true } },
@@ -360,6 +381,357 @@ app.patch("/:id/committee", async (c) => {
   return c.json({ ok: true, count: judgeIds.length });
 });
 
+app.get("/poster-planner", async (c) => {
+  const currentUser = c.get("user");
+
+  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "AUTHOR", "COMMITTEE")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const data = await getPosterPlannerPageData(currentUser as ServerAuthUser);
+  return c.json(data);
+});
+
+app.post("/poster-groups", async (c) => {
+  const currentUser = c.get("user");
+  const body = await c.req.json();
+  const schema = z.object({
+    trackId: z.string().uuid(),
+    name: z.string().trim().min(1).max(255),
+    room: z.string().trim().max(100).optional().nullable(),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  if (!(await canManageTrack(currentUser, parsed.data.trackId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const [group] = await db
+    .insert(posterPresentationGroups)
+    .values({
+      trackId: parsed.data.trackId,
+      name: parsed.data.name,
+      room: parsed.data.room ?? null,
+    })
+    .returning();
+
+  return c.json({ group }, 201);
+});
+
+app.patch("/poster-groups/:groupId", async (c) => {
+  const currentUser = c.get("user");
+  const { groupId } = c.req.param();
+  const body = await c.req.json();
+  const schema = z.object({
+    name: z.string().trim().min(1).max(255).optional(),
+    room: z.string().trim().max(100).nullable().optional(),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const group = await db.query.posterPresentationGroups.findFirst({
+    where: eq(posterPresentationGroups.id, groupId),
+    columns: { trackId: true },
+  });
+
+  if (!group) return c.json({ error: "Not found" }, 404);
+  if (!(await canManageTrack(currentUser, group.trackId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const [updated] = await db
+    .update(posterPresentationGroups)
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(eq(posterPresentationGroups.id, groupId))
+    .returning();
+
+  return c.json({ group: updated });
+});
+
+app.post("/poster-groups/:groupId/members", async (c) => {
+  const currentUser = c.get("user");
+  const { groupId } = c.req.param();
+  const body = await c.req.json();
+  const schema = z.object({
+    submissionIds: z.array(z.string().uuid()).min(1),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const group = await db.query.posterPresentationGroups.findFirst({
+    where: eq(posterPresentationGroups.id, groupId),
+    columns: { id: true, trackId: true },
+  });
+
+  if (!group) return c.json({ error: "Not found" }, 404);
+  if (!(await canManageTrack(currentUser, group.trackId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const targetSubmissions = await db.query.submissions.findMany({
+    where: inArray(submissions.id, parsed.data.submissionIds),
+    columns: { id: true, trackId: true, status: true },
+  });
+
+  const acceptedStatuses = new Set(["ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"]);
+  const invalidSubmission = targetSubmissions.find(
+    (submission) =>
+      submission.trackId !== group.trackId || !acceptedStatuses.has(submission.status)
+  );
+
+  if (invalidSubmission) {
+    return c.json({ error: "Invalid poster selection" }, 400);
+  }
+
+  const existingMembers = await db.query.posterGroupMembers.findMany({
+    where: inArray(posterGroupMembers.submissionId, parsed.data.submissionIds),
+    columns: { submissionId: true },
+  });
+
+  const existingSubmissionIds = new Set(existingMembers.map((member) => member.submissionId));
+  const values = parsed.data.submissionIds
+    .filter((submissionId) => !existingSubmissionIds.has(submissionId))
+    .map((submissionId) => ({ groupId, submissionId }));
+
+  if (values.length > 0) {
+    await db.insert(posterGroupMembers).values(values);
+  }
+
+  return c.json({ ok: true, count: values.length });
+});
+
+app.delete("/poster-groups/:groupId/members/:memberId", async (c) => {
+  const currentUser = c.get("user");
+  const { groupId, memberId } = c.req.param();
+
+  const group = await db.query.posterPresentationGroups.findFirst({
+    where: eq(posterPresentationGroups.id, groupId),
+    columns: { trackId: true },
+  });
+
+  if (!group) return c.json({ error: "Not found" }, 404);
+  if (!(await canManageTrack(currentUser, group.trackId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  await db
+    .delete(posterGroupMembers)
+    .where(and(eq(posterGroupMembers.id, memberId), eq(posterGroupMembers.groupId, groupId)));
+
+  return c.json({ ok: true });
+});
+
+app.put("/poster-groups/:groupId/judges", async (c) => {
+  const currentUser = c.get("user");
+  const { groupId } = c.req.param();
+  const body = await c.req.json();
+  const schema = z.object({
+    judgeIds: z.array(z.string().min(1)).max(3),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const uniqueJudgeIds = Array.from(new Set(parsed.data.judgeIds));
+  if (uniqueJudgeIds.length !== parsed.data.judgeIds.length) {
+    return c.json({ error: "Judges must be unique" }, 400);
+  }
+
+  const group = await db.query.posterPresentationGroups.findFirst({
+    where: eq(posterPresentationGroups.id, groupId),
+    columns: { trackId: true },
+  });
+
+  if (!group) return c.json({ error: "Not found" }, 404);
+  if (!(await canManageTrack(currentUser, group.trackId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const judges = uniqueJudgeIds.length
+    ? await db
+        .select({ id: user.id })
+        .from(user)
+        .innerJoin(userRoles, eq(user.id, userRoles.userId))
+        .where(
+          and(
+            eq(userRoles.role, "COMMITTEE"),
+            inArray(user.id, uniqueJudgeIds)
+          )
+        )
+    : [];
+
+  if (judges.length !== uniqueJudgeIds.length) {
+    return c.json({ error: "Invalid committee users" }, 400);
+  }
+
+  await db.delete(posterGroupJudges).where(eq(posterGroupJudges.groupId, groupId));
+
+  if (uniqueJudgeIds.length > 0) {
+    await db.insert(posterGroupJudges).values(
+      uniqueJudgeIds.map((judgeId, index) => ({
+        groupId,
+        judgeId,
+        judgeOrder: index + 1,
+      }))
+    );
+  }
+
+  return c.json({ ok: true, count: uniqueJudgeIds.length });
+});
+
+app.post("/poster-groups/:groupId/slots", async (c) => {
+  const currentUser = c.get("user");
+  const { groupId } = c.req.param();
+  const body = await c.req.json();
+  const schema = z.object({
+    startsAt: z.string(),
+    endsAt: z.string(),
+    judgeId: z.string().min(1).nullable().optional(),
+    status: z.enum(["PLANNED", "CONFIRMED", "COMPLETED"]).optional(),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const startsAt = new Date(parsed.data.startsAt);
+  const endsAt = new Date(parsed.data.endsAt);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || startsAt >= endsAt) {
+    return c.json({ error: "Invalid slot range" }, 400);
+  }
+
+  const group = await db.query.posterPresentationGroups.findFirst({
+    where: eq(posterPresentationGroups.id, groupId),
+    columns: { trackId: true },
+  });
+  if (!group) return c.json({ error: "Not found" }, 404);
+  if (!(await canManageTrack(currentUser, group.trackId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  if (parsed.data.judgeId) {
+    const assignedJudge = await db.query.posterGroupJudges.findFirst({
+      where: and(
+        eq(posterGroupJudges.groupId, groupId),
+        eq(posterGroupJudges.judgeId, parsed.data.judgeId)
+      ),
+      columns: { id: true },
+    });
+
+    if (!assignedJudge) {
+      return c.json({ error: "Judge must belong to the group" }, 400);
+    }
+  }
+
+  const [lastSlot] = await db
+    .select({ sortOrder: posterGroupSlots.sortOrder })
+    .from(posterGroupSlots)
+    .where(eq(posterGroupSlots.groupId, groupId))
+    .orderBy(desc(posterGroupSlots.sortOrder))
+    .limit(1);
+
+  const [slot] = await db
+    .insert(posterGroupSlots)
+    .values({
+      groupId,
+      startsAt,
+      endsAt,
+      judgeId: parsed.data.judgeId ?? null,
+      status: parsed.data.status ?? "PLANNED",
+      sortOrder: (lastSlot?.sortOrder ?? 0) + 1,
+    })
+    .returning();
+
+  return c.json({ slot }, 201);
+});
+
+app.patch("/poster-groups/:groupId/slots/:slotId", async (c) => {
+  const currentUser = c.get("user");
+  const { groupId, slotId } = c.req.param();
+  const body = await c.req.json();
+  const schema = z.object({
+    startsAt: z.string().optional(),
+    endsAt: z.string().optional(),
+    judgeId: z.string().min(1).nullable().optional(),
+    status: z.enum(["PLANNED", "CONFIRMED", "COMPLETED"]).optional(),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const group = await db.query.posterPresentationGroups.findFirst({
+    where: eq(posterPresentationGroups.id, groupId),
+    columns: { trackId: true },
+  });
+  if (!group) return c.json({ error: "Not found" }, 404);
+  if (!(await canManageTrack(currentUser, group.trackId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const existingSlot = await db.query.posterGroupSlots.findFirst({
+    where: and(eq(posterGroupSlots.id, slotId), eq(posterGroupSlots.groupId, groupId)),
+    columns: { startsAt: true, endsAt: true },
+  });
+  if (!existingSlot) return c.json({ error: "Not found" }, 404);
+
+  const startsAt = parsed.data.startsAt ? new Date(parsed.data.startsAt) : existingSlot.startsAt;
+  const endsAt = parsed.data.endsAt ? new Date(parsed.data.endsAt) : existingSlot.endsAt;
+  if (startsAt >= endsAt) {
+    return c.json({ error: "Invalid slot range" }, 400);
+  }
+
+  if (parsed.data.judgeId) {
+    const assignedJudge = await db.query.posterGroupJudges.findFirst({
+      where: and(
+        eq(posterGroupJudges.groupId, groupId),
+        eq(posterGroupJudges.judgeId, parsed.data.judgeId)
+      ),
+      columns: { id: true },
+    });
+
+    if (!assignedJudge) {
+      return c.json({ error: "Judge must belong to the group" }, 400);
+    }
+  }
+
+  const [updated] = await db
+    .update(posterGroupSlots)
+    .set({
+      startsAt,
+      endsAt,
+      ...(parsed.data.judgeId !== undefined ? { judgeId: parsed.data.judgeId } : {}),
+      ...(parsed.data.status ? { status: parsed.data.status } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(posterGroupSlots.id, slotId), eq(posterGroupSlots.groupId, groupId)))
+    .returning();
+
+  return c.json({ slot: updated });
+});
+
+app.delete("/poster-groups/:groupId/slots/:slotId", async (c) => {
+  const currentUser = c.get("user");
+  const { groupId, slotId } = c.req.param();
+
+  const group = await db.query.posterPresentationGroups.findFirst({
+    where: eq(posterPresentationGroups.id, groupId),
+    columns: { trackId: true },
+  });
+  if (!group) return c.json({ error: "Not found" }, 404);
+  if (!(await canManageTrack(currentUser, group.trackId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  await db
+    .delete(posterGroupSlots)
+    .where(and(eq(posterGroupSlots.id, slotId), eq(posterGroupSlots.groupId, groupId)));
+
+  return c.json({ ok: true });
+});
+
 // H5: Verify user is an assigned committee judge before allowing evaluation
 app.post("/:id/evaluations", async (c) => {
   const { id } = c.req.param();
@@ -432,7 +804,7 @@ app.get("/scoring-dashboard", async (c) => {
   const presentations = await db.query.presentationAssignments.findMany({
     where: whereClause,
     with: {
-      submission: { columns: { id: true, title: true }, with: { author: { columns: { name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } }, track: { columns: { id: true, name: true } } } },
+      submission: { columns: { id: true, paperCode: true, title: true }, with: { author: { columns: { name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } }, track: { columns: { id: true, name: true } } } },
     },
   });
   const presentationIds = presentations.map((presentation) => presentation.id);

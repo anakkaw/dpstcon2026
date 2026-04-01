@@ -23,6 +23,7 @@ export interface PresentationData {
   submissionId: string;
   submission: {
     id: string;
+    paperCode: string | null;
     title: string;
     author: {
       id: string;
@@ -115,7 +116,7 @@ async function getPresentations(currentUser: ServerAuthUser, type: PresentationT
     where: whereClause,
     with: {
       submission: {
-        columns: { id: true, title: true },
+        columns: { id: true, paperCode: true, title: true },
         with: {
           author: {
             columns: {
