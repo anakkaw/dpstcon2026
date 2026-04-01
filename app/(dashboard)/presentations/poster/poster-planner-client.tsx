@@ -5,11 +5,13 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Collapsible } from "@/components/ui/collapsible";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Select } from "@/components/ui/select";
+import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { formatDateTime } from "@/lib/utils";
 import type {
   PosterPlannerGroup,
@@ -18,8 +20,12 @@ import type {
 import {
   CalendarRange,
   Check,
+  CircleAlert,
   FolderKanban,
+  LayoutPanelTop,
+  MapPin,
   Plus,
+  Presentation,
   Trash2,
   Users,
 } from "lucide-react";
@@ -136,6 +142,33 @@ export function PosterPlannerClient({
 
     return Array.from(trackMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [groups, ungroupedPosters]);
+
+  const plannerStats = useMemo(() => {
+    const readyGroups = groups.filter((group) => group.members.length > 0 && group.judges.length === 3 && group.slots.length > 0).length;
+    const incompleteGroups = groups.length - readyGroups;
+    const totalSlots = groups.reduce((sum, group) => sum + group.slots.length, 0);
+
+    return {
+      totalGroups: groups.length,
+      readyGroups,
+      incompleteGroups,
+      ungroupedPosters: ungroupedPosters.length,
+      totalSlots,
+    };
+  }, [groups, ungroupedPosters]);
+
+  function getGroupTone(group: PosterPlannerGroup) {
+    if (group.members.length === 0) return "neutral";
+    if (group.judges.length < 3 || group.slots.length === 0) return "warning";
+    return "success";
+  }
+
+  function getGroupLabel(group: PosterPlannerGroup) {
+    if (group.members.length === 0) return "No papers yet";
+    if (group.judges.length < 3) return "Missing judges";
+    if (group.slots.length === 0) return "Need slots";
+    return "Ready";
+  }
 
   async function refreshPlanner() {
     const response = await fetch("/api/presentations/poster-planner");
@@ -445,19 +478,57 @@ export function PosterPlannerClient({
     <div className="space-y-6">
       <SectionTitle
         title="Poster Group Planner"
-        subtitle="Create track-based poster groups, assign three judges, and add as many time slots as needed."
+        subtitle="Set up poster groups by track, assign three judges per group, and plan flexible time slots without losing track of ungrouped papers."
       />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <SummaryStatCard
+          label="Poster groups"
+          value={plannerStats.totalGroups}
+          icon={<FolderKanban className="h-5 w-5" />}
+          color="blue"
+        />
+        <SummaryStatCard
+          label="Ready groups"
+          value={plannerStats.readyGroups}
+          icon={<Check className="h-5 w-5" />}
+          color="emerald"
+        />
+        <SummaryStatCard
+          label="Need follow-up"
+          value={plannerStats.incompleteGroups}
+          icon={<CircleAlert className="h-5 w-5" />}
+          color="amber"
+        />
+        <SummaryStatCard
+          label="Ungrouped papers"
+          value={plannerStats.ungroupedPosters}
+          icon={<Presentation className="h-5 w-5" />}
+          color="red"
+        />
+        <SummaryStatCard
+          label="Planned slots"
+          value={plannerStats.totalSlots}
+          icon={<CalendarRange className="h-5 w-5" />}
+          color="indigo"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)]">
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <h3 className="text-sm font-semibold text-ink">Ungrouped posters</h3>
-              <p className="text-sm text-ink-muted">
-                Start by creating groups per track, then move accepted papers into the right group.
-              </p>
+              <div className="space-y-1">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <LayoutPanelTop className="h-4 w-4 text-ink-muted" />
+                  Step 1: Group accepted posters
+                </h3>
+                <p className="text-sm text-ink-muted">
+                  Create a group for each track, then move accepted papers into the correct group before assigning judges.
+                </p>
+              </div>
             </CardHeader>
             <CardBody className="space-y-6">
               {trackSections.length === 0 ? (
@@ -472,15 +543,13 @@ export function PosterPlannerClient({
                   const trackPosters = ungroupedPosters.filter((paper) => paper.track?.id === track.id);
 
                   return (
-                    <div key={track.id} className="space-y-3 rounded-2xl border border-border/60 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <h4 className="text-base font-semibold text-ink">{track.name}</h4>
-                          <p className="text-xs text-ink-muted">
-                            {trackPosters.length} ungrouped paper(s) · {trackGroups.length} group(s)
-                          </p>
-                        </div>
-                        <div className="flex flex-col gap-2 sm:flex-row">
+                    <Collapsible
+                      key={track.id}
+                      title={`${track.name} · ${trackPosters.length} ungrouped`}
+                      defaultOpen={trackPosters.length > 0}
+                    >
+                      <div className="space-y-4 rounded-2xl border border-border/60 p-4">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                           <Input
                             value={newGroupNameByTrack[track.id] || ""}
                             onChange={(event) =>
@@ -489,7 +558,7 @@ export function PosterPlannerClient({
                                 [track.id]: event.target.value,
                               }))
                             }
-                            placeholder="New group name"
+                            placeholder={`Create a new ${track.name} group`}
                           />
                           <Button
                             size="sm"
@@ -500,83 +569,96 @@ export function PosterPlannerClient({
                             Create group
                           </Button>
                         </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {trackGroups.length === 0 ? (
+                            <Badge tone="warning">No groups yet</Badge>
+                          ) : (
+                            trackGroups.map((group) => (
+                              <Badge key={group.id} tone={getGroupTone(group)}>
+                                {group.name} · {getGroupLabel(group)}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+
+                        {trackPosters.length === 0 ? (
+                          <p className="text-sm text-ink-muted">All accepted papers in this track are already grouped.</p>
+                        ) : (
+                          <>
+                            <Field label="Move selected papers to">
+                              <Select
+                                value={selectedGroupByTrack[track.id] || ""}
+                                onChange={(event) =>
+                                  setSelectedGroupByTrack((prev) => ({
+                                    ...prev,
+                                    [track.id]: event.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="">Select a group</option>
+                                {trackGroups.map((group) => (
+                                  <option key={group.id} value={group.id}>
+                                    {group.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </Field>
+
+                            <div className="space-y-2">
+                              {trackPosters.map((paper) => {
+                                const selected = (selectedPosterIdsByTrack[track.id] || []).includes(
+                                  paper.submissionId
+                                );
+
+                                return (
+                                  <label
+                                    key={paper.submissionId}
+                                    className={`flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors ${
+                                      selected ? "border-brand-300 bg-brand-50/40" : "border-border/60 bg-white"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selected}
+                                      onChange={(event) => {
+                                        setSelectedPosterIdsByTrack((prev) => {
+                                          const current = prev[track.id] || [];
+                                          return {
+                                            ...prev,
+                                            [track.id]: event.target.checked
+                                              ? [...current, paper.submissionId]
+                                              : current.filter((id) => id !== paper.submissionId),
+                                          };
+                                        });
+                                      }}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Badge>{paper.paperCode || "NO-CODE"}</Badge>
+                                        <p className="text-sm font-medium text-ink">{paper.title}</p>
+                                      </div>
+                                      <p className="mt-1 text-xs text-ink-muted">{paper.author.name}</p>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+
+                            <div className="flex justify-end">
+                              <Button
+                                size="sm"
+                                onClick={() => addSelectedPosters(track.id)}
+                                loading={savingKey === `members-${track.id}`}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Add selected papers
+                              </Button>
+                            </div>
+                          </>
+                        )}
                       </div>
-
-                      {trackPosters.length === 0 ? (
-                        <p className="text-sm text-ink-muted">All accepted papers in this track are already grouped.</p>
-                      ) : (
-                        <>
-                          <Field label="Target group">
-                            <Select
-                              value={selectedGroupByTrack[track.id] || ""}
-                              onChange={(event) =>
-                                setSelectedGroupByTrack((prev) => ({
-                                  ...prev,
-                                  [track.id]: event.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">Select a group</option>
-                              {trackGroups.map((group) => (
-                                <option key={group.id} value={group.id}>
-                                  {group.name}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-
-                          <div className="space-y-2">
-                            {trackPosters.map((paper) => {
-                              const selected = (selectedPosterIdsByTrack[track.id] || []).includes(
-                                paper.submissionId
-                              );
-
-                              return (
-                                <label
-                                  key={paper.submissionId}
-                                  className={`flex items-start gap-3 rounded-xl border px-3 py-3 ${
-                                    selected ? "border-brand-300 bg-brand-50/40" : "border-border/60"
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={selected}
-                                    onChange={(event) => {
-                                      setSelectedPosterIdsByTrack((prev) => {
-                                        const current = prev[track.id] || [];
-                                        return {
-                                          ...prev,
-                                          [track.id]: event.target.checked
-                                            ? [...current, paper.submissionId]
-                                            : current.filter((id) => id !== paper.submissionId),
-                                        };
-                                      });
-                                    }}
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium text-ink">
-                                      {paper.paperCode || "NO-CODE"} · {paper.title}
-                                    </p>
-                                    <p className="text-xs text-ink-muted">{paper.author.name}</p>
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-
-                          <div className="flex justify-end">
-                            <Button
-                              size="sm"
-                              onClick={() => addSelectedPosters(track.id)}
-                              loading={savingKey === `members-${track.id}`}
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                              Add selected papers
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                    </Collapsible>
                   );
                 })
               )}
@@ -608,63 +690,92 @@ export function PosterPlannerClient({
               return (
                 <Card key={group.id}>
                   <CardHeader>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone="info">{group.track.name}</Badge>
-                      <Badge>{group.members.length} paper(s)</Badge>
-                      <Badge tone={group.judges.length === 3 ? "success" : "warning"}>
-                        {group.judges.length}/3 judges
-                      </Badge>
-                      <Badge tone={group.slots.length > 0 ? "success" : "warning"}>
-                        {group.slots.length} slot(s)
-                      </Badge>
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone="info">{group.track.name}</Badge>
+                          <Badge tone={getGroupTone(group)}>{getGroupLabel(group)}</Badge>
+                        </div>
+                        <h3 className="text-lg font-semibold text-ink">{group.name}</h3>
+                        <div className="flex flex-wrap gap-2 text-xs text-ink-muted">
+                          <span>{group.members.length} paper(s)</span>
+                          <span>{group.judges.length}/3 judges</span>
+                          <span>{group.slots.length} slot(s)</span>
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {group.room || "Room not set"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 rounded-2xl bg-surface-alt p-3 text-center">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-ink-muted">Papers</p>
+                          <p className="mt-1 text-sm font-semibold text-ink">{group.members.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-ink-muted">Judges</p>
+                          <p className="mt-1 text-sm font-semibold text-ink">{group.judges.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-ink-muted">Slots</p>
+                          <p className="mt-1 text-sm font-semibold text-ink">{group.slots.length}</p>
+                        </div>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardBody className="space-y-6">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <Field label="Group name">
-                        <Input
-                          value={groupDrafts[group.id]?.name || ""}
-                          onChange={(event) =>
-                            setGroupDrafts((prev) => ({
-                              ...prev,
-                              [group.id]: {
-                                ...prev[group.id],
-                                name: event.target.value,
-                              },
-                            }))
-                          }
-                        />
-                      </Field>
-                      <Field label="Room">
-                        <Input
-                          value={groupDrafts[group.id]?.room || ""}
-                          onChange={(event) =>
-                            setGroupDrafts((prev) => ({
-                              ...prev,
-                              [group.id]: {
-                                ...prev[group.id],
-                                room: event.target.value,
-                              },
-                            }))
-                          }
-                          placeholder="e.g. Poster Hall A"
-                        />
-                      </Field>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => saveGroup(group.id)}
-                        loading={savingKey === `group-${group.id}`}
-                      >
-                        Save group details
-                      </Button>
-                    </div>
+                    <section className="space-y-3 rounded-2xl border border-border/60 p-4">
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-semibold text-ink">Step 2: Group setup</h4>
+                        <p className="text-sm text-ink-muted">Name the group clearly and set the room before assigning judges.</p>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <Field label="Group name">
+                          <Input
+                            value={groupDrafts[group.id]?.name || ""}
+                            onChange={(event) =>
+                              setGroupDrafts((prev) => ({
+                                ...prev,
+                                [group.id]: {
+                                  ...prev[group.id],
+                                  name: event.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </Field>
+                        <Field label="Room">
+                          <Input
+                            value={groupDrafts[group.id]?.room || ""}
+                            onChange={(event) =>
+                              setGroupDrafts((prev) => ({
+                                ...prev,
+                                [group.id]: {
+                                  ...prev[group.id],
+                                  room: event.target.value,
+                                },
+                              }))
+                            }
+                            placeholder="e.g. Poster Hall A"
+                          />
+                        </Field>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => saveGroup(group.id)}
+                          loading={savingKey === `group-${group.id}`}
+                        >
+                          Save group details
+                        </Button>
+                      </div>
+                    </section>
 
-                    <section className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <h4 className="text-sm font-semibold text-ink">Group papers</h4>
+                    <section className="space-y-3 rounded-2xl border border-border/60 p-4">
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-semibold text-ink">Step 3: Review papers in this group</h4>
+                        <p className="text-sm text-ink-muted">Quickly confirm that the right accepted papers are grouped together before continuing.</p>
                       </div>
                       {group.members.length === 0 ? (
                         <p className="text-sm text-ink-muted">No papers in this group yet.</p>
@@ -675,10 +786,11 @@ export function PosterPlannerClient({
                               key={member.id}
                               className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-surface-alt p-3"
                             >
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-ink">
-                                  {member.paperCode || "NO-CODE"} · {member.title}
-                                </p>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge>{member.paperCode || "NO-CODE"}</Badge>
+                                  <p className="text-sm font-medium text-ink">{member.title}</p>
+                                </div>
                                 <p className="text-xs text-ink-muted">{member.authorName}</p>
                               </div>
                               <Button
@@ -695,8 +807,11 @@ export function PosterPlannerClient({
                       )}
                     </section>
 
-                    <section className="space-y-3">
-                      <h4 className="text-sm font-semibold text-ink">Group judges</h4>
+                    <section className="space-y-3 rounded-2xl border border-border/60 p-4">
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-semibold text-ink">Step 4: Assign three judges</h4>
+                        <p className="text-sm text-ink-muted">Each group needs three different judges before slot planning is complete.</p>
+                      </div>
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         {[0, 1, 2].map((index) => (
                           <Field key={index} label={`Judge ${index + 1}`}>
@@ -731,10 +846,13 @@ export function PosterPlannerClient({
                       </div>
                     </section>
 
-                    <section className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <CalendarRange className="h-4 w-4 text-ink-muted" />
-                        <h4 className="text-sm font-semibold text-ink">Time slots</h4>
+                    <section className="space-y-3 rounded-2xl border border-border/60 p-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <CalendarRange className="h-4 w-4 text-ink-muted" />
+                          <h4 className="text-sm font-semibold text-ink">Step 5: Plan time slots</h4>
+                        </div>
+                        <p className="text-sm text-ink-muted">Add as many slots as this group needs. You can attach a specific judge per slot or leave it unassigned first.</p>
                       </div>
                       {group.slots.length === 0 ? (
                         <p className="text-sm text-ink-muted">No slots added for this group yet.</p>
@@ -745,7 +863,7 @@ export function PosterPlannerClient({
                               key={slot.id}
                               className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-surface-alt p-3"
                             >
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <p className="text-sm font-medium text-ink">
                                   {formatDateTime(slot.startsAt)} - {formatDateTime(slot.endsAt)}
                                 </p>
