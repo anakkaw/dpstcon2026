@@ -15,8 +15,10 @@ import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { queueEmail, inviteEmail } from "@/server/email";
 import { getPrimaryRole } from "@/lib/permissions";
+import { mapWithConcurrencyLimit } from "@/server/concurrency";
 
 const INVITE_EXPIRY_HOURS = 72;
+const BULK_IMPORT_EMAIL_CONCURRENCY = 5;
 
 /** Compose Thai display name from structured fields. Returns empty string if no name parts. */
 function composeName(prefix?: string | null, firstName?: string | null, lastName?: string | null): string {
@@ -179,7 +181,12 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
   const newUserInserts: typeof user.$inferInsert[] = [];
   const newAccountInserts: typeof accountTable.$inferInsert[] = [];
   const newRoleInserts: typeof userRoles.$inferInsert[] = [];
-  const emailsToSend: { to: string; subject: string; html: string; text: string }[] = [];
+  const emailsToSend: {
+    email: string;
+    subject: string;
+    html: string;
+    text: string;
+  }[] = [];
 
   for (const u of parsed.data.users) {
     try {
@@ -259,9 +266,12 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
         activationUrl,
         expiresInHours: INVITE_EXPIRY_HOURS,
       });
-      emailsToSend.push({ to: u.email, subject: emailContent.subject, html: emailContent.html, text: emailContent.text });
-
-      results.push({ email: u.email, status: "invited" });
+      emailsToSend.push({
+        email: u.email,
+        subject: emailContent.subject,
+        html: emailContent.html,
+        text: emailContent.text,
+      });
     } catch {
       results.push({ email: u.email, status: "failed" });
     }
@@ -278,14 +288,35 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
     await db.insert(userRoles).values(newRoleInserts);
   }
 
-  // Queue emails in parallel
-  await Promise.all(emailsToSend.map((e) => queueEmail(e)));
+  const emailStatuses = await mapWithConcurrencyLimit(
+    emailsToSend,
+    BULK_IMPORT_EMAIL_CONCURRENCY,
+    async (emailJob) => {
+      try {
+        await queueEmail(
+          {
+            to: emailJob.email,
+            subject: emailJob.subject,
+            html: emailJob.html,
+            text: emailJob.text,
+            throwOnFailure: true,
+          }
+        );
+        return { email: emailJob.email, status: "invited" };
+      } catch {
+        return { email: emailJob.email, status: "invite_failed" };
+      }
+    }
+  );
+
+  results.push(...emailStatuses);
 
   return c.json({
     total: parsed.data.users.length,
     invited: results.filter((r) => r.status === "invited").length,
     updated: results.filter((r) => r.status === "updated_roles").length,
-    failed: results.filter((r) => r.status === "failed").length,
+    failed: results.filter((r) => r.status === "failed" || r.status === "invite_failed").length,
+    inviteFailed: results.filter((r) => r.status === "invite_failed").length,
     results,
   });
 });

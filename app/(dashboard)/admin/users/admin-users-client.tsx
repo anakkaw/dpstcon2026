@@ -310,10 +310,15 @@ export function AdminUsersClient({
       const data = await res.json();
       if (res.ok) {
         setBulkResults(data.results || []);
+        const summaryKey = (data.inviteFailed || 0) > 0
+          ? "users.importSummaryWithFailures"
+          : "users.importSummary";
         showMsg(
-          t("users.importSummary")
+          t(summaryKey)
             .replace("{invited}", String(data.invited || 0))
-            .replace("{updated}", String(data.updated || 0))
+            .replace("{inviteFailed}", String(data.inviteFailed || 0))
+            .replace("{updated}", String(data.updated || 0)),
+          (data.inviteFailed || 0) > 0 ? "danger" : "success"
         );
         void refreshUsers();
         void refreshRegStats();
@@ -481,7 +486,13 @@ export function AdminUsersClient({
                 <p className="font-medium mb-2">{t("users.importResults")}</p>
                 {bulkResults.map((result, index) => (
                   <p key={index} className={result.status === "invited" ? "text-green-700" : result.status === "updated_roles" ? "text-blue-600" : "text-red-600"}>
-                    {result.email}: {result.status === "invited" ? t("users.invited") : result.status === "updated_roles" ? t("users.rolesUpdated") : t("users.failed")}
+                    {result.email}: {result.status === "invited"
+                      ? t("users.invited")
+                      : result.status === "updated_roles"
+                        ? t("users.rolesUpdated")
+                        : result.status === "invite_failed"
+                          ? t("users.inviteFailed")
+                          : t("users.failed")}
                   </p>
                 ))}
               </div>
