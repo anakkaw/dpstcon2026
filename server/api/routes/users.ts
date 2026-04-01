@@ -8,6 +8,9 @@ import {
   reviewAssignments,
   session as sessionTable,
   account as accountTable,
+  tracks,
+  storedFiles,
+  auditLogs,
 } from "@/server/db/schema";
 import { eq, and, ilike, or, desc, inArray } from "drizzle-orm";
 import { authMiddleware, requireRole } from "../middleware/auth";
@@ -678,17 +681,34 @@ app.delete("/:id", requireRole("ADMIN"), async (c) => {
     return c.json({ error: "ไม่สามารถลบได้ — ผู้ใช้มีบทความในระบบ" }, 400);
   }
 
-  // Delete related data (userRoles cascade via FK, but be explicit)
-  await db.delete(userRoles).where(eq(userRoles.userId, id));
-  await db.delete(notifications).where(eq(notifications.userId, id));
-  await db
-    .delete(reviewAssignments)
-    .where(eq(reviewAssignments.reviewerId, id));
-  await db.delete(sessionTable).where(eq(sessionTable.userId, id));
-  await db.delete(accountTable).where(eq(accountTable.userId, id));
-  await db.delete(user).where(eq(user.id, id));
+  try {
+    // Preserve historical records that keep optional user references.
+    await db.update(tracks).set({ headUserId: null }).where(eq(tracks.headUserId, id));
+    await db.update(storedFiles).set({ uploadedById: null }).where(eq(storedFiles.uploadedById, id));
+    await db.update(auditLogs).set({ actorId: null }).where(eq(auditLogs.actorId, id));
 
-  return c.json({ ok: true });
+    // Delete related data (most cascade via FK, but be explicit for clarity).
+    await db.delete(userRoles).where(eq(userRoles.userId, id));
+    await db.delete(notifications).where(eq(notifications.userId, id));
+    await db
+      .delete(reviewAssignments)
+      .where(eq(reviewAssignments.reviewerId, id));
+    await db.delete(sessionTable).where(eq(sessionTable.userId, id));
+    await db.delete(accountTable).where(eq(accountTable.userId, id));
+
+    const [deleted] = await db
+      .delete(user)
+      .where(eq(user.id, id))
+      .returning({ id: user.id });
+
+    if (!deleted) {
+      return c.json({ error: "ไม่พบผู้ใช้" }, 404);
+    }
+
+    return c.json({ ok: true });
+  } catch {
+    return c.json({ error: "ไม่สามารถลบผู้ใช้ได้ในขณะนี้" }, 500);
+  }
 });
 
 export { app as userRoutes };

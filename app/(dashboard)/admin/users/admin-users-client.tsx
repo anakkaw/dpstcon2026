@@ -28,13 +28,26 @@ const ROLE_COLORS: Record<string, "neutral" | "success" | "warning" | "danger" |
 };
 
 const ALL_ROLES = ["ADMIN", "PROGRAM_CHAIR", "REVIEWER", "COMMITTEE", "AUTHOR"] as const;
-type SortBy = "name" | "email" | "affiliation" | "createdAt";
+type RegistrationStatus = "active" | "pending" | "expired";
+type StatusFilter = "all" | RegistrationStatus;
+type SortBy = "name" | "email" | "affiliation" | "createdAt" | "status";
 type SortDir = "asc" | "desc";
 type ModalMode = null | "edit" | "password" | "delete";
+const STATUS_ORDER: Record<RegistrationStatus, number> = {
+  active: 0,
+  pending: 1,
+  expired: 2,
+};
 
 function renderSortIcon(col: SortBy, sortBy: SortBy, sortDir: SortDir) {
   if (sortBy !== col) return <ChevronDown className="h-3 w-3 opacity-30" />;
   return sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />;
+}
+
+function getRegistrationStatus(user: AdminUserData): RegistrationStatus {
+  if (user.isActive) return "active";
+  if (user.inviteExpiresAt && new Date(user.inviteExpiresAt) > new Date()) return "pending";
+  return "expired";
 }
 
 export function AdminUsersClient({
@@ -49,6 +62,7 @@ export function AdminUsersClient({
   const [users, setUsers] = useState<AdminUserData[]>(initialUsers);
   const [search, setSearch] = useState("");
   const [filterRole, setFilterRole] = useState("");
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>("all");
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "danger">("success");
   const [showCreate, setShowCreate] = useState(false);
@@ -168,6 +182,18 @@ export function AdminUsersClient({
   function toggleSort(col: SortBy) {
     if (sortBy === col) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else { setSortBy(col); setSortDir("asc"); }
+  }
+
+  function getStatusLabel(status: RegistrationStatus) {
+    if (status === "active") return t("users.statusActive");
+    if (status === "pending") return t("users.statusPending");
+    return t("users.statusExpired");
+  }
+
+  function getStatusTone(status: RegistrationStatus): "success" | "warning" | "danger" {
+    if (status === "active") return "success";
+    if (status === "pending") return "warning";
+    return "danger";
   }
 
   async function createUser() {
@@ -338,14 +364,26 @@ export function AdminUsersClient({
     }));
   }, [users]);
 
+  const statusStats = useMemo(
+    () => [
+      { key: "all" as const, label: t("common.all"), count: users.length },
+      { key: "active" as const, label: t("users.statusActive"), count: regStats.active },
+      { key: "pending" as const, label: t("users.statusPending"), count: regStats.pending },
+      { key: "expired" as const, label: t("users.statusExpired"), count: regStats.expired },
+    ],
+    [regStats.active, regStats.pending, regStats.expired, t, users.length]
+  );
+
   const filtered = useMemo(() => {
     const result = users.filter((entry) => {
       const query = search.toLowerCase();
+      const status = getRegistrationStatus(entry);
       const nameThFull = displayNameTh(entry);
       const nameEnFull = displayNameEn(entry);
       const matchSearch = !search || nameThFull.toLowerCase().includes(query) || nameEnFull.toLowerCase().includes(query) || entry.email.toLowerCase().includes(query) || (entry.affiliation || "").toLowerCase().includes(query);
       const matchRole = !filterRole || (entry.roles || [entry.role]).includes(filterRole);
-      return matchSearch && matchRole;
+      const matchStatus = filterStatus === "all" || status === filterStatus;
+      return matchSearch && matchRole && matchStatus;
     });
     result.sort((a, b) => {
       let cmp = 0;
@@ -353,10 +391,11 @@ export function AdminUsersClient({
       else if (sortBy === "email") cmp = a.email.localeCompare(b.email);
       else if (sortBy === "affiliation") cmp = (a.affiliation || "").localeCompare(b.affiliation || "", "th");
       else if (sortBy === "createdAt") cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      else if (sortBy === "status") cmp = STATUS_ORDER[getRegistrationStatus(a)] - STATUS_ORDER[getRegistrationStatus(b)];
       return sortDir === "asc" ? cmp : -cmp;
     });
     return result;
-  }, [users, search, filterRole, sortBy, sortDir]);
+  }, [users, search, filterRole, filterStatus, sortBy, sortDir]);
 
   return (
     <div className="space-y-6">
@@ -372,6 +411,34 @@ export function AdminUsersClient({
         <SummaryStatCard label={t("users.statusActive")} value={regStats.active} icon={<CheckCircle className="h-5 w-5" />} color="emerald" />
         <SummaryStatCard label={t("users.statusPending")} value={regStats.pending} icon={<Clock className="h-5 w-5" />} color="amber" />
         <SummaryStatCard label={t("users.statusExpired")} value={regStats.expired} icon={<AlertTriangle className="h-5 w-5" />} color="red" />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {statusStats.map(({ key, label, count }) => {
+          const isActive = filterStatus === key;
+          const activeClasses: Record<StatusFilter, string> = {
+            all: "bg-slate-200 border-slate-400 text-slate-800",
+            active: "bg-emerald-100 border-emerald-400 text-emerald-800",
+            pending: "bg-amber-100 border-amber-400 text-amber-800",
+            expired: "bg-red-100 border-red-400 text-red-800",
+          };
+          const inactiveClasses: Record<StatusFilter, string> = {
+            all: "bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300",
+            active: "bg-emerald-50 border-emerald-200 text-emerald-700 hover:border-emerald-300",
+            pending: "bg-amber-50 border-amber-200 text-amber-700 hover:border-amber-300",
+            expired: "bg-red-50 border-red-200 text-red-700 hover:border-red-300",
+          };
+          return (
+            <button
+              key={key}
+              onClick={() => setFilterStatus(key)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-all ${isActive ? `${activeClasses[key]} ring-2 ring-offset-1 ring-current/20 shadow-sm` : inactiveClasses[key]}`}
+            >
+              {label}
+              <span className={`ml-0.5 text-xs font-bold ${isActive ? "" : "opacity-60"}`}>{count}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -407,6 +474,11 @@ export function AdminUsersClient({
         {filterRole && (
           <button onClick={() => setFilterRole("")} className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm text-ink-muted hover:bg-gray-100 transition-colors">
             <X className="h-3.5 w-3.5" /> {t("common.clear")}
+          </button>
+        )}
+        {filterStatus !== "all" && (
+          <button onClick={() => setFilterStatus("all")} className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm text-ink-muted hover:bg-gray-100 transition-colors">
+            <X className="h-3.5 w-3.5" /> {t("common.clear")} {t("users.status")}
           </button>
         )}
       </div>
@@ -508,6 +580,7 @@ export function AdminUsersClient({
       <div className="space-y-3 lg:hidden">
         {filtered.map((entry) => {
           const userRoles = entry.roles || [entry.role];
+          const status = getRegistrationStatus(entry);
           const isExpanded = expandedId === entry.id;
           return (
             <Card key={entry.id}>
@@ -518,8 +591,8 @@ export function AdminUsersClient({
                     {(entry.firstNameEn || entry.lastNameEn) && <p className="mt-0.5 text-xs text-ink-muted">{displayNameEn(entry)}</p>}
                     <p className="mt-1 text-sm text-ink-light">{entry.email}</p>
                   </button>
-                  <Badge tone={entry.isActive ? "success" : "warning"}>
-                    {entry.isActive ? t("users.statusActive") : t("users.statusPending")}
+                  <Badge tone={getStatusTone(status)}>
+                    {getStatusLabel(status)}
                   </Badge>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -569,6 +642,9 @@ export function AdminUsersClient({
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     <button onClick={() => toggleSort("affiliation")} className="flex items-center gap-1 hover:text-ink transition-colors">{t("users.affiliation")} {renderSortIcon("affiliation", sortBy, sortDir)}</button>
                   </th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
+                    <button onClick={() => toggleSort("status")} className="flex items-center gap-1 hover:text-ink transition-colors">{t("users.status")} {renderSortIcon("status", sortBy, sortDir)}</button>
+                  </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.roles")}</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-32">{t("users.actionsCol")}</th>
                 </tr>
@@ -576,6 +652,7 @@ export function AdminUsersClient({
               <tbody>
                 {filtered.map((entry) => {
                   const userRoles = entry.roles || [entry.role];
+                  const status = getRegistrationStatus(entry);
                   return (
                     <tr key={entry.id} className="border-b border-border/40 hover:bg-surface-hover/50 transition-colors group">
                       <td className="px-4 py-3">
@@ -586,6 +663,11 @@ export function AdminUsersClient({
                       </td>
                       <td className="px-4 py-3 text-ink-light">{entry.email}</td>
                       <td className="px-4 py-3 text-ink-light">{entry.affiliation || "—"}</td>
+                      <td className="px-4 py-3">
+                        <Badge tone={getStatusTone(status)}>
+                          {getStatusLabel(status)}
+                        </Badge>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {userRoles.map((role) => (

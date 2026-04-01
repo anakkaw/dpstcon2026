@@ -351,6 +351,7 @@ const en: Record<TranslationKey, string> = {
   "users.affiliation": "Affiliation",
   "users.affiliationPlaceholder": "University / Organization",
   "users.roles": "Roles (select multiple)",
+  "users.status": "Status",
   "users.inviteEmailNote": "An invitation email with password setup link will be sent (expires in 72 hours).",
   "users.sendInvitation": "Send Invitation",
   "users.bulkImportTitle": "Bulk Import Users",

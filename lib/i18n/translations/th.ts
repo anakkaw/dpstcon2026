@@ -353,6 +353,7 @@ const th = {
   "users.affiliation": "สังกัด",
   "users.affiliationPlaceholder": "มหาวิทยาลัย / องค์กร",
   "users.roles": "บทบาท (เลือกได้หลายรายการ)",
+  "users.status": "สถานะ",
   "users.inviteEmailNote": "ระบบจะส่งอีเมลเชิญพร้อมลิงก์ตั้งรหัสผ่าน (หมดอายุใน 72 ชั่วโมง)",
   "users.sendInvitation": "ส่งคำเชิญ",
   "users.bulkImportTitle": "นำเข้าผู้ใช้จำนวนมาก",
