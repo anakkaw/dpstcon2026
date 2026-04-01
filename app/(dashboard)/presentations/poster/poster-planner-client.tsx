@@ -22,6 +22,7 @@ import {
   CalendarRange,
   Check,
   CircleAlert,
+  Clock,
   FolderKanban,
   LayoutPanelTop,
   MapPin,
@@ -88,6 +89,32 @@ interface PosterPlannerClientProps {
 
 type MessageTone = "success" | "danger";
 
+const SLOT_DURATION_MINUTES = 15;
+
+function formatSlotCode(index: number): string {
+  return String(index + 1).padStart(2, "0");
+}
+
+function formatTime(isoString: string): string {
+  const d = new Date(isoString);
+  return d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function timeToIso(time: string): string {
+  const baseDate = "2026-01-01";
+  return new Date(`${baseDate}T${time}:00`).toISOString();
+}
+
+function addMinutes(isoString: string, minutes: number): string {
+  const d = new Date(isoString);
+  d.setMinutes(d.getMinutes() + minutes);
+  return d.toISOString();
+}
+
 export function PosterPlannerClient({
   mode,
   initialSessionSettings = { room: "", slotTemplates: [] },
@@ -110,7 +137,7 @@ export function PosterPlannerClient({
     )
   );
   const [sessionDraft, setSessionDraft] = useState<PosterPlannerSessionSettings>(initialSessionSettings);
-  const [slotTemplateDraft, setSlotTemplateDraft] = useState({ startsAt: "", endsAt: "" });
+  const [newSlotTime, setNewSlotTime] = useState("");
   const [newGroupNameByTrack, setNewGroupNameByTrack] = useState<Record<string, string>>({});
   const [selectedGroupByTrack, setSelectedGroupByTrack] = useState<Record<string, string>>({});
   const [selectedPosterIdsByTrack, setSelectedPosterIdsByTrack] = useState<Record<string, string[]>>(
@@ -263,33 +290,34 @@ export function PosterPlannerClient({
       }
 
       await refreshPlanner();
-      setSlotTemplateDraft({ startsAt: "", endsAt: "" });
+      setNewSlotTime("");
       setMessage("Poster session settings updated");
     });
   }
 
   function addSessionSlotTemplate() {
-    if (!slotTemplateDraft.startsAt || !slotTemplateDraft.endsAt) {
+    if (!newSlotTime) {
       setMessageTone("danger");
-      setMessage("Start and end time are required for a shared slot");
+      setMessage("Please enter a start time for the slot");
       return;
     }
 
-    const startsAt = new Date(slotTemplateDraft.startsAt);
-    const endsAt = new Date(slotTemplateDraft.endsAt);
-    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || startsAt >= endsAt) {
+    const startsAtIso = timeToIso(newSlotTime);
+    const endsAtIso = addMinutes(startsAtIso, SLOT_DURATION_MINUTES);
+
+    const startsAt = new Date(startsAtIso);
+    const endsAt = new Date(endsAtIso);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
       setMessageTone("danger");
-      setMessage("Shared slot times must be valid and end after start");
+      setMessage("Invalid time format");
       return;
     }
 
-    const startsAtIso = startsAt.toISOString();
-    const endsAtIso = endsAt.toISOString();
     const id = `${startsAtIso}__${endsAtIso}`;
     const duplicate = sessionDraft.slotTemplates.some((slot) => slot.id === id);
     if (duplicate) {
       setMessageTone("danger");
-      setMessage("This shared slot already exists");
+      setMessage("This slot already exists");
       return;
     }
 
@@ -301,9 +329,9 @@ export function PosterPlannerClient({
           new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime()
       ),
     }));
-    setSlotTemplateDraft({ startsAt: "", endsAt: "" });
+    setNewSlotTime("");
     setMessageTone("success");
-    setMessage("Shared slot added. Save poster session to publish it.");
+    setMessage("Slot added. Save session to publish.");
   }
 
   function removeSessionSlotTemplate(slotId: string) {
@@ -312,7 +340,7 @@ export function PosterPlannerClient({
       slotTemplates: prev.slotTemplates.filter((slot) => slot.id !== slotId),
     }));
     setMessageTone("success");
-    setMessage("Shared slot removed. Save poster session to publish it.");
+    setMessage("Slot removed. Save session to publish.");
   }
 
   async function createGroup(trackId: string) {
@@ -410,7 +438,7 @@ export function PosterPlannerClient({
       const draft = slotDrafts[groupId];
       const template = sessionSettings.slotTemplates.find((slot) => slot.id === draft?.templateId);
       if (!template) {
-        throw new Error("Select one shared slot");
+        throw new Error("Select one slot");
       }
 
       const response = await fetch(`/api/presentations/poster-groups/${groupId}/slots`, {
@@ -451,9 +479,8 @@ export function PosterPlannerClient({
   }
 
   const sessionRoomId = `${plannerId}-session-room`;
-  const sessionStartTimeId = `${plannerId}-session-start-time`;
-  const sessionEndTimeId = `${plannerId}-session-end-time`;
 
+  // ──────────────── AUTHOR VIEW ────────────────
   if (mode === "author") {
     return (
       <div className="space-y-6">
@@ -485,14 +512,19 @@ export function PosterPlannerClient({
                 {group.slots.length === 0 ? (
                   <p className="text-sm text-ink-muted">Your presentation slots have not been scheduled yet.</p>
                 ) : (
-                  group.slots.map((slot) => (
-                    <div key={slot.id} className="rounded-xl border border-border/60 bg-surface-alt p-4">
-                      <p className="text-sm font-medium text-ink">
-                        {formatDateTime(slot.startsAt)} - {formatDateTime(slot.endsAt)}
-                      </p>
-                      <p className="mt-1 text-xs text-ink-muted">Status: {slot.status}</p>
-                    </div>
-                  ))
+                  <div className="flex flex-wrap gap-2">
+                    {group.slots.map((slot, i) => (
+                      <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
+                        <Badge tone="info">{formatSlotCode(i)}</Badge>
+                        <span className="text-sm font-medium text-ink">
+                          {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                        </span>
+                        <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
+                          {slot.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardBody>
             </Card>
@@ -502,6 +534,7 @@ export function PosterPlannerClient({
     );
   }
 
+  // ──────────────── COMMITTEE VIEW ────────────────
   if (mode === "committee") {
     return (
       <div className="space-y-6">
@@ -537,16 +570,19 @@ export function PosterPlannerClient({
                     </div>
                   ))}
                 </div>
-                <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
                   {group.slots.length === 0 ? (
                     <p className="text-sm text-ink-muted">No slots planned for this group yet.</p>
                   ) : (
-                    group.slots.map((slot) => (
-                      <div key={slot.id} className="rounded-xl border border-border/60 bg-surface-alt p-3">
-                        <p className="text-sm font-medium text-ink">
-                          {formatDateTime(slot.startsAt)} - {formatDateTime(slot.endsAt)}
-                        </p>
-                        <p className="text-xs text-ink-muted">Status: {slot.status}</p>
+                    group.slots.map((slot, i) => (
+                      <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
+                        <Badge tone="info">{formatSlotCode(i)}</Badge>
+                        <span className="text-sm font-medium text-ink">
+                          {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                        </span>
+                        <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
+                          {slot.status}
+                        </Badge>
                       </div>
                     ))
                   )}
@@ -559,16 +595,18 @@ export function PosterPlannerClient({
     );
   }
 
+  // ──────────────── ADMIN VIEW ────────────────
   return (
     <div className="space-y-6">
       <SectionTitle
         title="Poster Group Planner"
-        subtitle="Configure one shared poster room and slot plan first, then group papers by track, assign three judges, and reuse those shared slots across every group."
+        subtitle="Set up shared slots, group papers by track, assign judges, and schedule presentations."
       />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {/* ── Summary Stats ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <SummaryStatCard
           label="Poster groups"
           value={plannerStats.totalGroups}
@@ -601,273 +639,258 @@ export function PosterPlannerClient({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="space-y-1">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <MapPin className="h-4 w-4 text-ink-muted" />
-                  Step 0: Configure the shared poster session
-                </h3>
-                <p className="text-sm text-ink-muted">
-                  Set the room and reusable time slots once. Every poster group will pick from this shared session plan.
-                </p>
-              </div>
-            </CardHeader>
-            <CardBody className="space-y-4">
-              <Field label="Shared room" htmlFor={sessionRoomId}>
-                <Input
-                  id={sessionRoomId}
-                  value={sessionDraft.room}
-                  onChange={(event) =>
-                    setSessionDraft((prev) => ({
-                      ...prev,
-                      room: event.target.value,
-                    }))
-                  }
-                  placeholder="e.g. Poster Hall A…"
-                  name="sharedRoom"
-                  autoComplete="off"
-                />
-              </Field>
+      {/* ── Session Settings: Room + Slots (compact top section) ── */}
+      <Card>
+        <CardHeader>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <MapPin className="h-4 w-4 text-ink-muted" />
+            Session Settings
+          </h3>
+          <p className="text-sm text-ink-muted">
+            Shared room and time slots (each slot = {SLOT_DURATION_MINUTES} min). All groups share these settings.
+          </p>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
+            {/* Room */}
+            <Field label="Room" htmlFor={sessionRoomId}>
+              <Input
+                id={sessionRoomId}
+                value={sessionDraft.room}
+                onChange={(event) =>
+                  setSessionDraft((prev) => ({
+                    ...prev,
+                    room: event.target.value,
+                  }))
+                }
+                placeholder="e.g. Poster Hall A"
+                name="sharedRoom"
+                autoComplete="off"
+              />
+            </Field>
 
-              <div className="space-y-3 rounded-2xl border border-border/60 p-4">
-                <div className="space-y-1">
-                  <h4 className="text-sm font-semibold text-ink">Shared time slots</h4>
-                  <p className="text-sm text-ink-muted">
-                    Add all time windows here first, then reuse them across groups.
-                  </p>
-                </div>
+            {/* Slot grid */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                Time Slots ({SLOT_DURATION_MINUTES} min each)
+              </p>
 
-                {sessionDraft.slotTemplates.length === 0 ? (
-                  <p className="text-sm text-ink-muted">No shared slots yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {sessionDraft.slotTemplates.map((slot) => (
-                      <div
-                        key={slot.id}
-                        className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-surface-alt p-3"
-                      >
-                        <p className="text-sm font-medium text-ink">
-                          {formatDateTime(slot.startsAt)} - {formatDateTime(slot.endsAt)}
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => removeSessionSlotTemplate(slot.id)}
-                          aria-label={`Remove shared slot ${formatDateTime(slot.startsAt)} to ${formatDateTime(slot.endsAt)}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <Field label="Start time" htmlFor={sessionStartTimeId}>
-                    <Input
-                      id={sessionStartTimeId}
-                      type="datetime-local"
-                      value={slotTemplateDraft.startsAt}
-                      onChange={(event) =>
-                        setSlotTemplateDraft((prev) => ({
-                          ...prev,
-                          startsAt: event.target.value,
-                        }))
-                      }
-                      name="sharedSlotStartTime"
-                    />
-                  </Field>
-                  <Field label="End time" htmlFor={sessionEndTimeId}>
-                    <Input
-                      id={sessionEndTimeId}
-                      type="datetime-local"
-                      value={slotTemplateDraft.endsAt}
-                      onChange={(event) =>
-                        setSlotTemplateDraft((prev) => ({
-                          ...prev,
-                          endsAt: event.target.value,
-                        }))
-                      }
-                      name="sharedSlotEndTime"
-                    />
-                  </Field>
-                </div>
-
-                <div className="flex justify-between gap-3">
-                  <Button size="sm" variant="outline" onClick={addSessionSlotTemplate}>
-                    <Plus className="h-3.5 w-3.5" />
-                    Add shared slot
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={saveSessionSettings}
-                    loading={savingKey === "session-settings"}
-                  >
-                    Save poster session
-                  </Button>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="space-y-1">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <LayoutPanelTop className="h-4 w-4 text-ink-muted" />
-                  Step 1: Group accepted posters
-                </h3>
-                <p className="text-sm text-ink-muted">
-                  Create a group for each track, then move accepted papers into the correct group before assigning judges.
-                </p>
-              </div>
-            </CardHeader>
-            <CardBody className="space-y-6">
-              {trackSections.length === 0 ? (
-                <EmptyState
-                  icon={<FolderKanban className="h-10 w-10" />}
-                  title="No poster records yet"
-                  body="Accepted poster papers will appear here."
-                />
+              {sessionDraft.slotTemplates.length === 0 ? (
+                <p className="text-sm text-ink-muted">No slots yet. Add a start time below.</p>
               ) : (
-                trackSections.map((track) => {
-                  const trackGroups = groups.filter((group) => group.track.id === track.id);
-                  const trackPosters = ungroupedPosters.filter((paper) => paper.track?.id === track.id);
-
-                  return (
-                    <Collapsible
-                      key={track.id}
-                      title={`${track.name} · ${trackPosters.length} ungrouped`}
-                      defaultOpen={trackPosters.length > 0}
+                <div className="flex flex-wrap gap-2">
+                  {sessionDraft.slotTemplates.map((slot, index) => (
+                    <div
+                      key={slot.id}
+                      className="group flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface-alt px-2.5 py-1.5"
                     >
-                      <div className="space-y-4 rounded-2xl border border-border/60 p-4">
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                          <Input
-                            id={`${plannerId}-new-group-${track.id}`}
-                            value={newGroupNameByTrack[track.id] || ""}
+                      <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">
+                        {formatSlotCode(index)}
+                      </span>
+                      <span className="text-sm font-medium text-ink">
+                        {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeSessionSlotTemplate(slot.id)}
+                        className="ml-1 rounded p-0.5 text-ink-muted opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                        aria-label={`Remove slot ${formatSlotCode(index)}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-end gap-2">
+                <Field label="Add slot (start time)" htmlFor={`${plannerId}-new-slot-time`}>
+                  <Input
+                    id={`${plannerId}-new-slot-time`}
+                    type="time"
+                    value={newSlotTime}
+                    onChange={(event) => setNewSlotTime(event.target.value)}
+                    name="newSlotTime"
+                  />
+                </Field>
+                <Button size="sm" variant="outline" onClick={addSessionSlotTemplate}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end border-t border-border/40 pt-3">
+            <Button
+              size="sm"
+              onClick={saveSessionSettings}
+              loading={savingKey === "session-settings"}
+            >
+              Save session settings
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* ── Two-column layout: left = grouping, right = group details ── */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)]">
+        {/* ── LEFT: Group papers by track ── */}
+        <div className="space-y-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <LayoutPanelTop className="h-4 w-4 text-ink-muted" />
+            Group Accepted Posters
+          </h3>
+
+          {trackSections.length === 0 ? (
+            <EmptyState
+              icon={<FolderKanban className="h-10 w-10" />}
+              title="No poster records yet"
+              body="Accepted poster papers will appear here."
+            />
+          ) : (
+            trackSections.map((track) => {
+              const trackGroups = groups.filter((group) => group.track.id === track.id);
+              const trackPosters = ungroupedPosters.filter((paper) => paper.track?.id === track.id);
+
+              return (
+                <Collapsible
+                  key={track.id}
+                  title={`${track.name} · ${trackPosters.length} ungrouped`}
+                  defaultOpen={trackPosters.length > 0}
+                >
+                  <div className="space-y-4 rounded-2xl border border-border/60 p-4">
+                    {/* Create group */}
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                      <Input
+                        id={`${plannerId}-new-group-${track.id}`}
+                        value={newGroupNameByTrack[track.id] || ""}
+                        onChange={(event) =>
+                          setNewGroupNameByTrack((prev) => ({
+                            ...prev,
+                            [track.id]: event.target.value,
+                          }))
+                        }
+                        placeholder={`New ${track.name} group name`}
+                        aria-label={`Create a new group for ${track.name}`}
+                        name={`newGroup-${track.id}`}
+                        autoComplete="off"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => createGroup(track.id)}
+                        loading={savingKey === `create-${track.id}`}
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                        Create
+                      </Button>
+                    </div>
+
+                    {/* Group badges */}
+                    <div className="flex flex-wrap gap-2">
+                      {trackGroups.length === 0 ? (
+                        <Badge tone="warning">No groups yet</Badge>
+                      ) : (
+                        trackGroups.map((group) => (
+                          <Badge key={group.id} tone={getGroupTone(group)}>
+                            {group.name} · {getGroupLabel(group)}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Ungrouped papers */}
+                    {trackPosters.length === 0 ? (
+                      <p className="text-sm text-ink-muted">All papers in this track are grouped.</p>
+                    ) : (
+                      <>
+                        <Field label="Move to group" htmlFor={`${plannerId}-target-group-${track.id}`}>
+                          <Select
+                            id={`${plannerId}-target-group-${track.id}`}
+                            value={selectedGroupByTrack[track.id] || ""}
                             onChange={(event) =>
-                              setNewGroupNameByTrack((prev) => ({
+                              setSelectedGroupByTrack((prev) => ({
                                 ...prev,
                                 [track.id]: event.target.value,
                               }))
                             }
-                            placeholder={`Create a new ${track.name} group…`}
-                            aria-label={`Create a new group for ${track.name}`}
-                            name={`newGroup-${track.id}`}
-                            autoComplete="off"
-                          />
+                            name={`targetGroup-${track.id}`}
+                          >
+                            <option value="">Select a group</option>
+                            {trackGroups.map((group) => (
+                              <option key={group.id} value={group.id}>
+                                {group.name}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+
+                        <div className="space-y-2">
+                          {trackPosters.map((paper) => {
+                            const selected = (selectedPosterIdsByTrack[track.id] || []).includes(
+                              paper.submissionId
+                            );
+
+                            return (
+                              <label
+                                key={paper.submissionId}
+                                className={`flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors ${
+                                  selected ? "border-brand-300 bg-brand-50/40" : "border-border/60 bg-white"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={(event) => {
+                                    setSelectedPosterIdsByTrack((prev) => {
+                                      const current = prev[track.id] || [];
+                                      return {
+                                        ...prev,
+                                        [track.id]: event.target.checked
+                                          ? [...current, paper.submissionId]
+                                          : current.filter((id) => id !== paper.submissionId),
+                                      };
+                                    });
+                                  }}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge>{paper.paperCode || "NO-CODE"}</Badge>
+                                    <p className="text-sm font-medium text-ink">{paper.title}</p>
+                                  </div>
+                                  <p className="mt-1 text-xs text-ink-muted">{paper.author.name}</p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex justify-end">
                           <Button
                             size="sm"
-                            onClick={() => createGroup(track.id)}
-                            loading={savingKey === `create-${track.id}`}
+                            onClick={() => addSelectedPosters(track.id)}
+                            loading={savingKey === `members-${track.id}`}
                           >
-                            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                            Create group
+                            <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                            Add selected
                           </Button>
                         </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {trackGroups.length === 0 ? (
-                            <Badge tone="warning">No groups yet</Badge>
-                          ) : (
-                            trackGroups.map((group) => (
-                              <Badge key={group.id} tone={getGroupTone(group)}>
-                                {group.name} · {getGroupLabel(group)}
-                              </Badge>
-                            ))
-                          )}
-                        </div>
-
-                        {trackPosters.length === 0 ? (
-                          <p className="text-sm text-ink-muted">All accepted papers in this track are already grouped.</p>
-                        ) : (
-                          <>
-                            <Field label="Move selected papers to" htmlFor={`${plannerId}-target-group-${track.id}`}>
-                              <Select
-                                id={`${plannerId}-target-group-${track.id}`}
-                                value={selectedGroupByTrack[track.id] || ""}
-                                onChange={(event) =>
-                                  setSelectedGroupByTrack((prev) => ({
-                                    ...prev,
-                                    [track.id]: event.target.value,
-                                  }))
-                                }
-                                name={`targetGroup-${track.id}`}
-                              >
-                                <option value="">Select a group</option>
-                                {trackGroups.map((group) => (
-                                  <option key={group.id} value={group.id}>
-                                    {group.name}
-                                  </option>
-                                ))}
-                              </Select>
-                            </Field>
-
-                            <div className="space-y-2">
-                              {trackPosters.map((paper) => {
-                                const selected = (selectedPosterIdsByTrack[track.id] || []).includes(
-                                  paper.submissionId
-                                );
-
-                                return (
-                                  <label
-                                    key={paper.submissionId}
-                                    className={`flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors ${
-                                      selected ? "border-brand-300 bg-brand-50/40" : "border-border/60 bg-white"
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={selected}
-                                      onChange={(event) => {
-                                        setSelectedPosterIdsByTrack((prev) => {
-                                          const current = prev[track.id] || [];
-                                          return {
-                                            ...prev,
-                                            [track.id]: event.target.checked
-                                              ? [...current, paper.submissionId]
-                                              : current.filter((id) => id !== paper.submissionId),
-                                          };
-                                        });
-                                      }}
-                                    />
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <Badge>{paper.paperCode || "NO-CODE"}</Badge>
-                                        <p className="text-sm font-medium text-ink">{paper.title}</p>
-                                      </div>
-                                      <p className="mt-1 text-xs text-ink-muted">{paper.author.name}</p>
-                                    </div>
-                                  </label>
-                                );
-                              })}
-                            </div>
-
-                            <div className="flex justify-end">
-                              <Button
-                                size="sm"
-                                onClick={() => addSelectedPosters(track.id)}
-                                loading={savingKey === `members-${track.id}`}
-                              >
-                                <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                                Add selected papers
-                              </Button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </Collapsible>
-                  );
-                })
-              )}
-            </CardBody>
-          </Card>
+                      </>
+                    )}
+                  </div>
+                </Collapsible>
+              );
+            })
+          )}
         </div>
 
-        <div className="space-y-6">
+        {/* ── RIGHT: Group detail cards ── */}
+        <div className="space-y-5">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <Users className="h-4 w-4 text-ink-muted" />
+            Group Details
+          </h3>
+
           {groups.length === 0 ? (
             <EmptyState
               icon={<FolderKanban className="h-12 w-12" />}
@@ -882,122 +905,99 @@ export function PosterPlannerClient({
               );
               const judgeDraft = judgeDrafts[group.id] || ["", "", ""];
               const slotDraft = slotDrafts[group.id] || {
-                startsAt: "",
-                endsAt: "",
+                templateId: "",
                 judgeId: "",
                 status: "PLANNED",
               };
 
               return (
                 <Card key={group.id}>
+                  {/* ── Group Header with inline stats ── */}
                   <CardHeader>
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-2">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge tone="info">{group.track.name}</Badge>
                           <Badge tone={getGroupTone(group)}>{getGroupLabel(group)}</Badge>
                         </div>
                         <h3 className="text-lg font-semibold text-ink">{group.name}</h3>
-                        <div className="flex flex-wrap gap-2 text-xs text-ink-muted">
-                          <span>{group.members.length} paper(s)</span>
-                          <span>{group.judges.length}/3 judges</span>
-                          <span>{group.slots.length} slot(s)</span>
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {sessionSettings.room || group.room || "Room not set"}
-                          </span>
-                        </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 rounded-2xl bg-surface-alt p-3 text-center">
+                      <div className="flex gap-4 rounded-xl bg-surface-alt px-4 py-2 text-center">
                         <div>
                           <p className="text-[11px] uppercase tracking-wide text-ink-muted">Papers</p>
-                          <p className="mt-1 text-sm font-semibold text-ink">{group.members.length}</p>
+                          <p className="text-sm font-bold text-ink">{group.members.length}</p>
                         </div>
                         <div>
                           <p className="text-[11px] uppercase tracking-wide text-ink-muted">Judges</p>
-                          <p className="mt-1 text-sm font-semibold text-ink">{group.judges.length}</p>
+                          <p className="text-sm font-bold text-ink">{group.judges.length}/3</p>
                         </div>
                         <div>
                           <p className="text-[11px] uppercase tracking-wide text-ink-muted">Slots</p>
-                          <p className="mt-1 text-sm font-semibold text-ink">{group.slots.length}</p>
+                          <p className="text-sm font-bold text-ink">{group.slots.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-ink-muted">Room</p>
+                          <p className="text-sm font-bold text-ink">{sessionSettings.room || "—"}</p>
                         </div>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardBody className="space-y-6">
-                    <section className="space-y-3 rounded-2xl border border-border/60 p-4">
-                      <div className="space-y-1">
-                        <h4 className="text-sm font-semibold text-ink">Step 2: Group setup</h4>
-                        <p className="text-sm text-ink-muted">
-                          Name the group clearly. Room comes from the shared poster session above.
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <Field label="Group name" htmlFor={`${plannerId}-group-name-${group.id}`}>
-                          <Input
-                            id={`${plannerId}-group-name-${group.id}`}
-                            value={groupDrafts[group.id]?.name || ""}
-                            onChange={(event) =>
-                              setGroupDrafts((prev) => ({
-                                ...prev,
-                                [group.id]: {
-                                  ...prev[group.id],
-                                  name: event.target.value,
-                                },
-                              }))
-                            }
-                            name={`groupName-${group.id}`}
-                            autoComplete="off"
-                          />
-                        </Field>
-                        <Field label="Shared room" htmlFor={`${plannerId}-shared-room-${group.id}`}>
-                          <Input
-                            id={`${plannerId}-shared-room-${group.id}`}
-                            value={sessionSettings.room || "Not set yet"}
-                            disabled
-                            name={`sharedRoom-${group.id}`}
-                          />
-                        </Field>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => saveGroup(group.id)}
-                          loading={savingKey === `group-${group.id}`}
-                        >
-                          Save group details
-                        </Button>
-                      </div>
-                    </section>
 
-                    <section className="space-y-3 rounded-2xl border border-border/60 p-4">
-                      <div className="space-y-1">
-                        <h4 className="text-sm font-semibold text-ink">Step 3: Review papers in this group</h4>
-                        <p className="text-sm text-ink-muted">Quickly confirm that the right accepted papers are grouped together before continuing.</p>
-                      </div>
+                  <CardBody className="space-y-5">
+                    {/* ── Group name edit ── */}
+                    <div className="flex items-end gap-3">
+                      <Field label="Group name" htmlFor={`${plannerId}-group-name-${group.id}`} className="flex-1">
+                        <Input
+                          id={`${plannerId}-group-name-${group.id}`}
+                          value={groupDrafts[group.id]?.name || ""}
+                          onChange={(event) =>
+                            setGroupDrafts((prev) => ({
+                              ...prev,
+                              [group.id]: {
+                                ...prev[group.id],
+                                name: event.target.value,
+                              },
+                            }))
+                          }
+                          name={`groupName-${group.id}`}
+                          autoComplete="off"
+                        />
+                      </Field>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => saveGroup(group.id)}
+                        loading={savingKey === `group-${group.id}`}
+                      >
+                        Rename
+                      </Button>
+                    </div>
+
+                    {/* ── Papers in group ── */}
+                    <section className="space-y-2 rounded-2xl border border-border/60 p-4">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                        Papers ({group.members.length})
+                      </h4>
                       {group.members.length === 0 ? (
                         <p className="text-sm text-ink-muted">No papers in this group yet.</p>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {group.members.map((member) => (
                             <div
                               key={member.id}
-                              className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-surface-alt p-3"
+                              className="flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-surface-alt px-3 py-2"
                             >
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge>{member.paperCode || "NO-CODE"}</Badge>
-                                  <p className="text-sm font-medium text-ink">{member.title}</p>
-                                </div>
-                                <p className="text-xs text-ink-muted">{member.authorName}</p>
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
+                                <Badge>{member.paperCode || "NO-CODE"}</Badge>
+                                <span className="truncate text-sm text-ink">{member.title}</span>
+                                <span className="shrink-0 text-xs text-ink-muted">({member.authorName})</span>
                               </div>
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => removeMember(group.id, member.id)}
                                 loading={savingKey === `remove-member-${member.id}`}
-                                aria-label={`Remove paper ${member.paperCode || member.title} from ${group.name}`}
+                                aria-label={`Remove ${member.paperCode || member.title}`}
                               >
                                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                               </Button>
@@ -1007,12 +1007,12 @@ export function PosterPlannerClient({
                       )}
                     </section>
 
+                    {/* ── Judges ── */}
                     <section className="space-y-3 rounded-2xl border border-border/60 p-4">
-                      <div className="space-y-1">
-                        <h4 className="text-sm font-semibold text-ink">Step 4: Assign three judges</h4>
-                        <p className="text-sm text-ink-muted">Each group needs three different judges before slot planning is complete.</p>
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                        Judges ({group.judges.length}/3)
+                      </h4>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         {[0, 1, 2].map((index) => (
                           <Field
                             key={index}
@@ -1052,136 +1052,145 @@ export function PosterPlannerClient({
                       </div>
                     </section>
 
+                    {/* ── Slots ── */}
                     <section className="space-y-3 rounded-2xl border border-border/60 p-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <CalendarRange className="h-4 w-4 text-ink-muted" />
-                          <h4 className="text-sm font-semibold text-ink">Step 5: Plan time slots</h4>
-                        </div>
-                        <p className="text-sm text-ink-muted">
-                          Reuse the shared slots from the poster session. You can attach a specific judge per slot or leave it unassigned first.
-                        </p>
+                      <div className="flex items-center justify-between">
+                        <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                          <Clock className="h-3.5 w-3.5" />
+                          Slots ({group.slots.length})
+                        </h4>
                       </div>
-                      {sessionSettings.slotTemplates.length === 0 ? (
+
+                      {sessionSettings.slotTemplates.length === 0 && (
                         <Alert tone="danger">
-                          Add shared poster slots in Step 0 before assigning slots to groups.
+                          Add shared slots in Session Settings first.
                         </Alert>
-                      ) : null}
-                      {group.slots.length === 0 ? (
-                        <p className="text-sm text-ink-muted">No slots added for this group yet.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {group.slots.map((slot) => (
-                            <div
-                              key={slot.id}
-                              className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-surface-alt p-3"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-ink">
-                                  {formatDateTime(slot.startsAt)} - {formatDateTime(slot.endsAt)}
-                                </p>
-                                <p className="text-xs text-ink-muted">
-                                  Judge:{" "}
-                                  {slot.judgeId
-                                    ? group.judges.find((judge) => judge.judge.id === slot.judgeId)?.judge.name ||
-                                      "Assigned"
-                                    : "Unassigned"}{" "}
-                                  | Status: {slot.status}
-                                </p>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => deleteSlot(group.id, slot.id)}
-                                loading={savingKey === `delete-slot-${slot.id}`}
-                                aria-label={`Delete slot ${formatDateTime(slot.startsAt)} to ${formatDateTime(slot.endsAt)} from ${group.name}`}
+                      )}
+
+                      {group.slots.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {group.slots.map((slot) => {
+                            const templateIndex = sessionSettings.slotTemplates.findIndex(
+                              (t) => t.startsAt === slot.startsAt && t.endsAt === slot.endsAt
+                            );
+                            const slotCode = templateIndex >= 0 ? formatSlotCode(templateIndex) : "??";
+                            const judgeName = slot.judgeId
+                              ? group.judges.find((j) => j.judge.id === slot.judgeId)?.judge.name || "Assigned"
+                              : "Unassigned";
+
+                            return (
+                              <div
+                                key={slot.id}
+                                className="group flex items-center gap-2 rounded-lg border border-border/60 bg-surface-alt px-3 py-2"
                               >
-                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                              </Button>
-                            </div>
-                          ))}
+                                <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">
+                                  {slotCode}
+                                </span>
+                                <span className="text-sm font-medium text-ink">
+                                  {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                                </span>
+                                <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
+                                  {slot.status}
+                                </Badge>
+                                <span className="text-xs text-ink-muted">{judgeName}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteSlot(group.id, slot.id)}
+                                  className="ml-1 rounded p-0.5 text-ink-muted opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                                  aria-label={`Delete slot ${slotCode}`}
+                                  disabled={savingKey === `delete-slot-${slot.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <Field label="Shared slot" htmlFor={`${plannerId}-slot-template-${group.id}`}>
-                          <Select
-                            id={`${plannerId}-slot-template-${group.id}`}
-                            value={slotDraft.templateId}
-                            onChange={(event) =>
-                              setSlotDrafts((prev) => ({
-                                ...prev,
-                                [group.id]: { ...slotDraft, templateId: event.target.value },
-                              }))
-                            }
-                            name={`slotTemplate-${group.id}`}
-                          >
-                            <option value="">Select a shared slot</option>
-                            {sessionSettings.slotTemplates.map((slot) => {
-                              const alreadyUsed = group.slots.some(
-                                (groupSlot) =>
-                                  groupSlot.startsAt === slot.startsAt &&
-                                  groupSlot.endsAt === slot.endsAt
-                              );
+                      {sessionSettings.slotTemplates.length > 0 && (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <Field label="Slot" htmlFor={`${plannerId}-slot-template-${group.id}`}>
+                            <Select
+                              id={`${plannerId}-slot-template-${group.id}`}
+                              value={slotDraft.templateId}
+                              onChange={(event) =>
+                                setSlotDrafts((prev) => ({
+                                  ...prev,
+                                  [group.id]: { ...slotDraft, templateId: event.target.value },
+                                }))
+                              }
+                              name={`slotTemplate-${group.id}`}
+                            >
+                              <option value="">Select slot</option>
+                              {sessionSettings.slotTemplates.map((slot, index) => {
+                                const alreadyUsed = group.slots.some(
+                                  (groupSlot) =>
+                                    groupSlot.startsAt === slot.startsAt &&
+                                    groupSlot.endsAt === slot.endsAt
+                                );
 
-                              return (
-                                <option key={slot.id} value={slot.id} disabled={alreadyUsed}>
-                                  {formatDateTime(slot.startsAt)} - {formatDateTime(slot.endsAt)}
-                                  {alreadyUsed ? " (already used)" : ""}
+                                return (
+                                  <option key={slot.id} value={slot.id} disabled={alreadyUsed}>
+                                    [{formatSlotCode(index)}] {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                                    {alreadyUsed ? " (used)" : ""}
+                                  </option>
+                                );
+                              })}
+                            </Select>
+                          </Field>
+                          <Field label="Judge" htmlFor={`${plannerId}-slot-judge-${group.id}`}>
+                            <Select
+                              id={`${plannerId}-slot-judge-${group.id}`}
+                              value={slotDraft.judgeId}
+                              onChange={(event) =>
+                                setSlotDrafts((prev) => ({
+                                  ...prev,
+                                  [group.id]: { ...slotDraft, judgeId: event.target.value },
+                                }))
+                              }
+                              name={`slotJudge-${group.id}`}
+                            >
+                              <option value="">Unassigned</option>
+                              {group.judges.map((judge) => (
+                                <option key={judge.id} value={judge.judge.id}>
+                                  {judge.judge.name}
                                 </option>
-                              );
-                            })}
-                          </Select>
-                        </Field>
-                        <Field label="Judge for this slot" htmlFor={`${plannerId}-slot-judge-${group.id}`}>
-                          <Select
-                            id={`${plannerId}-slot-judge-${group.id}`}
-                            value={slotDraft.judgeId}
-                            onChange={(event) =>
-                              setSlotDrafts((prev) => ({
-                                ...prev,
-                                [group.id]: { ...slotDraft, judgeId: event.target.value },
-                              }))
-                            }
-                            name={`slotJudge-${group.id}`}
+                              ))}
+                            </Select>
+                          </Field>
+                          <Field label="Status" htmlFor={`${plannerId}-slot-status-${group.id}`}>
+                            <Select
+                              id={`${plannerId}-slot-status-${group.id}`}
+                              value={slotDraft.status}
+                              onChange={(event) =>
+                                setSlotDrafts((prev) => ({
+                                  ...prev,
+                                  [group.id]: { ...slotDraft, status: event.target.value },
+                                }))
+                              }
+                              name={`slotStatus-${group.id}`}
+                            >
+                              <option value="PLANNED">Planned</option>
+                              <option value="CONFIRMED">Confirmed</option>
+                              <option value="COMPLETED">Completed</option>
+                            </Select>
+                          </Field>
+                        </div>
+                      )}
+
+                      {sessionSettings.slotTemplates.length > 0 && (
+                        <div className="flex justify-end">
+                          <Button
+                            size="sm"
+                            onClick={() => addSlot(group.id)}
+                            loading={savingKey === `slot-${group.id}`}
                           >
-                            <option value="">Unassigned</option>
-                            {group.judges.map((judge) => (
-                              <option key={judge.id} value={judge.judge.id}>
-                                {judge.judge.name}
-                              </option>
-                            ))}
-                          </Select>
-                        </Field>
-                        <Field label="Slot status" htmlFor={`${plannerId}-slot-status-${group.id}`}>
-                          <Select
-                            id={`${plannerId}-slot-status-${group.id}`}
-                            value={slotDraft.status}
-                            onChange={(event) =>
-                              setSlotDrafts((prev) => ({
-                                ...prev,
-                                [group.id]: { ...slotDraft, status: event.target.value },
-                              }))
-                            }
-                            name={`slotStatus-${group.id}`}
-                          >
-                            <option value="PLANNED">Planned</option>
-                            <option value="CONFIRMED">Confirmed</option>
-                            <option value="COMPLETED">Completed</option>
-                          </Select>
-                        </Field>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button
-                          size="sm"
-                          onClick={() => addSlot(group.id)}
-                          loading={savingKey === `slot-${group.id}`}
-                          disabled={sessionSettings.slotTemplates.length === 0}
-                        >
-                          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                          Use shared slot
-                        </Button>
-                      </div>
+                            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                            Add slot
+                          </Button>
+                        </div>
+                      )}
                     </section>
                   </CardBody>
                 </Card>
