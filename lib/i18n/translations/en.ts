@@ -50,6 +50,7 @@ const en: Record<TranslationKey, string> = {
   "nav.posterPresentation": "Poster Presentation",
   "nav.scheduleAndDocs": "Schedule & Documents",
   "nav.userManagement": "User Management",
+  "nav.trackManagement": "Track Management",
   "nav.trackTeam": "Track Team",
 
   // ─── Landing Page ─────────────────────────────────────
@@ -448,6 +449,28 @@ const en: Record<TranslationKey, string> = {
   "trackTeam.memberRemoved": "Member removed successfully",
   "trackTeam.removeTitle": "Remove member from track",
   "trackTeam.removeDescription": "Remove {name} from this track team.",
+
+  // ─── Track Admin ──────────────────────────────────────
+  "trackAdmin.title": "Track Management",
+  "trackAdmin.subtitle": "Add, edit, and assign Program Chairs to tracks",
+  "trackAdmin.createTrack": "Add Track",
+  "trackAdmin.editTrack": "Edit Track",
+  "trackAdmin.deleteTrack": "Delete Track",
+  "trackAdmin.trackName": "Track Name",
+  "trackAdmin.description": "Description",
+  "trackAdmin.programChair": "Program Chair",
+  "trackAdmin.selectChair": "-- Select Program Chair --",
+  "trackAdmin.noChair": "No Program Chair assigned",
+  "trackAdmin.deleteConfirm": "Are you sure you want to delete track \"{name}\"?",
+  "trackAdmin.deleteWarning": "This action cannot be undone",
+  "trackAdmin.hasSubmissions": "Cannot delete this track because it has submissions",
+  "trackAdmin.createSuccess": "Track created successfully",
+  "trackAdmin.updateSuccess": "Track updated successfully",
+  "trackAdmin.deleteSuccess": "Track deleted successfully",
+  "trackAdmin.noTracks": "No tracks yet",
+  "trackAdmin.noTracksDesc": "Add a new track to get started",
+  "trackAdmin.trackCount": "{count} tracks total",
+  "trackAdmin.searchPlaceholder": "Search tracks...",
 
   // ─── File Upload / Download ───────────────────────────
   "fileUpload.downloadFailed": "Unable to download the file",

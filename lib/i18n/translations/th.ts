@@ -48,6 +48,7 @@ const th = {
   "nav.posterPresentation": "การนำเสนอแบบโปสเตอร์",
   "nav.scheduleAndDocs": "กำหนดการและเอกสาร",
   "nav.userManagement": "จัดการผู้ใช้",
+  "nav.trackManagement": "จัดการสาขาวิชา",
   "nav.trackTeam": "ทีมสาขาวิชา",
 
   // ─── Landing Page ─────────────────────────────────────
@@ -450,6 +451,28 @@ const th = {
   "trackTeam.memberRemoved": "ลบสมาชิกสำเร็จ",
   "trackTeam.removeTitle": "นำสมาชิกออกจากสาขา",
   "trackTeam.removeDescription": "ยืนยันการนำ {name} ออกจากทีมสาขาวิชานี้",
+
+  // ─── Track Admin ──────────────────────────────────────
+  "trackAdmin.title": "จัดการสาขาวิชา",
+  "trackAdmin.subtitle": "เพิ่ม แก้ไข และกำหนดประธานสาขาวิชา",
+  "trackAdmin.createTrack": "เพิ่มสาขาวิชา",
+  "trackAdmin.editTrack": "แก้ไขสาขาวิชา",
+  "trackAdmin.deleteTrack": "ลบสาขาวิชา",
+  "trackAdmin.trackName": "ชื่อสาขาวิชา",
+  "trackAdmin.description": "คำอธิบาย",
+  "trackAdmin.programChair": "ประธานสาขา",
+  "trackAdmin.selectChair": "-- เลือกประธานสาขา --",
+  "trackAdmin.noChair": "ยังไม่มีประธานสาขา",
+  "trackAdmin.deleteConfirm": "ยืนยันการลบสาขาวิชา \"{name}\" หรือไม่?",
+  "trackAdmin.deleteWarning": "การลบสาขาวิชาจะไม่สามารถยกเลิกได้",
+  "trackAdmin.hasSubmissions": "ไม่สามารถลบสาขาวิชานี้ได้ เนื่องจากมีบทความอยู่",
+  "trackAdmin.createSuccess": "เพิ่มสาขาวิชาเรียบร้อยแล้ว",
+  "trackAdmin.updateSuccess": "แก้ไขสาขาวิชาเรียบร้อยแล้ว",
+  "trackAdmin.deleteSuccess": "ลบสาขาวิชาเรียบร้อยแล้ว",
+  "trackAdmin.noTracks": "ยังไม่มีสาขาวิชา",
+  "trackAdmin.noTracksDesc": "เพิ่มสาขาวิชาใหม่เพื่อเริ่มต้นจัดการระบบ",
+  "trackAdmin.trackCount": "สาขาวิชาทั้งหมด {count} สาขา",
+  "trackAdmin.searchPlaceholder": "ค้นหาสาขาวิชา...",
 
   // ─── File Upload / Download ───────────────────────────
   "fileUpload.downloadFailed": "ไม่สามารถดาวน์โหลดไฟล์ได้",

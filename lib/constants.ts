@@ -18,6 +18,7 @@ export const NAV_ITEMS = {
     { href: "/presentations/poster", label: "nav.posterPresentation", icon: "Image" },
     { href: "/deadlines", label: "nav.scheduleAndDocs", icon: "Calendar" },
     { href: "/admin/users", label: "nav.userManagement", icon: "Users" },
+    { href: "/admin/tracks", label: "nav.trackManagement", icon: "Layers" },
   ],
   PROGRAM_CHAIR: [
     { href: "/dashboard", label: "nav.dashboard", icon: "LayoutDashboard" },
