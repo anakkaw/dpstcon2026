@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { desc, eq, sql } from "drizzle-orm";
-import { hasRole } from "@/lib/permissions";
+import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
-import { reviewAssignments, submissions, tracks } from "@/server/db/schema";
+import { reviewAssignments, submissions } from "@/server/db/schema";
 import { SubmissionsPageClient, type SubmissionData } from "./submissions-page-client";
 
 async function loadInitialSubmissions(
@@ -34,15 +34,14 @@ async function loadInitialSubmissions(
   const roleFetches: Promise<void>[] = [];
 
   if (hasRole(currentUser, "PROGRAM_CHAIR")) {
+    const trackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
     roleFetches.push(
-      db.select({ id: tracks.id }).from(tracks).where(eq(tracks.headUserId, currentUser.id))
-        .then(async (myTracks) => {
-          const trackIds = myTracks.map((track) => track.id);
-          if (trackIds.length > 0) {
-            const trackSubs = await db.select({ id: submissions.id }).from(submissions).where(sql`${submissions.trackId} IN ${trackIds}`);
-            trackSubs.forEach((submission) => submissionIds.add(submission.id));
-          }
-        })
+      Promise.resolve().then(async () => {
+        if (trackIds.length > 0) {
+          const trackSubs = await db.select({ id: submissions.id }).from(submissions).where(sql`${submissions.trackId} IN ${trackIds}`);
+          trackSubs.forEach((submission) => submissionIds.add(submission.id));
+        }
+      })
     );
   }
 

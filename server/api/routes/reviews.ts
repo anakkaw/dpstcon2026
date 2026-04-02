@@ -5,28 +5,18 @@ import {
   reviewAssignments,
   submissions,
   decisions,
-  tracks,
 } from "@/server/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
-import { hasRole } from "@/lib/permissions";
+import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import { isDuplicateReviewRound } from "@/server/access-policies";
 import { ensureSubmissionPaperCode } from "@/server/paper-code-service";
 
 const app = new OpenAPIHono<AuthEnv>();
 
 app.use("/*", authMiddleware);
-
-async function getChairedTrackIds(userId: string) {
-  const rows = await db
-    .select({ id: tracks.id })
-    .from(tracks)
-    .where(eq(tracks.headUserId, userId));
-
-  return rows.map((row) => row.id);
-}
 
 async function canManageSubmissionById(currentUser: AuthEnv["Variables"]["user"], submissionId: string) {
   if (hasRole(currentUser, "ADMIN")) {
@@ -42,12 +32,7 @@ async function canManageSubmissionById(currentUser: AuthEnv["Variables"]["user"]
     return false;
   }
 
-  const track = await db.query.tracks.findFirst({
-    where: eq(tracks.id, submission.trackId),
-    columns: { headUserId: true },
-  });
-
-  return track?.headUserId === currentUser.id;
+  return hasTrackRole(currentUser, submission.trackId, "PROGRAM_CHAIR");
 }
 
 // GET /api/reviews/assignments
@@ -68,7 +53,7 @@ app.get("/assignments", async (c) => {
       ownAssignments.forEach((assignment) => assignmentIds.add(assignment.id));
     }
 
-    const chairedTrackIds = await getChairedTrackIds(currentUser.id);
+    const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
     if (chairedTrackIds.length > 0) {
       const managedAssignments = await db
         .select({ id: reviewAssignments.id })

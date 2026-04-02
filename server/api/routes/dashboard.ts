@@ -1,6 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
-import { submissions, reviews, reviewAssignments, userRoles, tracks } from "@/server/db/schema";
+import { submissions, reviews, reviewAssignments, userRoles } from "@/server/db/schema";
 import { eq, count, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
@@ -54,17 +54,11 @@ app.get("/", async (c) => {
     let scopeTrackIds: string[] | null = null;
 
     if (!hasRole(currentUser, "ADMIN")) {
-      const chairedTracks = hasRole(currentUser, "PROGRAM_CHAIR")
-        ? await db
-            .select({ id: tracks.id })
-            .from(tracks)
-            .where(eq(tracks.headUserId, currentUser.id))
-        : [];
-
+      const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
       const committeeTrackIds = getTrackRoleIds(currentUser, "COMMITTEE");
       scopeTrackIds = Array.from(
         new Set([
-          ...chairedTracks.map((track) => track.id),
+          ...chairedTrackIds,
           ...committeeTrackIds,
         ])
       );

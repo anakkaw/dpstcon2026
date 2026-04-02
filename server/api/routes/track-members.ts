@@ -1,11 +1,12 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
 import { trackMembers, tracks, user, userRoles } from "@/server/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
-import { hasRole, getPrimaryRole } from "@/lib/permissions";
+import { getTrackRoleIds, hasRole, getPrimaryRole } from "@/lib/permissions";
+import { isProgramChairForTrack } from "@/server/track-chairs";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -14,23 +15,23 @@ app.use("/*", authMiddleware);
 // GET /api/track-members/tracks
 app.get("/tracks", async (c) => {
   const currentUser = c.get("user");
+  const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
 
   const accessibleTracks = hasRole(currentUser, "ADMIN")
     ? await db.select({ id: tracks.id, name: tracks.name }).from(tracks)
+    : chairedTrackIds.length === 0
+      ? []
     : await db
         .select({ id: tracks.id, name: tracks.name })
         .from(tracks)
-        .where(eq(tracks.headUserId, currentUser.id));
+        .where(inArray(tracks.id, chairedTrackIds));
 
   return c.json({ tracks: accessibleTracks });
 });
 
 /** Check if user is head of the given track */
 async function isTrackHead(userId: string, trackId: string): Promise<boolean> {
-  const track = await db.query.tracks.findFirst({
-    where: and(eq(tracks.id, trackId), eq(tracks.headUserId, userId)),
-  });
-  return !!track;
+  return isProgramChairForTrack(userId, trackId);
 }
 
 // GET /api/track-members/:trackId

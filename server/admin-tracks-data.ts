@@ -1,23 +1,26 @@
 import { db } from "@/server/db";
 import { tracks, user } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
+import { getTrackProgramChairs } from "@/server/track-chairs";
+
+export interface AdminTrackChair {
+  id: string;
+  name: string;
+  email: string;
+  prefixTh: string | null;
+  firstNameTh: string | null;
+  lastNameTh: string | null;
+  prefixEn: string | null;
+  firstNameEn: string | null;
+  lastNameEn: string | null;
+}
 
 export interface AdminTrackData {
   id: string;
   name: string;
   description: string | null;
-  headUserId: string | null;
-  head: {
-    id: string;
-    name: string;
-    email: string;
-    prefixTh: string | null;
-    firstNameTh: string | null;
-    lastNameTh: string | null;
-    prefixEn: string | null;
-    firstNameEn: string | null;
-    lastNameEn: string | null;
-  } | null;
+  chairUserIds: string[];
+  chairs: AdminTrackChair[];
 }
 
 export interface AdminTrackUser {
@@ -33,23 +36,8 @@ export interface AdminTrackUser {
 }
 
 export async function getAdminTracksPageData() {
-  const allTracks = await db.query.tracks.findMany({
-    with: {
-      head: {
-        columns: {
-          id: true,
-          name: true,
-          email: true,
-          prefixTh: true,
-          firstNameTh: true,
-          lastNameTh: true,
-          prefixEn: true,
-          firstNameEn: true,
-          lastNameEn: true,
-        },
-      },
-    },
-  });
+  const allTracks = await db.select().from(tracks);
+  const chairsByTrackId = await getTrackProgramChairs(allTracks.map((track) => track.id));
 
   const allUsers = await db
     .select({
@@ -67,7 +55,14 @@ export async function getAdminTracksPageData() {
     .where(eq(user.isActive, true));
 
   return {
-    tracks: allTracks as AdminTrackData[],
+    tracks: allTracks.map((track) => {
+      const chairs = chairsByTrackId.get(track.id) ?? [];
+      return {
+        ...track,
+        chairUserIds: chairs.map((chair) => chair.id),
+        chairs,
+      };
+    }) as AdminTrackData[],
     users: allUsers as AdminTrackUser[],
   };
 }

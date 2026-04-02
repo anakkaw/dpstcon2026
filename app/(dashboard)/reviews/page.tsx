@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { eq, inArray, and } from "drizzle-orm";
-import { hasRole } from "@/lib/permissions";
+import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
-import { reviewAssignments, submissions, tracks, user, userRoles } from "@/server/db/schema";
+import { reviewAssignments, submissions, user, userRoles } from "@/server/db/schema";
 import { ReviewsPageClient, type AssignmentData, type ReviewerUser } from "./reviews-page-client";
 
 async function loadInitialAssignments(
@@ -24,11 +24,7 @@ async function loadInitialAssignments(
       ownAssignments.forEach((assignment) => assignmentIds.add(assignment.id));
     }
 
-    const chairedTracks = await db
-      .select({ id: tracks.id })
-      .from(tracks)
-      .where(eq(tracks.headUserId, currentUser.id));
-    const chairedTrackIds = chairedTracks.map((track) => track.id);
+    const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
 
     if (chairedTrackIds.length > 0) {
       const managedAssignments = await db
@@ -86,11 +82,7 @@ async function loadInitialReviewerUsers(
       .from(userRoles)
       .where(eq(userRoles.role, "REVIEWER"));
   } else {
-    const chairedTracks = await db
-      .select({ id: tracks.id })
-      .from(tracks)
-      .where(eq(tracks.headUserId, currentUser.id));
-    const chairedTrackIds = chairedTracks.map((track) => track.id);
+    const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
 
     if (chairedTrackIds.length === 0) {
       return [];

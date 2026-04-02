@@ -2,9 +2,9 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
-import { hasRole } from "@/lib/permissions";
-import { tracks, submissions } from "@/server/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { getTrackRoleIds, hasRole } from "@/lib/permissions";
+import { submissions } from "@/server/db/schema";
+import { inArray } from "drizzle-orm";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -17,11 +17,7 @@ app.get("/proceedings", async (c) => {
   let whereClause = undefined;
 
   if (!hasRole(currentUser, "ADMIN")) {
-    const chairedTracks = await db
-      .select({ id: tracks.id })
-      .from(tracks)
-      .where(eq(tracks.headUserId, currentUser.id));
-    const chairedTrackIds = chairedTracks.map((track) => track.id);
+    const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
 
     if (chairedTrackIds.length === 0) {
       return c.json({ error: "Forbidden" }, 403);

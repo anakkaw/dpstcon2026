@@ -6,7 +6,6 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/components/ui/select";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -34,7 +33,7 @@ export function AdminTracksClient({
   const [messageType, setMessageType] = useState<"success" | "danger">("success");
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedTrack, setSelectedTrack] = useState<AdminTrackData | null>(null);
-  const [form, setForm] = useState({ name: "", description: "", headUserId: "" });
+  const [form, setForm] = useState({ name: "", description: "", chairUserIds: [] as string[] });
   const [saving, setSaving] = useState(false);
 
   function showMsg(text: string, type: "success" | "danger" = "success") {
@@ -54,7 +53,7 @@ export function AdminTracksClient({
   }
 
   function openCreate() {
-    setForm({ name: "", description: "", headUserId: "" });
+    setForm({ name: "", description: "", chairUserIds: [] });
     setModalMode("create");
   }
 
@@ -63,7 +62,7 @@ export function AdminTracksClient({
     setForm({
       name: track.name,
       description: track.description || "",
-      headUserId: track.headUserId || "",
+      chairUserIds: track.chairUserIds,
     });
     setModalMode("edit");
   }
@@ -85,12 +84,11 @@ export function AdminTracksClient({
       const url = isCreate ? "/api/tracks" : `/api/tracks/${selectedTrack!.id}`;
       const method = isCreate ? "POST" : "PATCH";
 
-      const payload: Record<string, unknown> = { name: form.name, description: form.description || null };
-      if (isCreate) {
-        payload.headUserId = form.headUserId || undefined;
-      } else {
-        payload.headUserId = form.headUserId || null;
-      }
+      const payload: Record<string, unknown> = {
+        name: form.name,
+        description: form.description || null,
+        chairUserIds: form.chairUserIds,
+      };
 
       const res = await fetch(url, {
         method,
@@ -134,10 +132,19 @@ export function AdminTracksClient({
     setSaving(false);
   }
 
-  function displayUser(u: AdminTrackUser | AdminTrackData["head"]) {
+  function displayUser(u: AdminTrackUser | AdminTrackData["chairs"][number]) {
     if (!u) return "";
     if (locale === "th") return displayNameTh(u) || u.name || u.email;
     return displayNameEn(u) || u.name || u.email;
+  }
+
+  function toggleChair(userId: string, checked: boolean) {
+    setForm((current) => ({
+      ...current,
+      chairUserIds: checked
+        ? Array.from(new Set([...current.chairUserIds, userId]))
+        : current.chairUserIds.filter((id) => id !== userId),
+    }));
   }
 
   const filtered = (() => {
@@ -147,7 +154,7 @@ export function AdminTracksClient({
       (track) =>
         track.name.toLowerCase().includes(q) ||
         (track.description?.toLowerCase().includes(q)) ||
-        (track.head && displayUser(track.head).toLowerCase().includes(q))
+        track.chairs.some((chair) => displayUser(chair).toLowerCase().includes(q))
     );
   })();
 
@@ -208,10 +215,11 @@ export function AdminTracksClient({
                     )}
                     <p className="mt-1 text-sm text-muted">
                       <span className="font-medium">{t("trackAdmin.programChair")}:</span>{" "}
-                      {track.head ? (
+                      {track.chairs.length > 0 ? (
                         <span className="text-ink">
-                          {displayUser(track.head)}{" "}
-                          <span className="text-muted">({track.head.email})</span>
+                          {track.chairs
+                            .map((chair) => `${displayUser(chair)} (${chair.email})`)
+                            .join(", ")}
                         </span>
                       ) : (
                         <span className="italic text-gray-400">{t("trackAdmin.noChair")}</span>
@@ -259,17 +267,24 @@ export function AdminTracksClient({
             </Field>
 
             <Field label={t("trackAdmin.programChair")}>
-              <Select
-                value={form.headUserId}
-                onChange={(e) => setForm({ ...form, headUserId: e.target.value })}
-              >
-                <option value="">{t("trackAdmin.selectChair")}</option>
+              <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-line bg-white p-3">
                 {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {displayUser(u)} ({u.email})
-                  </option>
+                  <label key={u.id} className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-line"
+                      checked={form.chairUserIds.includes(u.id)}
+                      onChange={(e) => toggleChair(u.id, e.target.checked)}
+                    />
+                    <span className="min-w-0 text-sm text-ink">
+                      {displayUser(u)} <span className="text-muted">({u.email})</span>
+                    </span>
+                  </label>
                 ))}
-              </Select>
+                {users.length === 0 ? (
+                  <p className="text-sm text-muted">{t("trackAdmin.noChair")}</p>
+                ) : null}
+              </div>
             </Field>
 
             <div className="flex justify-end gap-2 pt-2">

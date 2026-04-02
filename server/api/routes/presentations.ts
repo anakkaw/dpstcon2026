@@ -11,7 +11,6 @@ import {
   posterPresentationGroups,
   settings,
   submissions,
-  tracks,
   user,
   userRoles,
 } from "@/server/db/schema";
@@ -19,7 +18,7 @@ import { eq, and, desc, inArray } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
-import { hasRole } from "@/lib/permissions";
+import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import {
   getPosterPlannerPageData,
   getPosterSessionSettings,
@@ -32,15 +31,6 @@ const POSTER_SESSION_ROOM_KEY = "posterSessionRoom";
 const POSTER_SESSION_SLOTS_KEY = "posterSessionSlotTemplates";
 
 app.use("/*", authMiddleware);
-
-async function getChairedTrackIds(userId: string) {
-  const rows = await db
-    .select({ id: tracks.id })
-    .from(tracks)
-    .where(eq(tracks.headUserId, userId));
-
-  return rows.map((row) => row.id);
-}
 
 async function canManageSubmissionPresentation(
   currentUser: AuthEnv["Variables"]["user"],
@@ -55,12 +45,7 @@ async function canManageSubmissionPresentation(
 
   if (!submission?.trackId) return false;
 
-  const track = await db.query.tracks.findFirst({
-    where: eq(tracks.id, submission.trackId),
-    columns: { headUserId: true },
-  });
-
-  return track?.headUserId === currentUser.id;
+  return hasTrackRole(currentUser, submission.trackId, "PROGRAM_CHAIR");
 }
 
 async function canManagePresentation(
@@ -83,13 +68,7 @@ async function canManageTrack(
   trackId: string
 ) {
   if (hasRole(currentUser, "ADMIN")) return true;
-
-  const track = await db.query.tracks.findFirst({
-    where: eq(tracks.id, trackId),
-    columns: { headUserId: true },
-  });
-
-  return track?.headUserId === currentUser.id;
+  return hasTrackRole(currentUser, trackId, "PROGRAM_CHAIR");
 }
 
 function parseScheduledAt(value: string | null | undefined) {
@@ -196,7 +175,7 @@ app.get("/", async (c) => {
   if (!hasRole(currentUser, "ADMIN")) {
     const presentationIds = new Set<string>();
 
-    const chairedTrackIds = await getChairedTrackIds(currentUser.id);
+    const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
     if (chairedTrackIds.length > 0) {
       const managedRows = await db
         .select({ id: presentationAssignments.id })
@@ -925,7 +904,7 @@ app.get("/scoring-dashboard", async (c) => {
   let whereClause = undefined;
 
   if (!hasRole(currentUser, "ADMIN")) {
-    const chairedTrackIds = await getChairedTrackIds(currentUser.id);
+    const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
     if (chairedTrackIds.length === 0) {
       return c.json({ error: "Forbidden" }, 403);
     }

@@ -7,7 +7,6 @@ import {
   posterPresentationGroups,
   presentationAssignments,
   settings,
-  tracks,
   user,
   userRoles,
 } from "@/server/db/schema";
@@ -124,15 +123,7 @@ async function getScopedTrackIds(currentUser: ServerAuthUser) {
     return null;
   }
 
-  const chaired = await db
-    .select({ id: tracks.id })
-    .from(tracks)
-    .where(eq(tracks.headUserId, currentUser.id));
-
-  const scoped = new Set([
-    ...chaired.map((row) => row.id),
-    ...getTrackRoleIds(currentUser, "PROGRAM_CHAIR"),
-  ]);
+  const scoped = new Set(getTrackRoleIds(currentUser, "PROGRAM_CHAIR"));
 
   return scoped.size > 0 ? Array.from(scoped) : [];
 }

@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { hasRole } from "@/lib/permissions";
+import { eq, inArray } from "drizzle-orm";
+import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import type { ServerAuthUser } from "@/server/auth-helpers";
 import { db } from "@/server/db";
 import { trackMembers, tracks, user } from "@/server/db/schema";
@@ -46,10 +46,15 @@ async function getAccessibleTracks(currentUser: ServerAuthUser): Promise<TrackDa
     return db.select({ id: tracks.id, name: tracks.name }).from(tracks);
   }
 
+  const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
+  if (chairedTrackIds.length === 0) {
+    return [];
+  }
+
   return db
     .select({ id: tracks.id, name: tracks.name })
     .from(tracks)
-    .where(eq(tracks.headUserId, currentUser.id));
+    .where(inArray(tracks.id, chairedTrackIds));
 }
 
 async function getTrackMembers(trackId: string): Promise<MemberData[]> {

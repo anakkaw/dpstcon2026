@@ -7,7 +7,7 @@ import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getUploadUrl, getDownloadUrl, generateFileKey } from "@/server/r2";
-import { hasRole } from "@/lib/permissions";
+import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import {
   canRevealReviewerIdentity,
   getAllowedDiscussionVisibilities,
@@ -122,12 +122,7 @@ async function canAccessSubmission(
   }
 
   if (hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
-    const track = await db.query.tracks.findFirst({
-      where: eq(tracks.id, submission.trackId),
-      columns: { headUserId: true },
-    });
-
-    if (track?.headUserId === currentUser.id) return true;
+    if (hasTrackRole(currentUser, submission.trackId, "PROGRAM_CHAIR")) return true;
   }
 
   return false;
@@ -155,12 +150,7 @@ async function getSubmissionAccessFlags(
 
   let isTrackHead = false;
   if (submission.trackId) {
-    const track = await db.query.tracks.findFirst({
-      where: eq(tracks.id, submission.trackId),
-      columns: { headUserId: true },
-    });
-
-    isTrackHead = track?.headUserId === currentUser.id;
+    isTrackHead = hasTrackRole(currentUser, submission.trackId, "PROGRAM_CHAIR");
   }
 
   return {
@@ -204,15 +194,14 @@ app.get("/", async (c) => {
 
   // PROGRAM_CHAIR: submissions in tracks they head
   if (hasRole(currentUser, "PROGRAM_CHAIR")) {
+    const trackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
     roleFetches.push(
-      db.select({ id: tracks.id }).from(tracks).where(eq(tracks.headUserId, currentUser.id))
-        .then(async (myTracks) => {
-          const trackIds = myTracks.map((t) => t.id);
-          if (trackIds.length > 0) {
-            const trackSubs = await db.select({ id: submissions.id }).from(submissions).where(sql`${submissions.trackId} IN ${trackIds}`);
-            trackSubs.forEach((s) => submissionIds.add(s.id));
-          }
-        })
+      Promise.resolve().then(async () => {
+        if (trackIds.length > 0) {
+          const trackSubs = await db.select({ id: submissions.id }).from(submissions).where(sql`${submissions.trackId} IN ${trackIds}`);
+          trackSubs.forEach((s) => submissionIds.add(s.id));
+        }
+      })
     );
   }
 

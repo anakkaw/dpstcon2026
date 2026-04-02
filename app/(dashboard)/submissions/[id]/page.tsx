@@ -9,13 +9,12 @@ import {
   presentationCriteria,
   reviewAssignments,
   settings,
-  tracks,
   userRoles,
 } from "@/server/db/schema";
 import { eq, sql, and, inArray } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
-import { hasRole } from "@/lib/permissions";
+import { hasTrackRole, hasRole } from "@/lib/permissions";
 import { canRevealReviewerIdentity } from "@/server/access-policies";
 
 export default async function SubmissionDetailPage({
@@ -68,11 +67,7 @@ export default async function SubmissionDetailPage({
   }
 
   if (!hasAccess && hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
-    const track = await db.query.tracks.findFirst({
-      where: eq(tracks.id, submission.trackId),
-      columns: { headUserId: true },
-    });
-    isTrackHead = track?.headUserId === currentUser.id;
+    isTrackHead = hasTrackRole(currentUser, submission.trackId, "PROGRAM_CHAIR");
     hasAccess = isTrackHead;
     canManageSubmission = canManageSubmission || isTrackHead;
   }
