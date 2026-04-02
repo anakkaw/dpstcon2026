@@ -25,7 +25,7 @@ import {
   storedFiles,
   auditLogs,
 } from "@/server/db/schema";
-import { eq, and, ilike, or, desc, inArray } from "drizzle-orm";
+import { eq, and, ilike, or, desc, inArray, isNull } from "drizzle-orm";
 import { authMiddleware, requireRole } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -488,7 +488,7 @@ app.patch("/:id/roles", requireRole("ADMIN"), async (c) => {
   // Replace only global roles; keep track-scoped assignments intact.
   await db
     .delete(userRoles)
-    .where(and(eq(userRoles.userId, id), eq(userRoles.trackId, null)));
+    .where(and(eq(userRoles.userId, id), isNull(userRoles.trackId)));
 
   await db.insert(userRoles).values(
     globalRoles.map((role) => ({

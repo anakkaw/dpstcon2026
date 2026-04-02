@@ -1,21 +1,6 @@
 import type { Metadata } from "next";
-import { Prompt, Sarabun } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
-
-const sarabun = Sarabun({
-  subsets: ["thai", "latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  display: "swap",
-  variable: "--font-dpst-body",
-});
-
-const prompt = Prompt({
-  subsets: ["thai", "latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-  variable: "--font-dpst-heading",
-});
 
 export const metadata: Metadata = {
   title: "DPSTCon — Submission Management System",
@@ -29,10 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="th"
-      className={`${sarabun.variable} ${prompt.variable} h-full`}
-    >
+    <html lang="th" className="h-full">
       <body className="min-h-full flex flex-col antialiased">
         <I18nProvider>
           {children}
