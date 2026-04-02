@@ -151,7 +151,7 @@ export function AdminUsersClient({
       setEditForm({
         affiliation: user.affiliation || "",
         bio: user.bio || "",
-        roles: user.roles || [user.role],
+        roles: user.globalRoles || user.roles || [user.role],
         prefixTh: user.prefixTh || "",
         prefixEn: user.prefixEn || "",
         firstNameTh: user.firstNameTh || "",
@@ -237,7 +237,9 @@ export function AdminUsersClient({
           firstNameEn: editForm.firstNameEn, lastNameEn: editForm.lastNameEn,
         }),
       });
-      const rolesChanged = JSON.stringify(editForm.roles.sort()) !== JSON.stringify((selectedUser.roles || [selectedUser.role]).sort());
+      const rolesChanged =
+        JSON.stringify([...editForm.roles].sort()) !==
+        JSON.stringify([...(selectedUser.globalRoles || selectedUser.roles || [selectedUser.role])].sort());
       if (rolesChanged) {
         await fetch(`/api/users/${selectedUser.id}/roles`, {
           method: "PATCH",

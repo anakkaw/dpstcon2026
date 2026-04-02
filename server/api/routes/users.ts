@@ -83,15 +83,23 @@ app.get("/", requireRole("ADMIN"), async (c) => {
       : [];
 
   const rolesMap = new Map<string, string[]>();
+  const globalRolesMap = new Map<string, string[]>();
   for (const r of allRoles) {
-    const existing = rolesMap.get(r.userId) || [];
-    existing.push(r.role);
-    rolesMap.set(r.userId, existing);
+    const existing = new Set(rolesMap.get(r.userId) || []);
+    existing.add(r.role);
+    rolesMap.set(r.userId, Array.from(existing));
+
+    if (r.trackId === null) {
+      const globalExisting = new Set(globalRolesMap.get(r.userId) || []);
+      globalExisting.add(r.role);
+      globalRolesMap.set(r.userId, Array.from(globalExisting));
+    }
   }
 
   const usersWithRoles = users.map((u) => ({
     ...u,
     roles: rolesMap.get(u.id) || [u.role],
+    globalRoles: globalRolesMap.get(u.id) || [u.role],
   }));
 
   // Filter by role if specified
@@ -402,7 +410,12 @@ app.get("/:id", requireRole("ADMIN"), async (c) => {
   return c.json({
     user: {
       ...found,
-      roles: roles.length > 0 ? roles.map((r) => r.role) : [found.role],
+      roles: Array.from(new Set(roles.map((r) => r.role))),
+      globalRoles: Array.from(
+        new Set(
+          roles.filter((r) => r.trackId === null).map((r) => r.role)
+        )
+      ),
     },
   });
 });
@@ -470,18 +483,28 @@ app.patch("/:id/roles", requireRole("ADMIN"), async (c) => {
     return c.json({ error: "Invalid roles" }, 400);
   }
 
-  // Delete existing roles and re-insert
-  await db.delete(userRoles).where(eq(userRoles.userId, id));
+  const globalRoles = Array.from(new Set(parsed.data.roles));
+
+  // Replace only global roles; keep track-scoped assignments intact.
+  await db
+    .delete(userRoles)
+    .where(and(eq(userRoles.userId, id), eq(userRoles.trackId, null)));
 
   await db.insert(userRoles).values(
-    parsed.data.roles.map((role) => ({
+    globalRoles.map((role) => ({
       userId: id,
       role: role as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
+      trackId: null,
     }))
   );
 
+  const allRoles = await db
+    .select({ role: userRoles.role })
+    .from(userRoles)
+    .where(eq(userRoles.userId, id));
+
   // Update primary role on user table for Better Auth compat
-  const primaryRole = getPrimaryRole(parsed.data.roles);
+  const primaryRole = getPrimaryRole(allRoles.map((row) => row.role));
   const [updated] = await db
     .update(user)
     .set({
@@ -491,7 +514,7 @@ app.patch("/:id/roles", requireRole("ADMIN"), async (c) => {
     .where(eq(user.id, id))
     .returning();
 
-  return c.json({ user: { ...updated, roles: parsed.data.roles } });
+  return c.json({ user: { ...updated, roles: Array.from(new Set(allRoles.map((row) => row.role))), globalRoles } });
 });
 
 // POST /api/users — create user with invite (ADMIN)

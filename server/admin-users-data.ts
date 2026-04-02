@@ -8,6 +8,7 @@ export interface AdminUserData {
   email: string;
   role: string;
   roles: string[];
+  globalRoles: string[];
   affiliation: string | null;
   bio: string | null;
   prefixTh: string | null;
@@ -37,16 +38,24 @@ export async function getAdminUsersPageData() {
         .select({
           userId: userRoles.userId,
           role: userRoles.role,
+          trackId: userRoles.trackId,
         })
         .from(userRoles)
         .where(inArray(userRoles.userId, userIds))
     : [];
 
-  const rolesMap = new Map<string, string[]>();
+  const rolesMap = new Map<string, Set<string>>();
+  const globalRolesMap = new Map<string, Set<string>>();
   for (const roleRow of allRoles) {
-    const existing = rolesMap.get(roleRow.userId) || [];
-    existing.push(roleRow.role);
+    const existing = rolesMap.get(roleRow.userId) || new Set<string>();
+    existing.add(roleRow.role);
     rolesMap.set(roleRow.userId, existing);
+
+    if (roleRow.trackId === null) {
+      const globalExisting = globalRolesMap.get(roleRow.userId) || new Set<string>();
+      globalExisting.add(roleRow.role);
+      globalRolesMap.set(roleRow.userId, globalExisting);
+    }
   }
 
   const now = new Date();
@@ -65,7 +74,8 @@ export async function getAdminUsersPageData() {
 
     return {
       ...entry,
-      roles: rolesMap.get(entry.id) || [entry.role],
+      roles: Array.from(rolesMap.get(entry.id) || new Set([entry.role])),
+      globalRoles: Array.from(globalRolesMap.get(entry.id) || new Set([entry.role])),
       inviteExpiresAt: entry.inviteExpiresAt?.toISOString() ?? null,
       createdAt: entry.createdAt.toISOString(),
     };
