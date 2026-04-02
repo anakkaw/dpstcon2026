@@ -1,6 +1,5 @@
 import { db } from "@/server/db";
 import { tracks, user } from "@/server/db/schema";
-import { eq } from "drizzle-orm";
 import { getTrackProgramChairs } from "@/server/track-chairs";
 
 export interface AdminTrackChair {
@@ -51,8 +50,7 @@ export async function getAdminTracksPageData() {
       firstNameEn: user.firstNameEn,
       lastNameEn: user.lastNameEn,
     })
-    .from(user)
-    .where(eq(user.isActive, true));
+    .from(user);
 
   return {
     tracks: allTracks.map((track) => {
