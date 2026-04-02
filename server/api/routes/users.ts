@@ -6,6 +6,16 @@ import {
   userRoles,
   notifications,
   reviewAssignments,
+  reviews,
+  decisions,
+  conflicts,
+  bids,
+  discussions,
+  trackMembers,
+  presentationCommitteeAssignments,
+  presentationEvaluations,
+  posterGroupJudges,
+  posterGroupSlots,
   session as sessionTable,
   account as accountTable,
   tracks,
@@ -682,17 +692,26 @@ app.delete("/:id", requireRole("ADMIN"), async (c) => {
   }
 
   try {
-    // Preserve historical records that keep optional user references.
+    // Preserve historical records that keep optional user references (SET NULL).
     await db.update(tracks).set({ headUserId: null }).where(eq(tracks.headUserId, id));
     await db.update(storedFiles).set({ uploadedById: null }).where(eq(storedFiles.uploadedById, id));
     await db.update(auditLogs).set({ actorId: null }).where(eq(auditLogs.actorId, id));
+    await db.update(posterGroupSlots).set({ judgeId: null }).where(eq(posterGroupSlots.judgeId, id));
 
-    // Delete related data (most cascade via FK, but be explicit for clarity).
+    // Explicitly delete all referencing rows to avoid FK constraint errors
+    // (DB cascades may not be in place if migrations were applied before cascade was added).
+    await db.delete(presentationEvaluations).where(eq(presentationEvaluations.judgeId, id));
+    await db.delete(presentationCommitteeAssignments).where(eq(presentationCommitteeAssignments.judgeId, id));
+    await db.delete(posterGroupJudges).where(eq(posterGroupJudges.judgeId, id));
+    await db.delete(reviews).where(eq(reviews.reviewerId, id));
+    await db.delete(decisions).where(eq(decisions.decidedBy, id));
+    await db.delete(conflicts).where(eq(conflicts.userId, id));
+    await db.delete(bids).where(eq(bids.reviewerId, id));
+    await db.delete(discussions).where(eq(discussions.authorId, id));
+    await db.delete(trackMembers).where(eq(trackMembers.userId, id));
     await db.delete(userRoles).where(eq(userRoles.userId, id));
     await db.delete(notifications).where(eq(notifications.userId, id));
-    await db
-      .delete(reviewAssignments)
-      .where(eq(reviewAssignments.reviewerId, id));
+    await db.delete(reviewAssignments).where(eq(reviewAssignments.reviewerId, id));
     await db.delete(sessionTable).where(eq(sessionTable.userId, id));
     await db.delete(accountTable).where(eq(accountTable.userId, id));
 
