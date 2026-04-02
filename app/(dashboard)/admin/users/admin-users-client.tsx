@@ -286,7 +286,8 @@ export function AdminUsersClient({
   async function deleteUser() {
     if (!selectedUser) return;
     setSaving(true);
-    const res = await fetch(`/api/users/${selectedUser.id}`, { method: "DELETE" });
+    // Use force=true to also delete submissions and all related data
+    const res = await fetch(`/api/users/${selectedUser.id}?force=true`, { method: "DELETE" });
     const data = await res.json();
     if (res.ok) {
       showMsg(t("users.userDeleted"));

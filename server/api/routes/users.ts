@@ -3,6 +3,7 @@ import { db } from "@/server/db";
 import {
   user,
   submissions,
+  coAuthors,
   userRoles,
   notifications,
   reviewAssignments,
@@ -13,9 +14,11 @@ import {
   discussions,
   trackMembers,
   presentationCommitteeAssignments,
+  presentationAssignments,
   presentationEvaluations,
   posterGroupJudges,
   posterGroupSlots,
+  posterGroupMembers,
   session as sessionTable,
   account as accountTable,
   tracks,
@@ -675,31 +678,74 @@ app.post("/:id/reset-password", requireRole("ADMIN"), async (c) => {
 });
 
 // DELETE /api/users/:id — delete user (ADMIN)
+// Use ?force=true to also delete all submissions authored by this user.
 app.delete("/:id", requireRole("ADMIN"), async (c) => {
   const { id } = c.req.param();
   const currentUser = c.get("user");
+  const force = c.req.query("force") === "true";
 
   if (id === currentUser.id) {
     return c.json({ error: "ไม่สามารถลบตัวเองได้" }, 400);
   }
 
-  const userSubs = await db.query.submissions.findFirst({
-    where: eq(submissions.authorId, id),
-  });
+  // Check for submissions
+  const userSubs = await db
+    .select({ id: submissions.id })
+    .from(submissions)
+    .where(eq(submissions.authorId, id));
 
-  if (userSubs) {
-    return c.json({ error: "ไม่สามารถลบได้ — ผู้ใช้มีบทความในระบบ" }, 400);
+  if (userSubs.length > 0 && !force) {
+    return c.json(
+      {
+        error: "ไม่สามารถลบได้ — ผู้ใช้มีบทความในระบบ",
+        submissionCount: userSubs.length,
+        hint: "ใช้ ?force=true เพื่อลบผู้ใช้พร้อมบทความทั้งหมด",
+      },
+      400
+    );
   }
 
   try {
+    // If force-deleting, remove all submissions and their cascading data first.
+    if (userSubs.length > 0) {
+      const subIds = userSubs.map((s) => s.id);
+
+      // Explicitly delete submission-related data that may not cascade in DB.
+      await db.delete(storedFiles).where(inArray(storedFiles.submissionId, subIds));
+      await db.delete(posterGroupMembers).where(inArray(posterGroupMembers.submissionId, subIds));
+
+      // Fetch presentation IDs to clean up committee assignments & evaluations
+      const presRows = await db
+        .select({ id: presentationAssignments.id })
+        .from(presentationAssignments)
+        .where(inArray(presentationAssignments.submissionId, subIds));
+      if (presRows.length > 0) {
+        const presIds = presRows.map((p) => p.id);
+        await db.delete(presentationEvaluations).where(inArray(presentationEvaluations.presentationId, presIds));
+        await db.delete(presentationCommitteeAssignments).where(inArray(presentationCommitteeAssignments.presentationId, presIds));
+        await db.delete(presentationAssignments).where(inArray(presentationAssignments.id, presIds));
+      }
+
+      // Delete review-related rows for these submissions
+      await db.delete(reviews).where(inArray(reviews.submissionId, subIds));
+      await db.delete(reviewAssignments).where(inArray(reviewAssignments.submissionId, subIds));
+      await db.delete(decisions).where(inArray(decisions.submissionId, subIds));
+      await db.delete(conflicts).where(inArray(conflicts.submissionId, subIds));
+      await db.delete(bids).where(inArray(bids.submissionId, subIds));
+      await db.delete(discussions).where(inArray(discussions.submissionId, subIds));
+      await db.delete(coAuthors).where(inArray(coAuthors.submissionId, subIds));
+
+      // Finally delete the submissions themselves
+      await db.delete(submissions).where(inArray(submissions.id, subIds));
+    }
+
     // Preserve historical records that keep optional user references (SET NULL).
     await db.update(tracks).set({ headUserId: null }).where(eq(tracks.headUserId, id));
     await db.update(storedFiles).set({ uploadedById: null }).where(eq(storedFiles.uploadedById, id));
     await db.update(auditLogs).set({ actorId: null }).where(eq(auditLogs.actorId, id));
     await db.update(posterGroupSlots).set({ judgeId: null }).where(eq(posterGroupSlots.judgeId, id));
 
-    // Explicitly delete all referencing rows to avoid FK constraint errors
-    // (DB cascades may not be in place if migrations were applied before cascade was added).
+    // Explicitly delete all referencing rows to avoid FK constraint errors.
     await db.delete(presentationEvaluations).where(eq(presentationEvaluations.judgeId, id));
     await db.delete(presentationCommitteeAssignments).where(eq(presentationCommitteeAssignments.judgeId, id));
     await db.delete(posterGroupJudges).where(eq(posterGroupJudges.judgeId, id));
