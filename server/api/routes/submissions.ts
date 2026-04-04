@@ -918,27 +918,27 @@ app.delete("/:id/files/:fileId", async (c) => {
       ? await getLatestStoredKeyForKind(id, "CAMERA_READY", file.id)
       : null;
 
-  await db.transaction(async (tx) => {
-    await tx.delete(storedFiles).where(eq(storedFiles.id, file.id));
+  // The app uses the neon-http driver, which does not support db.transaction().
+  // Keep the submission pointers in sync first, then remove the stored file row.
+  if (file.kind === "MANUSCRIPT") {
+    await db
+      .update(submissions)
+      .set({ fileUrl: nextManuscriptKey, updatedAt: new Date() })
+      .where(eq(submissions.id, id));
+  }
 
-    if (file.kind === "MANUSCRIPT") {
-      await tx
-        .update(submissions)
-        .set({ fileUrl: nextManuscriptKey, updatedAt: new Date() })
-        .where(eq(submissions.id, id));
-    }
+  if (file.kind === "CAMERA_READY") {
+    await db
+      .update(submissions)
+      .set({
+        cameraReadyUrl: nextCameraReadyKey,
+        status: nextCameraReadyKey ? submission.status : "CAMERA_READY_PENDING",
+        updatedAt: new Date(),
+      })
+      .where(eq(submissions.id, id));
+  }
 
-    if (file.kind === "CAMERA_READY") {
-      await tx
-        .update(submissions)
-        .set({
-          cameraReadyUrl: nextCameraReadyKey,
-          status: nextCameraReadyKey ? submission.status : "CAMERA_READY_PENDING",
-          updatedAt: new Date(),
-        })
-        .where(eq(submissions.id, id));
-    }
-  });
+  await db.delete(storedFiles).where(eq(storedFiles.id, file.id));
 
   try {
     await deleteFile(file.storedKey);
