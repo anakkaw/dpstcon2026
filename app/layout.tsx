@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
+import { Noto_Sans_Thai } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
+
+const notoSansThai = Noto_Sans_Thai({
+  subsets: ["thai", "latin"],
+  weight: "variable",
+  display: "swap",
+  variable: "--font-dpst-body",
+});
 
 export const metadata: Metadata = {
   title: "DPSTCon — Submission Management System",
@@ -14,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th" className="h-full">
+    <html lang="th" className={`${notoSansThai.variable} h-full`}>
       <body className="min-h-full flex flex-col antialiased">
         <I18nProvider>
           {children}

@@ -61,7 +61,7 @@
 
 :root {
   --font-dpst-body: "Noto Sans Thai", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-dpst-heading: "Noto Sans Thai", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-dpst-heading: var(--font-dpst-body);
 }
 
 body {
