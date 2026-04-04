@@ -36,6 +36,10 @@ const FILE_KIND_PATHS = {
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 const UPLOAD_TOKEN_TTL_MS = 15 * 60 * 1000;
 
+function hasAuthorSubmissionRole(currentUser: AuthEnv["Variables"]["user"]) {
+  return hasRole(currentUser, "AUTHOR");
+}
+
 type UploadTokenPayload = {
   submissionId: string;
   userId: string;
@@ -240,13 +244,11 @@ app.get("/", async (c) => {
     );
   }
 
-  // AUTHOR: own submissions
-  if (hasRole(currentUser, "AUTHOR")) {
-    roleFetches.push(
-      db.select({ id: submissions.id }).from(submissions).where(eq(submissions.authorId, currentUser.id))
-        .then((rows) => rows.forEach((s) => submissionIds.add(s.id)))
-    );
-  }
+  // Owners should always see their own submissions, even if an AUTHOR role assignment is missing.
+  roleFetches.push(
+    db.select({ id: submissions.id }).from(submissions).where(eq(submissions.authorId, currentUser.id))
+      .then((rows) => rows.forEach((s) => submissionIds.add(s.id)))
+  );
 
   await Promise.all(roleFetches);
 
@@ -336,6 +338,9 @@ const createSchema = z.object({
 
 app.post("/", async (c) => {
   const currentUser = c.get("user");
+  if (!hasAuthorSubmissionRole(currentUser)) {
+    return c.json({ error: "Forbidden — only authors can create submissions" }, 403);
+  }
   const body = await c.req.json();
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error", details: parsed.error.flatten().fieldErrors }, 400);
@@ -412,7 +417,7 @@ app.patch("/:id", async (c) => {
   if (
     existing.authorId === currentUser.id &&
     !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR") &&
-    !canAuthorEditSubmission(existing.status)
+    (!hasAuthorSubmissionRole(currentUser) || !canAuthorEditSubmission(existing.status))
   ) {
     return c.json({ error: "Authors can only edit submission metadata while the paper is in draft" }, 403);
   }
@@ -467,6 +472,9 @@ app.post("/:id/submit", async (c) => {
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
   if (submission.authorId !== currentUser.id) return c.json({ error: "Forbidden" }, 403);
+  if (!hasAuthorSubmissionRole(currentUser)) {
+    return c.json({ error: "Forbidden — only authors can submit papers" }, 403);
+  }
   if (submission.status !== "DRAFT") return c.json({ error: "Can only submit from DRAFT" }, 400);
   const validationError = getSubmissionValidationError({
     title: submission.title,
@@ -527,7 +535,7 @@ app.post("/:id/resend-advisor-approval", async (c) => {
 
   const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
   const isOwner = submission.authorId === currentUser.id;
-  if (!isOwner && !isStaff) {
+  if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -585,6 +593,9 @@ app.post("/:id/resubmit", async (c) => {
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
   if (submission.authorId !== currentUser.id) return c.json({ error: "Forbidden" }, 403);
+  if (!hasAuthorSubmissionRole(currentUser)) {
+    return c.json({ error: "Forbidden — only authors can resubmit papers" }, 403);
+  }
   if (submission.status !== "REVISION_REQUIRED") return c.json({ error: "Can only resubmit from REVISION_REQUIRED" }, 400);
 
   await db
@@ -614,6 +625,9 @@ app.post("/:id/withdraw", async (c) => {
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
   if (submission.authorId !== currentUser.id) return c.json({ error: "Forbidden" }, 403);
+  if (!hasAuthorSubmissionRole(currentUser)) {
+    return c.json({ error: "Forbidden — only authors can withdraw papers" }, 403);
+  }
   if (submission.status === "WITHDRAWN") return c.json({ error: "Already withdrawn" }, 400);
 
   const [updated] = await db
@@ -641,6 +655,9 @@ app.post("/:id/rebuttal", async (c) => {
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
   if (submission.authorId !== currentUser.id) return c.json({ error: "Forbidden" }, 403);
+  if (!hasAuthorSubmissionRole(currentUser)) {
+    return c.json({ error: "Forbidden — only authors can manage rebuttals" }, 403);
+  }
   if (submission.status !== "REBUTTAL") return c.json({ error: "Rebuttal not allowed" }, 400);
 
   const [updated] = await db
@@ -661,6 +678,9 @@ app.post("/:id/camera-ready", async (c) => {
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
   if (submission.authorId !== currentUser.id) return c.json({ error: "Forbidden" }, 403);
+  if (!hasAuthorSubmissionRole(currentUser)) {
+    return c.json({ error: "Forbidden — only authors can submit camera-ready files" }, 403);
+  }
   if (submission.status !== "CAMERA_READY_PENDING") return c.json({ error: "Not expected" }, 400);
 
   const [updated] = await db
@@ -706,7 +726,7 @@ app.post("/:id/upload-url", async (c) => {
   if (!submission) return c.json({ error: "Not found" }, 404);
   const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
   const isOwner = submission.authorId === currentUser.id;
-  if (!isOwner && !isStaff) {
+  if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -766,7 +786,7 @@ app.post("/:id/confirm-upload", async (c) => {
   if (!submission) return c.json({ error: "Not found" }, 404);
   const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
   const isOwner = submission.authorId === currentUser.id;
-  if (!isOwner && !isStaff) {
+  if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -898,7 +918,9 @@ app.delete("/:id/files/:fileId", async (c) => {
 
   const canManageAsStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
   const canManageOwnDraft =
-    submission.authorId === currentUser.id && submission.status === "DRAFT";
+    submission.authorId === currentUser.id &&
+    submission.status === "DRAFT" &&
+    hasAuthorSubmissionRole(currentUser);
 
   if (!canManageAsStaff && !canManageOwnDraft) {
     return c.json({ error: "Forbidden" }, 403);

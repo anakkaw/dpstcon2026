@@ -27,7 +27,7 @@ export function DashboardClient({
   const visibleRoles = Array.from(new Set(roles));
   const roleSummary = visibleRoles.map((role) => roleLabels[role] || role).join(", ");
   const showManagerDashboard = visibleRoles.some((role) =>
-    ["ADMIN", "PROGRAM_CHAIR", "COMMITTEE"].includes(role)
+    ["ADMIN", "PROGRAM_CHAIR"].includes(role)
   );
 
   return (

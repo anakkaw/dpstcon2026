@@ -153,8 +153,7 @@ async function loadManagerStats(
 
   if (!hasRole(currentUser, "ADMIN")) {
     const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
-    const committeeTrackIds = getTrackRoleIds(currentUser, "COMMITTEE");
-    scopeTrackIds = Array.from(new Set([...chairedTrackIds, ...committeeTrackIds]));
+    scopeTrackIds = Array.from(new Set(chairedTrackIds));
 
     if (scopeTrackIds.length === 0) {
       return {
@@ -230,13 +229,11 @@ export default async function DashboardPage() {
   const statsByRole: Record<string, DashboardStats> = {};
   const loaders: Promise<void>[] = [];
 
-  if (hasRole(currentUser, "AUTHOR")) {
-    loaders.push(
-      loadAuthorStats(currentUser.id).then((stats) => {
-        statsByRole.AUTHOR = stats;
-      })
-    );
-  }
+  loaders.push(
+    loadAuthorStats(currentUser.id).then((stats) => {
+      statsByRole.AUTHOR = stats;
+    })
+  );
 
   if (hasRole(currentUser, "REVIEWER")) {
     loaders.push(
@@ -246,7 +243,7 @@ export default async function DashboardPage() {
     );
   }
 
-  if (hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "COMMITTEE")) {
+  if (hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
     loaders.push(
       loadManagerStats(currentUser).then((stats) => {
         statsByRole.MANAGER = stats;

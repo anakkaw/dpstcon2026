@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireActiveServerAuthContext } from "@/server/auth-helpers";
 import { isDuplicateReviewRound } from "@/server/access-policies";
+import { hasRole } from "@/lib/permissions";
 
 export async function submitReview(data: {
   submissionId: string;
@@ -24,7 +25,7 @@ export async function submitReview(data: {
     ),
   });
 
-  if (!assignment && !user.roles.includes("ADMIN")) {
+  if (!assignment && !hasRole(user, "ADMIN")) {
     throw new Error("คุณไม่ได้รับมอบหมายให้รีวิวบทความนี้");
   }
 
@@ -50,7 +51,7 @@ export async function submitReview(data: {
     isDuplicateReviewRound({
       hasExistingReview: !!existingReview,
       assignmentStatus: assignment?.status,
-      isAdminOverride: user.roles.includes("ADMIN") && !assignmentIdToComplete,
+      isAdminOverride: hasRole(user, "ADMIN") && !assignmentIdToComplete,
     })
   ) {
     throw new Error("มีรีวิวสำหรับรอบการพิจารณานี้แล้ว");
@@ -90,9 +91,7 @@ export async function makeDecision(data: {
   const { session, user } = await requireActiveServerAuthContext();
 
   // Only ADMIN or PROGRAM_CHAIR can make decisions
-  const canDecide = user.roles.some((r) =>
-    ["ADMIN", "PROGRAM_CHAIR"].includes(r)
-  );
+  const canDecide = hasRole(user, "ADMIN", "PROGRAM_CHAIR");
   if (!canDecide) {
     throw new Error("คุณไม่มีสิทธิ์ตัดสินบทความ");
   }

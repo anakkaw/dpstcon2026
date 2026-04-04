@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Select } from "@/components/ui/select";
 import { SummaryStatCard } from "@/components/ui/summary-stat-card";
-import { formatDateTime } from "@/lib/utils";
 import type {
   PosterPlannerGroup,
   PosterPlannerPaper,
@@ -78,7 +77,7 @@ type CommitteePosterGroup = {
 };
 
 interface PosterPlannerClientProps {
-  mode: "admin" | "author" | "committee";
+  mode: "admin" | "author" | "committee" | "hybrid";
   initialSessionSettings?: PosterPlannerSessionSettings;
   initialGroups?: PosterPlannerGroup[];
   initialUngroupedPosters?: PosterPlannerPaper[];
@@ -479,6 +478,8 @@ export function PosterPlannerClient({
   }
 
   const sessionRoomId = `${plannerId}-session-room`;
+  const showAuthorView = mode === "author" || mode === "hybrid";
+  const showCommitteeView = mode === "committee" || mode === "hybrid";
 
   // ──────────────── AUTHOR VIEW ────────────────
   if (mode === "author") {
@@ -590,6 +591,121 @@ export function PosterPlannerClient({
               </CardBody>
             </Card>
           ))
+        )}
+      </div>
+    );
+  }
+
+  if (mode === "hybrid") {
+    return (
+      <div className="space-y-8">
+        {showAuthorView && (
+          <div className="space-y-6">
+            <SectionTitle
+              title="Poster Presentation"
+              subtitle="Your poster group, judges, and planned presentation slots"
+            />
+            {authorGroups.length === 0 ? (
+              <EmptyState
+                icon={<FolderKanban className="h-12 w-12" />}
+                title="No poster group yet"
+                body="You will see your poster group here once the organizers finish planning."
+              />
+            ) : (
+              authorGroups.map((group) => (
+                <Card key={group.membershipId}>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge>{group.paperCode || "NO-CODE"}</Badge>
+                      <Badge tone="info">{group.trackName}</Badge>
+                      <Badge tone="success">{group.groupName}</Badge>
+                    </div>
+                    <h3 className="text-lg font-semibold text-ink">{group.title}</h3>
+                    <p className="text-sm text-ink-muted">
+                      Room: {group.room || "TBA"} | Judges: {group.judges.join(", ") || "TBA"}
+                    </p>
+                  </CardHeader>
+                  <CardBody className="space-y-3">
+                    {group.slots.length === 0 ? (
+                      <p className="text-sm text-ink-muted">Your presentation slots have not been scheduled yet.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {group.slots.map((slot, i) => (
+                          <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
+                            <Badge tone="info">{formatSlotCode(i)}</Badge>
+                            <span className="text-sm font-medium text-ink">
+                              {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                            </span>
+                            <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
+                              {slot.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              ))
+            )}
+          </div>
+        )}
+
+        {showCommitteeView && (
+          <div className="space-y-6">
+            <SectionTitle
+              title="Poster Review Queue"
+              subtitle="Groups and slots assigned to you for poster review"
+            />
+            {committeeGroups.length === 0 ? (
+              <EmptyState
+                icon={<Users className="h-12 w-12" />}
+                title="No poster groups assigned"
+                body="Your assigned poster groups will appear here once scheduling is ready."
+              />
+            ) : (
+              committeeGroups.map((group) => (
+                <Card key={`${group.groupId}-${group.judgeOrder}`}>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="info">{group.trackName}</Badge>
+                      <Badge tone="success">{group.groupName}</Badge>
+                      <Badge>Judge {group.judgeOrder}</Badge>
+                    </div>
+                    <p className="text-sm text-ink-muted">Room: {group.room || "TBA"}</p>
+                  </CardHeader>
+                  <CardBody className="space-y-4">
+                    <div className="space-y-2">
+                      {group.members.map((member) => (
+                        <div key={member.submissionId} className="rounded-xl border border-border/60 bg-surface-alt p-3">
+                          <p className="text-sm font-medium text-ink">
+                            {member.paperCode || "NO-CODE"} · {member.title}
+                          </p>
+                          <p className="text-xs text-ink-muted">{member.authorName}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {group.slots.length === 0 ? (
+                        <p className="text-sm text-ink-muted">No slots planned for this group yet.</p>
+                      ) : (
+                        group.slots.map((slot, i) => (
+                          <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
+                            <Badge tone="info">{formatSlotCode(i)}</Badge>
+                            <span className="text-sm font-medium text-ink">
+                              {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                            </span>
+                            <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
+                              {slot.status}
+                            </Badge>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardBody>
+                </Card>
+              ))
+            )}
+          </div>
         )}
       </div>
     );

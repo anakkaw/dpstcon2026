@@ -66,7 +66,7 @@ interface Props {
       author: { id: string; name: string };
     }[];
   };
-  currentUserRole: string;
+  currentUserRoles: string[];
   currentUserId: string;
   reviewers: { id: string; name: string; email: string }[];
   files: {
@@ -103,7 +103,7 @@ interface Props {
 }
 
 export function SubmissionDetail({
-  submission, currentUserRole, currentUserId, reviewers, files,
+  submission, currentUserRoles, currentUserId, reviewers, files,
   reviewCounts, decision, presentations, criteria, deadlines,
 }: Props) {
   const router = useRouter();
@@ -113,11 +113,16 @@ export function SubmissionDetail({
     null
   );
   const isOwner = submission.author.id === currentUserId;
-  const isAdmin = ["ADMIN", "PROGRAM_CHAIR"].includes(currentUserRole);
-  const isAuthor = currentUserRole === "AUTHOR";
-  const canSubmit = isOwner && submission.status === "DRAFT";
-  const canWithdraw = isOwner && !["WITHDRAWN", "DRAFT"].includes(submission.status);
-  const canResubmit = isOwner && submission.status === "REVISION_REQUIRED";
+  const isAdmin = currentUserRoles.some((role) =>
+    ["ADMIN", "PROGRAM_CHAIR"].includes(role)
+  );
+  const isAuthor = currentUserRoles.includes("AUTHOR");
+  const isReviewer = currentUserRoles.includes("REVIEWER");
+  const canManageOwnSubmission = isOwner && isAuthor;
+  const canDeleteFiles = isAdmin || (canManageOwnSubmission && submission.status === "DRAFT");
+  const canSubmit = canManageOwnSubmission && submission.status === "DRAFT";
+  const canWithdraw = canManageOwnSubmission && !["WITHDRAWN", "DRAFT"].includes(submission.status);
+  const canResubmit = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
 
   const [selectedReviewer, setSelectedReviewer] = useState("");
   const [assigning, setAssigning] = useState(false);
@@ -430,7 +435,7 @@ export function SubmissionDetail({
               >
                 {submission.advisorApprovalStatus === "APPROVED" ? "รับรองแล้ว" : submission.advisorApprovalStatus === "PENDING" ? "รออนุมัติ" : submission.advisorApprovalStatus || "—"}
               </Badge>
-              {isOwner && submission.status === "ADVISOR_APPROVAL_PENDING" && submission.advisorApprovalStatus === "PENDING" && (
+              {canManageOwnSubmission && submission.status === "ADVISOR_APPROVAL_PENDING" && submission.advisorApprovalStatus === "PENDING" && (
                 <div className="mt-2">
                   <Button
                     type="button"
@@ -465,11 +470,11 @@ export function SubmissionDetail({
           <FileList
             submissionId={submission.id}
             files={files}
-            canDelete={isOwner && submission.status === "DRAFT"}
+            canDelete={canDeleteFiles}
             onDeleteComplete={() => router.refresh()}
           />
 
-          {isOwner && submission.status === "DRAFT" && (
+          {canManageOwnSubmission && submission.status === "DRAFT" && (
             <FileUpload
               submissionId={submission.id}
               kind="MANUSCRIPT"
@@ -480,7 +485,7 @@ export function SubmissionDetail({
             />
           )}
 
-          {isOwner && submission.status === "CAMERA_READY_PENDING" && (
+          {canManageOwnSubmission && submission.status === "CAMERA_READY_PENDING" && (
             <FileUpload
               submissionId={submission.id}
               kind="CAMERA_READY"
@@ -491,7 +496,7 @@ export function SubmissionDetail({
             />
           )}
 
-          {isOwner && submission.status === "DRAFT" && (
+          {canManageOwnSubmission && submission.status === "DRAFT" && (
             <FileUpload
               submissionId={submission.id}
               kind="SUPPLEMENTARY"
@@ -687,7 +692,7 @@ export function SubmissionDetail({
       )}
 
       {/* Discussion */}
-      {(isAdmin || currentUserRole === "REVIEWER") && (
+      {(isAdmin || isReviewer) && (
         <Card>
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink">การสนทนา (เฉพาะ Reviewer และ Program Chair)</h3>

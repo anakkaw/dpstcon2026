@@ -4,7 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { db } from "@/server/db";
 import { user as userTable, userRoles } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
-import type { RoleAssignment } from "@/lib/permissions";
+import { hasRole, type RoleAssignment } from "@/lib/permissions";
 
 export type SessionUser = {
   id: string;
@@ -65,7 +65,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
 export function requireRole(...requiredRoles: string[]) {
   return createMiddleware<AuthEnv>(async (c, next) => {
     const user = c.get("user");
-    if (!user || !requiredRoles.some((r) => user.roles.includes(r))) {
+    if (!user || !hasRole(user, ...requiredRoles)) {
       throw new HTTPException(403, { message: "Forbidden" });
     }
     await next();

@@ -51,6 +51,7 @@ interface PresentationsClientProps {
   initialPresentations: PresentationData[];
   initialCriteria: CriterionData[];
   initialCommitteeUsers: CommitteeUser[];
+  canManage: boolean;
 }
 
 export function PresentationsClient({
@@ -58,6 +59,7 @@ export function PresentationsClient({
   initialPresentations,
   initialCriteria,
   initialCommitteeUsers,
+  canManage,
 }: PresentationsClientProps) {
   const { t } = useI18n();
   const [presentations, setPresentations] = useState(initialPresentations);
@@ -258,12 +260,16 @@ export function PresentationsClient({
     }
   }
 
-  const tabs = [
-    { key: "schedule" as const, label: t("presentations.schedule"), icon: <Calendar className="h-3.5 w-3.5" /> },
-    { key: "criteria" as const, label: t("presentations.criteria"), icon: <ClipboardList className="h-3.5 w-3.5" /> },
-    { key: "committee" as const, label: t("presentations.committee"), icon: <Users className="h-3.5 w-3.5" /> },
-    { key: "scoring" as const, label: t("presentations.scoring"), icon: <BarChart3 className="h-3.5 w-3.5" /> },
-  ];
+  const tabs = canManage
+    ? [
+        { key: "schedule" as const, label: t("presentations.schedule"), icon: <Calendar className="h-3.5 w-3.5" /> },
+        { key: "criteria" as const, label: t("presentations.criteria"), icon: <ClipboardList className="h-3.5 w-3.5" /> },
+        { key: "committee" as const, label: t("presentations.committee"), icon: <Users className="h-3.5 w-3.5" /> },
+        { key: "scoring" as const, label: t("presentations.scoring"), icon: <BarChart3 className="h-3.5 w-3.5" /> },
+      ]
+    : [
+        { key: "schedule" as const, label: t("presentations.schedule"), icon: <Calendar className="h-3.5 w-3.5" /> },
+      ];
 
   const filteredScoring = scoringData.filter((presentation) => !trackFilter || presentation.submission.track?.id === trackFilter);
 
@@ -284,7 +290,7 @@ export function PresentationsClient({
     <div className="space-y-6">
       <SectionTitle
         title={title}
-        subtitle={t("presentations.managementSubtitle", { n: filteredPresentations.length })}
+        subtitle={canManage ? t("presentations.managementSubtitle", { n: filteredPresentations.length }) : t("presentations.itemsCount", { n: filteredPresentations.length })}
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -352,7 +358,7 @@ export function PresentationsClient({
                       </div>
                     </div>
 
-                    {editingId === presentation.id ? (
+                    {canManage && editingId === presentation.id ? (
                       <div className="space-y-3 rounded-xl border border-brand-200/50 bg-brand-50/40 p-4">
                         <Field label={t("presentations.dateTime")}>
                           <Input type="datetime-local" value={editForm.scheduledAt} onChange={(e) => setEditForm({ ...editForm, scheduledAt: e.target.value })} />
@@ -368,7 +374,7 @@ export function PresentationsClient({
                           <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>{t("common.cancel")}</Button>
                         </div>
                       </div>
-                    ) : (
+                    ) : canManage ? (
                       <Button
                         size="sm"
                         variant="outline"
@@ -383,7 +389,7 @@ export function PresentationsClient({
                       >
                         {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
                       </Button>
-                    )}
+                    ) : null}
                   </CardBody>
                 </Card>
               ))}
@@ -438,12 +444,12 @@ export function PresentationsClient({
                               </Badge>
                             </td>
                             <td className="px-5 py-3.5 text-right">
-                              {editingId === presentation.id ? (
+                              {canManage && editingId === presentation.id ? (
                                 <div className="flex justify-end gap-1">
                                   <Button size="sm" onClick={() => handleSchedule(presentation.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
                                   <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
                                 </div>
-                              ) : (
+                              ) : canManage ? (
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -459,10 +465,10 @@ export function PresentationsClient({
                                 >
                                   {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
                                 </Button>
-                              )}
+                              ) : null}
                             </td>
                           </tr>
-                          {editingId === presentation.id && (
+                          {canManage && editingId === presentation.id && (
                             <tr className="bg-brand-50/40">
                               <td colSpan={7} className="px-5 py-4">
                                 <div className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">

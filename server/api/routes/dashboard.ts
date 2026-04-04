@@ -16,19 +16,17 @@ app.get("/", async (c) => {
   // Build combined stats based on all user roles
   const stats: Record<string, unknown> = {};
 
-  // Author stats
-  if (hasRole(currentUser, "AUTHOR")) {
-    const mySubmissions = await db
-      .select({ status: submissions.status, count: count() })
-      .from(submissions)
-      .where(eq(submissions.authorId, currentUser.id))
-      .groupBy(submissions.status);
+  // Users should always see stats for submissions they own, even if AUTHOR is not present in role assignments.
+  const mySubmissions = await db
+    .select({ status: submissions.status, count: count() })
+    .from(submissions)
+    .where(eq(submissions.authorId, currentUser.id))
+    .groupBy(submissions.status);
 
-    stats.author = {
-      totalSubmissions: mySubmissions.reduce((s, r) => s + Number(r.count), 0),
-      byStatus: Object.fromEntries(mySubmissions.map((s) => [s.status, Number(s.count)])),
-    };
-  }
+  stats.author = {
+    totalSubmissions: mySubmissions.reduce((s, r) => s + Number(r.count), 0),
+    byStatus: Object.fromEntries(mySubmissions.map((s) => [s.status, Number(s.count)])),
+  };
 
   // Reviewer stats
   if (hasRole(currentUser, "REVIEWER")) {
@@ -49,19 +47,13 @@ app.get("/", async (c) => {
     };
   }
 
-  // Admin/Chair/Committee stats — run all queries in parallel
-  if (hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "COMMITTEE")) {
+  // Admin/Chair stats — run all queries in parallel
+  if (hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
     let scopeTrackIds: string[] | null = null;
 
     if (!hasRole(currentUser, "ADMIN")) {
       const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
-      const committeeTrackIds = getTrackRoleIds(currentUser, "COMMITTEE");
-      scopeTrackIds = Array.from(
-        new Set([
-          ...chairedTrackIds,
-          ...committeeTrackIds,
-        ])
-      );
+      scopeTrackIds = Array.from(new Set(chairedTrackIds));
 
       if (scopeTrackIds.length === 0) {
         return c.json({

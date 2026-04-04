@@ -194,7 +194,7 @@ export default async function SubmissionDetailPage({
   return (
     <SubmissionDetail
       submission={{ ...submission, discussions: filteredDiscussions, reviews: filteredReviews }}
-      currentUserRole={currentUser.role}
+      currentUserRoles={currentUser.roles}
       currentUserId={currentUser.id}
       reviewers={reviewers}
       files={files.map((f) => ({

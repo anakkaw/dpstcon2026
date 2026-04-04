@@ -52,12 +52,10 @@ async function loadInitialSubmissions(
     );
   }
 
-  if (hasRole(currentUser, "AUTHOR")) {
-    roleFetches.push(
-      db.select({ id: submissions.id }).from(submissions).where(eq(submissions.authorId, currentUser.id))
-        .then((rows) => rows.forEach((submission) => submissionIds.add(submission.id)))
-    );
-  }
+  roleFetches.push(
+    db.select({ id: submissions.id }).from(submissions).where(eq(submissions.authorId, currentUser.id))
+      .then((rows) => rows.forEach((submission) => submissionIds.add(submission.id)))
+  );
 
   await Promise.all(roleFetches);
 

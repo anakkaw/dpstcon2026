@@ -31,14 +31,29 @@ export default async function PosterPresentationPage() {
     );
   }
 
-  if (hasRole(currentUser, "AUTHOR")) {
-    const authorGroups = await getPosterGroupsForAuthor(currentUser.id);
-    return <PosterPlannerClient mode="author" authorGroups={authorGroups} />;
-  }
+  const hasAuthorRole = hasRole(currentUser, "AUTHOR");
+  const hasCommitteeRole = hasRole(currentUser, "COMMITTEE");
 
-  if (hasRole(currentUser, "COMMITTEE")) {
-    const committeeGroups = await getPosterGroupsForCommittee(currentUser.id);
-    return <PosterPlannerClient mode="committee" committeeGroups={committeeGroups} />;
+  if (hasAuthorRole || hasCommitteeRole) {
+    const [authorGroups, committeeGroups] = await Promise.all([
+      hasAuthorRole ? getPosterGroupsForAuthor(currentUser.id) : Promise.resolve([]),
+      hasCommitteeRole ? getPosterGroupsForCommittee(currentUser.id) : Promise.resolve([]),
+    ]);
+
+    const mode =
+      hasAuthorRole && hasCommitteeRole
+        ? "hybrid"
+        : hasAuthorRole
+          ? "author"
+          : "committee";
+
+    return (
+      <PosterPlannerClient
+        mode={mode}
+        authorGroups={authorGroups}
+        committeeGroups={committeeGroups}
+      />
+    );
   }
 
   redirect("/presentations/oral");

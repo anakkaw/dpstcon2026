@@ -15,6 +15,7 @@ import { FileUpload } from "@/components/ui/file-upload";
 import { FileList } from "@/components/ui/file-list";
 import { WorkspaceSection, WorkspaceSurface } from "@/components/ui/workspace-section";
 import { useI18n } from "@/lib/i18n";
+import { useDashboardAuth } from "@/components/dashboard-auth-context";
 
 interface Track {
   id: string;
@@ -41,7 +42,9 @@ interface DraftFile {
 
 export default function NewSubmissionPage() {
   const { t } = useI18n();
+  const { roles } = useDashboardAuth();
   const router = useRouter();
+  const canCreateSubmission = roles.includes("AUTHOR");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -54,11 +57,20 @@ export default function NewSubmissionPage() {
   const hasUploadedManuscript = draftFiles.some((file) => file.kind === "MANUSCRIPT");
 
   useEffect(() => {
+    if (!canCreateSubmission) {
+      router.replace("/submissions");
+      return;
+    }
+
     fetch("/api/submissions/tracks")
       .then((r) => r.json())
       .then((data) => setTracks(data.tracks || []))
       .catch(() => {});
-  }, []);
+  }, [canCreateSubmission, router]);
+
+  if (!canCreateSubmission) {
+    return <Alert tone="danger">เฉพาะผู้ใช้ที่มีบทบาท Author เท่านั้นที่ส่งบทความใหม่ได้</Alert>;
+  }
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);

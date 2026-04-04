@@ -48,6 +48,7 @@ export function SubmissionsPageClient({
   const statusLabels = getSubmissionStatusLabels(t);
   const { roles } = useDashboardAuth();
   const isAdmin = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
+  const canCreateSubmission = roles.includes("AUTHOR");
 
   const [submissions, setSubmissions] = useState<SubmissionData[]>(initialSubmissions);
   const [trackFilter, setTrackFilter] = useState("");
@@ -183,12 +184,12 @@ export function SubmissionsPageClient({
       <SectionTitle
           title={t("submissions.mySubmissions")}
           subtitle={t("submissions.mySubtitle", { n: filtered.length })}
-          action={<Link href="/submissions/new"><Button size="sm"><Plus className="h-3.5 w-3.5" />{t("submissions.newSubmission")}</Button></Link>}
+          action={canCreateSubmission ? <Link href="/submissions/new"><Button size="sm"><Plus className="h-3.5 w-3.5" />{t("submissions.newSubmission")}</Button></Link> : undefined}
         />
         <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
         {filtered.length === 0 ? (
           <EmptyState icon={<FileText className="h-12 w-12" />} title={t("submissions.noSubmissions")} body={t("submissions.startSubmitting")}
-            action={<Link href="/submissions/new"><Button>{t("submissions.newSubmission")}</Button></Link>} />
+            action={canCreateSubmission ? <Link href="/submissions/new"><Button>{t("submissions.newSubmission")}</Button></Link> : undefined} />
         ) : (
           <div className="space-y-4">
             {filtered.map((sub) => {

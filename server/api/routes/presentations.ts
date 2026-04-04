@@ -451,7 +451,7 @@ app.patch("/:id/committee", async (c) => {
 app.get("/poster-planner", async (c) => {
   const currentUser = c.get("user");
 
-  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "AUTHOR", "COMMITTEE")) {
+  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -877,7 +877,7 @@ app.post("/:id/evaluations", async (c) => {
     ),
   });
 
-  const isAdmin = currentUser.roles?.includes("ADMIN") || currentUser.role === "ADMIN";
+  const isAdmin = hasRole(currentUser, "ADMIN");
   if (!isAssignedJudge && !isAdmin) {
     return c.json({ error: "คุณไม่ได้รับมอบหมายให้ประเมินการนำเสนอนี้" }, 403);
   }
