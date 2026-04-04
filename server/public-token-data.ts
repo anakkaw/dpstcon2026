@@ -66,6 +66,7 @@ export interface AdvisorApprovalSubmissionData {
   id: string;
   title: string;
   abstract: string | null;
+  abstractEn: string | null;
   keywords: string | null;
   advisorName: string | null;
   author: {
@@ -89,6 +90,7 @@ export async function getAdvisorApprovalPageData(token: string) {
       id: true,
       title: true,
       abstract: true,
+      abstractEn: true,
       keywords: true,
       advisorName: true,
       advisorEmail: true,

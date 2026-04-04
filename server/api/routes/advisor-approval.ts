@@ -31,6 +31,7 @@ app.get("/:token", async (c) => {
       id: true,
       title: true,
       abstract: true,
+      abstractEn: true,
       keywords: true,
       advisorName: true,
       advisorEmail: true,

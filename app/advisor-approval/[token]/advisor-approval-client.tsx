@@ -121,8 +121,14 @@ export function AdvisorApprovalClient({
             </div>
             {submission?.abstract && (
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.abstract")}</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.abstractTh")}</p>
                 <p className="text-sm text-ink whitespace-pre-wrap mt-0.5 leading-relaxed">{submission.abstract}</p>
+              </div>
+            )}
+            {submission?.abstractEn && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t("advisor.abstractEn")}</p>
+                <p className="text-sm text-ink whitespace-pre-wrap mt-0.5 leading-relaxed">{submission.abstractEn}</p>
               </div>
             )}
             {submission?.keywords && (
@@ -159,7 +165,8 @@ export function AdvisorApprovalClient({
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="text-lg shrink-0">📄</span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-ink truncate">{file.originalName}</p>
+                        <p className="text-sm font-medium text-ink truncate">{t("advisor.abstractTemplateDocument")}</p>
+                        <p className="text-[11px] text-ink-muted truncate">{file.originalName}</p>
                         <p className="text-xs text-ink-muted">
                           {file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(0)} KB` : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}
                         </p>
