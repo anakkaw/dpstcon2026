@@ -5,6 +5,8 @@ import { submissions, reviewAssignments } from "@/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireActiveServerAuthContext } from "@/server/auth-helpers";
+import { advisorApprovalEmail, queueEmail } from "@/server/email";
+import { canAuthorEditSubmission, getSubmissionValidationError } from "@/server/submission-workflow";
 
 export async function createSubmission(formData: FormData) {
   const { session } = await requireActiveServerAuthContext();
@@ -19,15 +21,20 @@ export async function createSubmission(formData: FormData) {
   const advisorEmail = (formData.get("advisorEmail") as string || "").trim();
   const advisorName = (formData.get("advisorName") as string || "").trim();
 
-  // M11: Validate required fields
-  if (!title || title.length > 500) {
+  const validationError = getSubmissionValidationError({
+    title,
+    titleEn,
+    abstract,
+    abstractEn,
+    trackId,
+    advisorEmail,
+    advisorName,
+  });
+  if (validationError) {
+    throw new Error(validationError);
+  }
+  if (title.length > 500) {
     throw new Error("กรุณากรอกชื่อบทความ (ไม่เกิน 500 ตัวอักษร)");
-  }
-  if (!advisorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(advisorEmail)) {
-    throw new Error("กรุณากรอกอีเมล Advisor ให้ถูกต้อง");
-  }
-  if (!advisorName) {
-    throw new Error("กรุณากรอกชื่อ Advisor");
   }
 
   const [submission] = await db
@@ -56,6 +63,9 @@ export async function updateSubmission(id: string, formData: FormData) {
   const existing = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!existing) throw new Error("Not found");
   if (existing.authorId !== session.user.id) throw new Error("Forbidden");
+  if (!canAuthorEditSubmission(existing.status)) {
+    throw new Error("แก้ไขข้อมูลบทความได้เฉพาะตอนเป็นแบบร่าง");
+  }
 
   const [updated] = await db
     .update(submissions)
@@ -81,8 +91,18 @@ export async function submitPaper(id: string) {
   if (!submission) throw new Error("Not found");
   if (submission.authorId !== session.user.id) throw new Error("Forbidden");
   if (submission.status !== "DRAFT") throw new Error("Can only submit from DRAFT");
-  if (!submission.fileUrl) throw new Error("กรุณาแนบไฟล์บทความก่อนส่ง");
-  if (!submission.advisorEmail) throw new Error("ไม่พบอีเมลอาจารย์ที่ปรึกษา");
+
+  const validationError = getSubmissionValidationError({
+    title: submission.title,
+    titleEn: submission.titleEn,
+    abstract: submission.abstract,
+    abstractEn: submission.abstractEn,
+    trackId: submission.trackId,
+    advisorEmail: submission.advisorEmail,
+    advisorName: submission.advisorName,
+    fileUrl: submission.fileUrl,
+  });
+  if (validationError) throw new Error(validationError);
 
   const advisorToken = crypto.randomUUID();
 
@@ -101,7 +121,6 @@ export async function submitPaper(id: string) {
   // Send advisor approval email
   let emailSent = false;
   try {
-    const { queueEmail, advisorApprovalEmail } = await import("@/server/email");
     const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const emailContent = advisorApprovalEmail({
       advisorName: submission.advisorName || "Advisor",
@@ -125,7 +144,7 @@ export async function submitPaper(id: string) {
   revalidatePath(`/submissions/${id}`);
 
   if (!emailSent) {
-    throw new Error("ส่งบทความสำเร็จ แต่ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้ กรุณาใช้ปุ่ม 'ส่งอีเมลอีกครั้ง' ในหน้ารายละเอียดบทความ");
+    throw new Error("ส่งบทความสำเร็จ แต่ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้ กรุณาใช้ปุ่ม 'ส่งอีเมลขอรับรองอีกครั้ง' ในหน้ารายละเอียดบทความ");
   }
 
   return updated;

@@ -127,6 +127,7 @@ export function SubmissionDetail({
   const [deciding, setDeciding] = useState(false);
   const [discussionMsg, setDiscussionMsg] = useState("");
   const [posting, setPosting] = useState(false);
+  const [resendingAdvisor, setResendingAdvisor] = useState(false);
 
   // Computed values for author view
   const nextAction = isAuthor ? getNextAction(submission.status, !!submission.fileUrl) : null;
@@ -146,6 +147,7 @@ export function SubmissionDetail({
       router.refresh();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      router.refresh();
     }
     setLoading(false);
   }
@@ -218,6 +220,26 @@ export function SubmissionDetail({
       router.refresh();
     } catch {}
     setPosting(false);
+  }
+
+  async function handleResendAdvisorApproval() {
+    setResendingAdvisor(true);
+    try {
+      const res = await fetch(`/api/submissions/${submission.id}/resend-advisor-approval`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้");
+        return;
+      }
+      setMessage("ส่งอีเมลขอรับรองถึงอาจารย์ที่ปรึกษาอีกครั้งเรียบร้อยแล้ว");
+      router.refresh();
+    } catch {
+      setMessage("ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้");
+    } finally {
+      setResendingAdvisor(false);
+    }
   }
 
   return (
@@ -408,6 +430,19 @@ export function SubmissionDetail({
               >
                 {submission.advisorApprovalStatus === "APPROVED" ? "รับรองแล้ว" : submission.advisorApprovalStatus === "PENDING" ? "รออนุมัติ" : submission.advisorApprovalStatus || "—"}
               </Badge>
+              {isOwner && submission.status === "ADVISOR_APPROVAL_PENDING" && submission.advisorApprovalStatus === "PENDING" && (
+                <div className="mt-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    loading={resendingAdvisor}
+                    onClick={handleResendAdvisorApproval}
+                  >
+                    ส่งอีเมลขอรับรองอีกครั้ง
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -427,13 +462,18 @@ export function SubmissionDetail({
           </h3>
         </CardHeader>
         <CardBody className="space-y-4">
-          <FileList submissionId={submission.id} files={files} />
+          <FileList
+            submissionId={submission.id}
+            files={files}
+            canDelete={isOwner && submission.status === "DRAFT"}
+            onDeleteComplete={() => router.refresh()}
+          />
 
           {isOwner && submission.status === "DRAFT" && (
             <FileUpload
               submissionId={submission.id}
               kind="MANUSCRIPT"
-              label="อัปโหลดต้นฉบับบทความ"
+              label="แนบบทคัดย่อ ตาม template"
               hint="อัปโหลดไฟล์บทความที่ต้องการส่ง"
               accept=".pdf,.doc,.docx"
               onUploadComplete={() => router.refresh()}
@@ -457,7 +497,7 @@ export function SubmissionDetail({
               kind="SUPPLEMENTARY"
               label="อัปโหลดเอกสารเสริม (ไม่บังคับ)"
               hint="เช่น ข้อมูลเพิ่มเติม ซอร์สโค้ด ฯลฯ"
-              accept=".pdf,.zip,.rar,.doc,.docx"
+              accept=".pdf,.zip,.doc,.docx"
               onUploadComplete={() => router.refresh()}
             />
           )}
@@ -548,7 +588,7 @@ export function SubmissionDetail({
               kind="SUPPLEMENTARY"
               label="อัปโหลดเอกสารเสริม (ไม่บังคับ)"
               hint="เช่น ข้อมูลเพิ่มเติม ซอร์สโค้ด ฯลฯ"
-              accept=".pdf,.zip,.rar,.doc,.docx"
+              accept=".pdf,.zip,.doc,.docx"
               onUploadComplete={() => router.refresh()}
             />
           </CardBody>

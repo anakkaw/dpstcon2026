@@ -2,11 +2,11 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { db } from "@/server/db";
 import { submissions, coAuthors, tracks, reviewAssignments, storedFiles } from "@/server/db/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, ne, sql } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
-import { getUploadUrl, getDownloadUrl, generateFileKey } from "@/server/r2";
+import { getUploadUrl, getDownloadUrl, generateFileKey, deleteFile } from "@/server/r2";
 import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import {
   canRevealReviewerIdentity,
@@ -18,6 +18,12 @@ import {
   generateMissingPaperCodes,
   isPaperCodeAvailable,
 } from "@/server/paper-code-service";
+import {
+  canAuthorEditSubmission,
+  canAuthorUploadSubmissionFile,
+  getSubmissionValidationError,
+} from "@/server/submission-workflow";
+import { advisorApprovalEmail, queueEmail } from "@/server/email";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -100,6 +106,27 @@ function matchesExpectedFileKey(
   const expectedPrefix = `submissions/${submissionId}/${FILE_KIND_PATHS[kind]}/`;
   const expectedSuffix = `-${sanitizeFileName(fileName)}`;
   return fileKey.startsWith(expectedPrefix) && fileKey.endsWith(expectedSuffix);
+}
+
+async function getLatestStoredKeyForKind(
+  submissionId: string,
+  kind: "MANUSCRIPT" | "CAMERA_READY",
+  excludingFileId: string
+) {
+  const [replacement] = await db
+    .select({ storedKey: storedFiles.storedKey })
+    .from(storedFiles)
+    .where(
+      and(
+        eq(storedFiles.submissionId, submissionId),
+        eq(storedFiles.kind, kind),
+        ne(storedFiles.id, excludingFileId)
+      )
+    )
+    .orderBy(desc(storedFiles.uploadedAt), desc(storedFiles.id))
+    .limit(1);
+
+  return replacement?.storedKey ?? null;
 }
 
 async function canAccessSubmission(
@@ -294,12 +321,12 @@ app.get("/:id", async (c) => {
 // POST /api/submissions
 const createSchema = z.object({
   title: z.string().min(1).max(500),
-  titleEn: z.string().max(500).optional(),
-  abstract: z.string().optional(),
-  abstractEn: z.string().optional(),
+  titleEn: z.string().min(1).max(500),
+  abstract: z.string().min(1),
+  abstractEn: z.string().min(1),
   keywords: z.string().optional(),
   keywordsEn: z.string().optional(),
-  trackId: z.string().uuid().optional(),
+  trackId: z.string().uuid(),
   advisorEmail: z.string().email(),
   advisorName: z.string().min(1),
   coAuthors: z
@@ -382,6 +409,13 @@ app.patch("/:id", async (c) => {
   if (existing.authorId !== currentUser.id && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
     return c.json({ error: "Forbidden" }, 403);
   }
+  if (
+    existing.authorId === currentUser.id &&
+    !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR") &&
+    !canAuthorEditSubmission(existing.status)
+  ) {
+    return c.json({ error: "Authors can only edit submission metadata while the paper is in draft" }, 403);
+  }
   if (parsed.data.status && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
     return c.json({ error: "Forbidden — only chairs can change status" }, 403);
   }
@@ -434,10 +468,17 @@ app.post("/:id/submit", async (c) => {
   if (!submission) return c.json({ error: "Not found" }, 404);
   if (submission.authorId !== currentUser.id) return c.json({ error: "Forbidden" }, 403);
   if (submission.status !== "DRAFT") return c.json({ error: "Can only submit from DRAFT" }, 400);
-
-  if (!submission.fileUrl) {
-    return c.json({ error: "กรุณาแนบไฟล์บทความก่อนส่ง" }, 400);
-  }
+  const validationError = getSubmissionValidationError({
+    title: submission.title,
+    titleEn: submission.titleEn,
+    abstract: submission.abstract,
+    abstractEn: submission.abstractEn,
+    trackId: submission.trackId,
+    advisorEmail: submission.advisorEmail,
+    advisorName: submission.advisorName,
+    fileUrl: submission.fileUrl,
+  });
+  if (validationError) return c.json({ error: validationError }, 400);
 
   const advisorToken = crypto.randomUUID();
 
@@ -453,7 +494,6 @@ app.post("/:id/submit", async (c) => {
     .where(eq(submissions.id, id))
     .returning();
 
-  const { queueEmail, advisorApprovalEmail } = await import("@/server/email");
   const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const emailContent = advisorApprovalEmail({
     advisorName: submission.advisorName || "Advisor",
@@ -470,6 +510,71 @@ app.post("/:id/submit", async (c) => {
   });
 
   return c.json({ submission: updated });
+});
+
+// POST /api/submissions/:id/resend-advisor-approval
+app.post("/:id/resend-advisor-approval", async (c) => {
+  const { id } = c.req.param();
+  const currentUser = c.get("user");
+
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, id),
+    with: {
+      author: { columns: { name: true } },
+    },
+  });
+  if (!submission) return c.json({ error: "Not found" }, 404);
+
+  const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const isOwner = submission.authorId === currentUser.id;
+  if (!isOwner && !isStaff) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  if (
+    submission.status !== "ADVISOR_APPROVAL_PENDING" ||
+    submission.advisorApprovalStatus !== "PENDING"
+  ) {
+    return c.json({ error: "Advisor approval resend is only available while approval is pending" }, 400);
+  }
+
+  if (!submission.advisorEmail) {
+    return c.json({ error: "ไม่พบอีเมลอาจารย์ที่ปรึกษา" }, 400);
+  }
+
+  const advisorToken = crypto.randomUUID();
+
+  await db
+    .update(submissions)
+    .set({
+      advisorApprovalToken: advisorToken,
+      advisorApprovalStatus: "PENDING",
+      submittedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(submissions.id, id));
+
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const emailContent = advisorApprovalEmail({
+    advisorName: submission.advisorName || "Advisor",
+    studentName: submission.author.name,
+    paperTitle: submission.title,
+    approvalUrl: `${appUrl}/advisor-approval/${advisorToken}`,
+  });
+
+  try {
+    await queueEmail({
+      to: submission.advisorEmail,
+      subject: emailContent.subject,
+      html: emailContent.html,
+      text: emailContent.text,
+      throwOnFailure: true,
+    });
+  } catch {
+    return c.json({ error: "ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้" }, 500);
+  }
+
+  return c.json({ ok: true });
 });
 
 // POST /api/submissions/:id/resubmit
@@ -599,11 +704,16 @@ app.post("/:id/upload-url", async (c) => {
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
-  if (submission.authorId !== currentUser.id && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+  const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const isOwner = submission.authorId === currentUser.id;
+  if (!isOwner && !isStaff) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
   const { fileName, mimeType, kind } = parsed.data;
+  if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
+    return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
+  }
   if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
     return c.json({ error: "Camera-ready upload is not available for this submission" }, 400);
   }
@@ -654,7 +764,9 @@ app.post("/:id/confirm-upload", async (c) => {
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
-  if (submission.authorId !== currentUser.id && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+  const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const isOwner = submission.authorId === currentUser.id;
+  if (!isOwner && !isStaff) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -679,6 +791,10 @@ app.post("/:id/confirm-upload", async (c) => {
 
   if (!matchesExpectedFileKey(id, kind, fileName, fileKey)) {
     return c.json({ error: "Invalid file key" }, 400);
+  }
+
+  if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
+    return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
   }
 
   if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
@@ -770,6 +886,71 @@ app.get("/:id/download/:fileId", async (c) => {
   } catch {
     return c.json({ error: "File storage not configured" }, 503);
   }
+});
+
+// DELETE /api/submissions/:id/files/:fileId
+app.delete("/:id/files/:fileId", async (c) => {
+  const { id, fileId } = c.req.param();
+  const currentUser = c.get("user");
+
+  const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
+  if (!submission) return c.json({ error: "Not found" }, 404);
+
+  const canManageAsStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const canManageOwnDraft =
+    submission.authorId === currentUser.id && submission.status === "DRAFT";
+
+  if (!canManageAsStaff && !canManageOwnDraft) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const file = await db.query.storedFiles.findFirst({
+    where: and(eq(storedFiles.id, fileId), eq(storedFiles.submissionId, id)),
+  });
+  if (!file) return c.json({ error: "File not found" }, 404);
+
+  const nextManuscriptKey =
+    file.kind === "MANUSCRIPT"
+      ? await getLatestStoredKeyForKind(id, "MANUSCRIPT", file.id)
+      : null;
+  const nextCameraReadyKey =
+    file.kind === "CAMERA_READY"
+      ? await getLatestStoredKeyForKind(id, "CAMERA_READY", file.id)
+      : null;
+
+  await db.transaction(async (tx) => {
+    await tx.delete(storedFiles).where(eq(storedFiles.id, file.id));
+
+    if (file.kind === "MANUSCRIPT") {
+      await tx
+        .update(submissions)
+        .set({ fileUrl: nextManuscriptKey, updatedAt: new Date() })
+        .where(eq(submissions.id, id));
+    }
+
+    if (file.kind === "CAMERA_READY") {
+      await tx
+        .update(submissions)
+        .set({
+          cameraReadyUrl: nextCameraReadyKey,
+          status: nextCameraReadyKey ? submission.status : "CAMERA_READY_PENDING",
+          updatedAt: new Date(),
+        })
+        .where(eq(submissions.id, id));
+    }
+  });
+
+  try {
+    await deleteFile(file.storedKey);
+  } catch (error) {
+    console.error("[submissions.deleteFile] Failed to remove object from storage", {
+      fileId: file.id,
+      storedKey: file.storedKey,
+      error,
+    });
+  }
+
+  return c.json({ ok: true, deletedFileId: file.id });
 });
 
 // POST /api/submissions/:id/conflicts — M7: require REVIEWER+ role and validate

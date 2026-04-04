@@ -197,7 +197,7 @@ const th = {
   "submissions.new.keywordsEn": "คำสำคัญ (ภาษาอังกฤษ)",
   "submissions.new.keywordsThPlaceholder": "เช่น การเรียนรู้ของเครื่อง, การเรียนรู้เชิงลึก",
   "submissions.new.keywordsEnPlaceholder": "เช่น machine learning, deep learning, NLP",
-  "submissions.new.attachManuscript": "แนบไฟล์บทความ",
+  "submissions.new.attachManuscript": "แนบบทคัดย่อ ตาม template",
   "submissions.new.attachManuscriptDesc": "กรุณาแนบไฟล์ต้นฉบับบทความ (PDF, DOC, DOCX) ก่อนดำเนินการต่อไปยังหน้ารายละเอียดบทความ",
   "submissions.new.requiredFile": "กรุณาแนบไฟล์บทความก่อนบันทึกแบบร่าง",
   "submissions.new.continueToDetail": "ไปหน้าบทความ",
@@ -533,7 +533,7 @@ const th = {
   "notifications.empty": "ไม่มีการแจ้งเตือน",
 
   // ─── File Upload ──────────────────────────────────────
-  "fileUpload.attachFile": "แนบไฟล์",
+  "fileUpload.attachFile": "แนบบทคัดย่อ ตาม template",
   "fileUpload.fileTooLarge": "ไฟล์มีขนาดเกิน {n} MB",
   "fileUpload.unsupportedType": "ประเภทไฟล์ไม่รองรับ (รองรับ: {types})",
   "fileUpload.uploadUrlError": "ไม่สามารถขอ URL สำหรับอัปโหลดได้",
@@ -542,6 +542,10 @@ const th = {
   "fileUpload.timeout": "อัปโหลดหมดเวลา กรุณาลองใหม่",
   "fileUpload.confirmFailed": "ยืนยันการอัปโหลดไม่สำเร็จ",
   "fileUpload.genericError": "เกิดข้อผิดพลาด",
+  "fileUpload.delete": "ลบไฟล์",
+  "fileUpload.deleteFailed": "ไม่สามารถลบไฟล์ได้",
+  "fileUpload.deleteConfirmTitle": "ยืนยันการลบไฟล์",
+  "fileUpload.deleteConfirmDesc": "ต้องการลบไฟล์ {name} ออกจากแบบร่างใช่หรือไม่",
   "fileUpload.clickToSelect": "คลิกเพื่อเลือกไฟล์",
   "fileUpload.supported": "รองรับ {types} (สูงสุด {n} MB)",
   "fileUpload.uploading": "กำลังอัปโหลด {name}...",

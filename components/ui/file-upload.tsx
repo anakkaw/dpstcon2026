@@ -12,7 +12,15 @@ interface FileUploadProps {
   maxSizeMB?: number;
   label?: string;
   hint?: string;
-  onUploadComplete?: (file: { id: string; originalName: string; storedKey: string }) => void;
+  onUploadComplete?: (file: {
+    id: string;
+    originalName: string;
+    storedKey: string;
+    mimeType: string;
+    size: number;
+    kind: "MANUSCRIPT" | "SUPPLEMENTARY" | "CAMERA_READY";
+    uploadedAt: string | Date;
+  }) => void;
   disabled?: boolean;
 }
 
@@ -128,7 +136,8 @@ export function FileUpload({
           });
 
         if (!confirmRes.ok) {
-          throw new Error(t("fileUpload.confirmFailed"));
+          const data = await confirmRes.json().catch(() => null);
+          throw new Error(data?.error || t("fileUpload.confirmFailed"));
         }
 
         const { file: savedFile } = await confirmRes.json();

@@ -12,6 +12,7 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Alert } from "@/components/ui/alert";
 import { FileUpload } from "@/components/ui/file-upload";
+import { FileList } from "@/components/ui/file-list";
 import { WorkspaceSection, WorkspaceSurface } from "@/components/ui/workspace-section";
 import { useI18n } from "@/lib/i18n";
 
@@ -29,6 +30,15 @@ interface DraftSummary {
   advisorEmail: string;
 }
 
+interface DraftFile {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  kind: string;
+  uploadedAt: string | Date;
+}
+
 export default function NewSubmissionPage() {
   const { t } = useI18n();
   const router = useRouter();
@@ -38,8 +48,10 @@ export default function NewSubmissionPage() {
 
   // After form submit: hold the created submission id and wait for file upload
   const [submissionId, setSubmissionId] = useState<string | null>(null);
-  const [fileUploaded, setFileUploaded] = useState(false);
+  const [draftFiles, setDraftFiles] = useState<DraftFile[]>([]);
   const [draftSummary, setDraftSummary] = useState<DraftSummary | null>(null);
+
+  const hasUploadedManuscript = draftFiles.some((file) => file.kind === "MANUSCRIPT");
 
   useEffect(() => {
     fetch("/api/submissions/tracks")
@@ -79,6 +91,7 @@ export default function NewSubmissionPage() {
       if (result?.id) {
         // Transition to file upload step on the same page
         setSubmissionId(result.id);
+        setDraftFiles([]);
         setDraftSummary({
           trackName: tracks.find((track) => track.id === trackId)?.name || t("submissions.new.track"),
           title: title.trim(),
@@ -96,8 +109,8 @@ export default function NewSubmissionPage() {
   }
 
   // After file uploaded, navigate to submission detail
-  function handleUploadComplete() {
-    setFileUploaded(true);
+  function handleUploadComplete(file: DraftFile) {
+    setDraftFiles((prev) => [...prev.filter((item) => item.id !== file.id), file]);
   }
 
   function handleContinue() {
@@ -131,7 +144,7 @@ export default function NewSubmissionPage() {
           number={2}
           title={t("submissions.new.stepUploadTitle")}
           description={t("submissions.new.stepUploadDesc")}
-          status={!submissionId ? "pending" : fileUploaded ? "complete" : "active"}
+          status={!submissionId ? "pending" : hasUploadedManuscript ? "complete" : "active"}
         />
       </div>
 
@@ -305,17 +318,27 @@ export default function NewSubmissionPage() {
 
           <WorkspaceSection title={t("submissions.new.attachManuscript")} description={t("submissions.new.attachManuscriptDesc")}>
             <WorkspaceSurface className="overflow-hidden">
-              <div className="p-5">
-              <FileUpload
-                submissionId={submissionId}
-                kind="MANUSCRIPT"
-                onUploadComplete={handleUploadComplete}
-              />
+              <div className="space-y-4 p-5">
+                <FileUpload
+                  submissionId={submissionId}
+                  kind="MANUSCRIPT"
+                  onUploadComplete={handleUploadComplete}
+                />
+                {draftFiles.length > 0 && (
+                  <FileList
+                    submissionId={submissionId}
+                    files={draftFiles}
+                    canDelete
+                    onDeleteComplete={(fileId) => {
+                      setDraftFiles((prev) => prev.filter((file) => file.id !== fileId));
+                    }}
+                  />
+                )}
               </div>
               <div className="border-t border-border-light bg-surface-alt/40 px-5 py-4">
                 <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs text-ink-muted">
-                    {fileUploaded
+                    {hasUploadedManuscript
                       ? t("submissions.new.fileUploadedReady")
                       : t("submissions.new.uploadRequired")}
                   </p>
@@ -330,7 +353,7 @@ export default function NewSubmissionPage() {
                     <Button
                       type="button"
                       onClick={handleContinue}
-                      disabled={!fileUploaded}
+                      disabled={!hasUploadedManuscript}
                     >
                       {t("submissions.new.continueToDetail")}
                     </Button>

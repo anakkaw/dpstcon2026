@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Download, Loader2 } from "lucide-react";
+import { FileText, Download, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { Alert } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
 
 interface StoredFile {
   id: string;
@@ -18,6 +20,8 @@ interface StoredFile {
 interface FileListProps {
   submissionId: string;
   files: StoredFile[];
+  canDelete?: boolean;
+  onDeleteComplete?: (fileId: string) => void;
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -32,9 +36,16 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function FileList({ submissionId, files }: FileListProps) {
+export function FileList({
+  submissionId,
+  files,
+  canDelete = false,
+  onDeleteComplete,
+}: FileListProps) {
   const { t } = useI18n();
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<StoredFile | null>(null);
   const [error, setError] = useState("");
 
   async function handleDownload(fileId: string) {
@@ -52,6 +63,29 @@ export function FileList({ submissionId, files }: FileListProps) {
     setDownloading(null);
   }
 
+  async function handleDelete(file: StoredFile) {
+    setDeleting(file.id);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/submissions/${submissionId}/files/${file.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || t("fileUpload.deleteFailed"));
+      }
+
+      onDeleteComplete?.(file.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("fileUpload.deleteFailed"));
+    } finally {
+      setDeleting(null);
+      setPendingDelete(null);
+    }
+  }
+
   if (files.length === 0) {
     return (
       <p className="text-sm text-ink-muted">ยังไม่มีไฟล์แนบ</p>
@@ -60,6 +94,19 @@ export function FileList({ submissionId, files }: FileListProps) {
 
   return (
     <div className="space-y-2">
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={t("fileUpload.deleteConfirmTitle")}
+        description={t("fileUpload.deleteConfirmDesc", {
+          name: pendingDelete?.originalName || "",
+        })}
+        confirmLabel={t("fileUpload.delete")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        loading={!!pendingDelete && deleting === pendingDelete.id}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && handleDelete(pendingDelete)}
+      />
       {error && <Alert tone="danger">{error}</Alert>}
       {files.map((file) => (
         <div
@@ -75,23 +122,46 @@ export function FileList({ submissionId, files }: FileListProps) {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => handleDownload(file.id)}
-            disabled={downloading === file.id}
-            className={cn(
-              "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:w-auto sm:shrink-0",
-              "text-brand-600 hover:bg-brand-50 active:bg-brand-100",
-              "disabled:opacity-50 disabled:cursor-not-allowed"
+          <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
+            <button
+              type="button"
+              onClick={() => handleDownload(file.id)}
+              disabled={downloading === file.id || deleting === file.id}
+              className={cn(
+                "inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:w-auto sm:flex-none",
+                "text-brand-600 hover:bg-brand-50 active:bg-brand-100",
+                "disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
+            >
+              {downloading === file.id ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {t("common.download")}
+            </button>
+
+            {canDelete && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={downloading === file.id || deleting === file.id}
+                onClick={() => {
+                  setError("");
+                  setPendingDelete(file);
+                }}
+                className="flex-1 text-red-700 hover:bg-red-50 hover:text-red-800 sm:flex-none"
+              >
+                {deleting === file.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                {t("fileUpload.delete")}
+              </Button>
             )}
-          >
-            {downloading === file.id ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Download className="h-3.5 w-3.5" />
-            )}
-            {t("common.download")}
-          </button>
+          </div>
         </div>
       ))}
     </div>
