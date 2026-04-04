@@ -28,12 +28,16 @@ export interface SubmissionReadinessInput {
   fileUrl?: string | null | undefined;
 }
 
-function hasText(value: string | null | undefined) {
+function hasText(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
 function isValidEmail(value: string | null | undefined) {
-  return hasText(value) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  if (!hasText(value)) {
+    return false;
+  }
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 export function canAuthorEditSubmission(status: SubmissionWorkflowStatus) {

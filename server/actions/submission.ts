@@ -103,6 +103,10 @@ export async function submitPaper(id: string) {
     fileUrl: submission.fileUrl,
   });
   if (validationError) throw new Error(validationError);
+  const advisorEmail = submission.advisorEmail;
+  if (!advisorEmail) {
+    throw new Error("ไม่พบอีเมลอาจารย์ที่ปรึกษา");
+  }
 
   const advisorToken = crypto.randomUUID();
 
@@ -129,7 +133,7 @@ export async function submitPaper(id: string) {
       approvalUrl: `${appUrl}/advisor-approval/${advisorToken}`,
     });
     await queueEmail({
-      to: submission.advisorEmail,
+      to: advisorEmail,
       subject: emailContent.subject,
       html: emailContent.html,
       text: emailContent.text,
