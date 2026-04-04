@@ -31,6 +31,7 @@ import { displayNameTh } from "@/lib/display-name";
 import {
   UserPlus, Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
+  Trash2,
 } from "lucide-react";
 
 interface Props {
@@ -109,7 +110,7 @@ export function SubmissionDetail({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [confirmAction, setConfirmAction] = useState<null | "withdraw" | "resubmit">(
+  const [confirmAction, setConfirmAction] = useState<null | "withdraw" | "resubmit" | "delete">(
     null
   );
   const isOwner = submission.author.id === currentUserId;
@@ -120,6 +121,7 @@ export function SubmissionDetail({
   const isReviewer = currentUserRoles.includes("REVIEWER");
   const canManageOwnSubmission = isOwner && isAuthor;
   const canDeleteFiles = isAdmin || (canManageOwnSubmission && submission.status === "DRAFT");
+  const canDeleteSubmission = currentUserRoles.includes("ADMIN");
   const canSubmit = canManageOwnSubmission && submission.status === "DRAFT";
   const canWithdraw = canManageOwnSubmission && !["WITHDRAWN", "DRAFT"].includes(submission.status);
   const canResubmit = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
@@ -169,6 +171,28 @@ export function SubmissionDetail({
     await resubmitPaper(submission.id);
     router.refresh();
     setLoading(false);
+  }
+
+  async function handleDeleteSubmission() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/submissions/${submission.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setMessage(data?.error || "ไม่สามารถลบบทความได้");
+        return;
+      }
+
+      router.push("/submissions");
+      router.refresh();
+    } catch {
+      setMessage("ไม่สามารถลบบทความได้");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleAssignReviewer() {
@@ -276,6 +300,20 @@ export function SubmissionDetail({
           setConfirmAction(null);
         }}
       />
+      <ConfirmDialog
+        open={confirmAction === "delete"}
+        title="ยืนยันการลบบทความ"
+        description="การลบบทความจะลบข้อมูลรีวิว การนำเสนอ และไฟล์แนบที่เกี่ยวข้องทั้งหมดออกจากระบบทันที"
+        confirmLabel="ลบบทความ"
+        cancelLabel="ยกเลิก"
+        tone="danger"
+        loading={loading}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={async () => {
+          await handleDeleteSubmission();
+          setConfirmAction(null);
+        }}
+      />
 
       <Breadcrumb items={[{ label: "บทความ", href: "/submissions" }, { label: submission.title }]} />
 
@@ -305,6 +343,17 @@ export function SubmissionDetail({
               size="sm"
             >
               ถอนบทความ
+            </Button>
+          )}
+          {canDeleteSubmission && (
+            <Button
+              onClick={() => setConfirmAction("delete")}
+              variant="danger"
+              loading={loading}
+              size="sm"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              ลบบทความ
             </Button>
           )}
         </div>

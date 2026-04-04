@@ -1,8 +1,23 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { db } from "@/server/db";
-import { submissions, coAuthors, tracks, reviewAssignments, storedFiles } from "@/server/db/schema";
-import { eq, desc, and, ne, sql } from "drizzle-orm";
+import {
+  submissions,
+  coAuthors,
+  tracks,
+  reviewAssignments,
+  storedFiles,
+  reviews,
+  decisions,
+  conflicts,
+  bids,
+  discussions,
+  presentationAssignments,
+  presentationCommitteeAssignments,
+  presentationEvaluations,
+  posterGroupMembers,
+} from "@/server/db/schema";
+import { eq, desc, and, ne, sql, inArray } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -131,6 +146,55 @@ async function getLatestStoredKeyForKind(
     .limit(1);
 
   return replacement?.storedKey ?? null;
+}
+
+async function deleteSubmissionCascade(submissionId: string) {
+  const files = await db
+    .select({ id: storedFiles.id, storedKey: storedFiles.storedKey })
+    .from(storedFiles)
+    .where(eq(storedFiles.submissionId, submissionId));
+
+  const presentationRows = await db
+    .select({ id: presentationAssignments.id })
+    .from(presentationAssignments)
+    .where(eq(presentationAssignments.submissionId, submissionId));
+
+  if (presentationRows.length > 0) {
+    const presentationIds = presentationRows.map((row) => row.id);
+    await db
+      .delete(presentationEvaluations)
+      .where(inArray(presentationEvaluations.presentationId, presentationIds));
+    await db
+      .delete(presentationCommitteeAssignments)
+      .where(inArray(presentationCommitteeAssignments.presentationId, presentationIds));
+    await db
+      .delete(presentationAssignments)
+      .where(inArray(presentationAssignments.id, presentationIds));
+  }
+
+  await db.delete(storedFiles).where(eq(storedFiles.submissionId, submissionId));
+  await db.delete(posterGroupMembers).where(eq(posterGroupMembers.submissionId, submissionId));
+  await db.delete(reviews).where(eq(reviews.submissionId, submissionId));
+  await db.delete(reviewAssignments).where(eq(reviewAssignments.submissionId, submissionId));
+  await db.delete(decisions).where(eq(decisions.submissionId, submissionId));
+  await db.delete(conflicts).where(eq(conflicts.submissionId, submissionId));
+  await db.delete(bids).where(eq(bids.submissionId, submissionId));
+  await db.delete(discussions).where(eq(discussions.submissionId, submissionId));
+  await db.delete(coAuthors).where(eq(coAuthors.submissionId, submissionId));
+  await db.delete(submissions).where(eq(submissions.id, submissionId));
+
+  for (const file of files) {
+    try {
+      await deleteFile(file.storedKey);
+    } catch (error) {
+      console.error("[submissions.deleteSubmission] Failed to remove object from storage", {
+        submissionId,
+        fileId: file.id,
+        storedKey: file.storedKey,
+        error,
+      });
+    }
+  }
 }
 
 async function canAccessSubmission(
@@ -637,6 +701,26 @@ app.post("/:id/withdraw", async (c) => {
     .returning();
 
   return c.json({ submission: updated });
+});
+
+// DELETE /api/submissions/:id
+app.delete("/:id", async (c) => {
+  const { id } = c.req.param();
+  const currentUser = c.get("user");
+
+  if (!hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, id),
+    columns: { id: true },
+  });
+  if (!submission) return c.json({ error: "Not found" }, 404);
+
+  await deleteSubmissionCascade(id);
+
+  return c.json({ ok: true, deletedSubmissionId: id });
 });
 
 // POST /api/submissions/:id/rebuttal — M5: validate rebuttal text
