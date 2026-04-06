@@ -10,7 +10,7 @@ import { LanguageToggle } from "@/components/language-toggle";
 export default function HomePage() {
   const { t } = useI18n();
   return (
-    <div className="min-h-screen bg-landing-hero text-white overflow-hidden">
+    <div className="min-h-screen bg-landing-hero text-white">
       {/* ── Decorative background elements ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Top-left blue glow */}

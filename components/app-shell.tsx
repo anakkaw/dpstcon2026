@@ -104,7 +104,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200",
+                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
                   isActive
                     ? "bg-white text-slate-950 shadow-sm"
                     : "text-slate-300 hover:bg-white/5 hover:text-white"
