@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Noto_Sans_Thai } from "next/font/google";
+import Script from "next/script";
 import { I18nProvider } from "@/lib/i18n";
+import { getServerLocale, getServerTranslator } from "@/lib/i18n/server";
 import "./globals.css";
 
 const notoSansThai = Noto_Sans_Thai({
@@ -10,43 +12,55 @@ const notoSansThai = Noto_Sans_Thai({
   variable: "--font-dpst-body",
 });
 
-export const metadata: Metadata = {
-  title: "DPSTCon — Submission Management System",
-  description:
-    "ระบบบริหารการส่งและพิจารณาบทความ DPSTCon",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getServerTranslator();
 
-export default function RootLayout({
+  return {
+    title: "DPSTCon — Submission Management System",
+    description: `DPSTCon — ${t("app.description")}`,
+  };
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getServerLocale();
+
   return (
-    <html lang="th" className={`${notoSansThai.variable} h-full`}>
+    <html lang={locale} className={`${notoSansThai.variable} h-full`}>
       <body className="min-h-full flex flex-col antialiased">
-        <I18nProvider>
+        <I18nProvider initialLocale={locale}>
           {children}
         </I18nProvider>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              // Auto-recover from ChunkLoadError by reloading the page
-              window.addEventListener('error', function(e) {
-                if (e.message && (e.message.includes('ChunkLoadError') || e.message.includes('Loading chunk'))) {
-                  console.warn('[DPSTCon] Chunk load error detected, reloading...');
-                  window.location.reload();
-                }
-              });
-              window.addEventListener('unhandledrejection', function(e) {
-                var reason = e.reason && (e.reason.message || String(e.reason));
-                if (reason && (reason.includes('ChunkLoadError') || reason.includes('Loading chunk') || reason.includes('Failed to fetch dynamically'))) {
-                  console.warn('[DPSTCon] Chunk load rejection detected, reloading...');
-                  window.location.reload();
-                }
-              });
-            `,
-          }}
-        />
+        <Script id="chunk-recovery" strategy="afterInteractive">
+          {`
+            window.addEventListener("error", function (event) {
+              if (
+                event.message &&
+                (event.message.includes("ChunkLoadError") ||
+                  event.message.includes("Loading chunk"))
+              ) {
+                console.warn("[DPSTCon] Chunk load error detected, reloading...");
+                window.location.reload();
+              }
+            });
+
+            window.addEventListener("unhandledrejection", function (event) {
+              var reason = event.reason && (event.reason.message || String(event.reason));
+              if (
+                reason &&
+                (reason.includes("ChunkLoadError") ||
+                  reason.includes("Loading chunk") ||
+                  reason.includes("Failed to fetch dynamically"))
+              ) {
+                console.warn("[DPSTCon] Chunk load rejection detected, reloading...");
+                window.location.reload();
+              }
+            });
+          `}
+        </Script>
       </body>
     </html>
   );

@@ -1,14 +1,13 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
-import { Footer } from "@/components/ui/footer";
-import { useI18n } from "@/lib/i18n";
+import { getServerTranslator } from "@/lib/i18n/server";
 import { LanguageToggle } from "@/components/language-toggle";
+import { Footer } from "@/components/ui/footer";
 
-export default function HomePage() {
-  const { t } = useI18n();
+export default async function HomePage() {
+  const { t } = await getServerTranslator();
+
   return (
     <div className="min-h-screen bg-landing-hero text-white">
       {/* ── Decorative background elements ── */}
@@ -117,9 +116,11 @@ export default function HomePage() {
         </div>
       </section>
 
-
-      {/* ── Footer ── */}
-      <Footer variant="dark" />
+      <Footer
+        variant="dark"
+        developedBy={t("footer.developedBy")}
+        university={t("footer.university")}
+      />
     </div>
   );
 }

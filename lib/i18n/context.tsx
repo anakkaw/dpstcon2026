@@ -1,18 +1,17 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from "react";
 import type { Locale } from "./types";
 import { DEFAULT_LOCALE } from "./types";
 import type { TranslationKey } from "./translations/th";
-import thDict from "./translations/th";
-import enDict from "./translations/en";
-
-const STORAGE_KEY = "dpstcon-locale";
-
-const dictionaries: Record<Locale, Record<string, string>> = {
-  th: thDict,
-  en: enDict,
-};
+import { LOCALE_COOKIE, translate } from "./shared";
 
 interface I18nContextValue {
   locale: Locale;
@@ -22,15 +21,18 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY) as Locale | null;
-      if (stored === "th" || stored === "en") return stored;
-    } catch {}
+export function I18nProvider({
+  children,
+  initialLocale = DEFAULT_LOCALE,
+}: {
+  children: ReactNode;
+  initialLocale?: Locale;
+}) {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
 
-    return DEFAULT_LOCALE;
-  });
+  useEffect(() => {
+    setLocaleState(initialLocale);
+  }, [initialLocale]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -38,21 +40,21 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);
-    try {
-      localStorage.setItem(STORAGE_KEY, newLocale);
-    } catch {}
     document.documentElement.lang = newLocale;
+    document.cookie = [
+      `${LOCALE_COOKIE}=${newLocale}`,
+      "Path=/",
+      "Max-Age=31536000",
+      "SameSite=Lax",
+      window.location.protocol === "https:" ? "Secure" : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
   }, []);
 
   const t = useCallback(
     (key: TranslationKey, params?: Record<string, string | number>): string => {
-      let text = dictionaries[locale][key] || dictionaries[DEFAULT_LOCALE][key] || key;
-      if (params) {
-        for (const [k, v] of Object.entries(params)) {
-          text = text.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
-        }
-      }
-      return text;
+      return translate(locale, key, params);
     },
     [locale]
   );

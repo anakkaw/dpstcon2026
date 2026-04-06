@@ -1,3 +1,4 @@
+import "server-only";
 import { cache } from "react";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
@@ -14,6 +15,12 @@ export type ServerAuthUser = {
   roles: string[];
   roleAssignments: RoleAssignment[];
   isActive: boolean;
+  prefixTh?: string | null;
+  firstNameTh?: string | null;
+  lastNameTh?: string | null;
+  prefixEn?: string | null;
+  firstNameEn?: string | null;
+  lastNameEn?: string | null;
 };
 
 export const getServerAuthContext = cache(async function getServerAuthContext() {
@@ -46,6 +53,12 @@ export const getServerAuthContext = cache(async function getServerAuthContext() 
         name: string;
         email: string;
         role: string;
+        prefixTh?: string | null;
+        firstNameTh?: string | null;
+        lastNameTh?: string | null;
+        prefixEn?: string | null;
+        firstNameEn?: string | null;
+        lastNameEn?: string | null;
       }),
       roles:
         roleAssignments.length > 0

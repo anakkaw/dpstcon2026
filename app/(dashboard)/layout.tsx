@@ -10,13 +10,15 @@ export default async function DashboardLayout({
 }) {
   const authContext = await getServerAuthContext();
 
-  if (!authContext?.user.isActive) {
+  if (!authContext) {
     redirect("/login");
   }
 
   return (
-    <DashboardAuthProvider user={authContext.user}>
-      <AppShell>{children}</AppShell>
-    </DashboardAuthProvider>
+    <AppShell user={authContext.user}>
+      <DashboardAuthProvider user={authContext.user}>
+        {children}
+      </DashboardAuthProvider>
+    </AppShell>
   );
 }
