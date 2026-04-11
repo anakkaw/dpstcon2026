@@ -366,16 +366,56 @@ export function PosterPlannerClient({
     setMessage(t("poster.slotRemovedSave"));
   }
 
+  // ── Auto-create group for ungrouped paper ──
+  async function ensureGroupForPaper(
+    row: ScheduleRow
+  ): Promise<string> {
+    if (row.groupId) return row.groupId;
+
+    // Create a new group for this track
+    const createGroupRes = await fetch("/api/presentations/poster-groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        trackId: row.trackId,
+        name: `${row.trackName} — ${row.paperCode || row.submissionId.slice(0, 8)}`,
+      }),
+    });
+    if (!createGroupRes.ok) {
+      const d = await createGroupRes.json().catch(() => null);
+      throw new Error(d?.error || t("poster.unableToCreateGroup"));
+    }
+    const { group: newGroup } = await createGroupRes.json();
+
+    // Add the paper to the group
+    const addMemberRes = await fetch(
+      `/api/presentations/poster-groups/${newGroup.id}/members`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionIds: [row.submissionId] }),
+      }
+    );
+    if (!addMemberRes.ok) {
+      const d = await addMemberRes.json().catch(() => null);
+      throw new Error(d?.error || t("poster.unableToAddPapers"));
+    }
+
+    return newGroup.id as string;
+  }
+
   // ── Judge assignment handler ──
   const handleJudgeChange = useCallback(
     async (row: ScheduleRow, templateId: string, newJudgeId: string) => {
       const existing = row.slotAssignments[templateId];
-      const groupId = row.groupId;
       const template = sessionSettings.slotTemplates.find((s) => s.id === templateId);
-      if (!template || !groupId) return;
+      if (!template) return;
 
       const actionKey = `assign-${row.submissionId}-${templateId}`;
       await runAction(actionKey, async () => {
+        // Ensure the paper has a group (auto-create if needed)
+        const groupId = await ensureGroupForPaper(row);
+
         if (existing && newJudgeId === "") {
           // Remove slot
           const response = await fetch(
@@ -888,27 +928,23 @@ export function PosterPlannerClient({
 
                           return (
                             <td key={slot.id} className="px-2 py-2">
-                              {row.groupId ? (
-                                <select
-                                  value={currentJudgeId}
-                                  onChange={(e) => handleJudgeChange(row, slot.id, e.target.value)}
-                                  disabled={isSaving}
-                                  className={`w-full rounded-lg border px-2 py-1.5 text-xs transition-colors ${
-                                    currentJudgeId
-                                      ? "border-brand-200 bg-brand-50/40 text-ink"
-                                      : "border-border/60 bg-white text-ink-muted"
-                                  } ${isSaving ? "opacity-50 cursor-wait" : "hover:border-brand-300 focus:border-brand-400 focus:ring-1 focus:ring-brand-200"} focus:outline-none`}
-                                >
-                                  <option value="">{t("poster.selectJudgeOption")}</option>
-                                  {trackCommitteeUsers.map((cu) => (
-                                    <option key={cu.id} value={cu.id}>
-                                      {cu.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <span className="text-xs text-ink-muted italic">—</span>
-                              )}
+                              <select
+                                value={currentJudgeId}
+                                onChange={(e) => handleJudgeChange(row, slot.id, e.target.value)}
+                                disabled={isSaving}
+                                className={`w-full rounded-lg border px-2 py-1.5 text-xs transition-colors ${
+                                  currentJudgeId
+                                    ? "border-brand-200 bg-brand-50/40 text-ink"
+                                    : "border-border/60 bg-white text-ink-muted"
+                                } ${isSaving ? "opacity-50 cursor-wait" : "hover:border-brand-300 focus:border-brand-400 focus:ring-1 focus:ring-brand-200"} focus:outline-none`}
+                              >
+                                <option value="">{t("poster.selectJudgeOption")}</option>
+                                {trackCommitteeUsers.map((cu) => (
+                                  <option key={cu.id} value={cu.id}>
+                                    {cu.name}
+                                  </option>
+                                ))}
+                              </select>
                             </td>
                           );
                         })}
