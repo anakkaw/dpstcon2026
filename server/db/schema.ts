@@ -522,92 +522,31 @@ export const presentationCommitteeAssignments = pgTable(
   ]
 );
 
-export const posterPresentationGroups = pgTable(
-  "poster_presentation_groups",
+export const posterSlotJudges = pgTable(
+  "poster_slot_judges",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    trackId: uuid("track_id")
-      .references(() => tracks.id, { onDelete: "cascade" })
-      .notNull(),
-    name: varchar("name", { length: 255 }).notNull(),
-    room: varchar("room", { length: 100 }),
-    sortOrder: integer("sort_order").default(0).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  (table) => [
-    index("poster_groups_track_idx").on(table.trackId),
-    uniqueIndex("poster_groups_track_name_unique").on(table.trackId, table.name),
-  ]
-);
-
-export const posterGroupMembers = pgTable(
-  "poster_group_members",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    groupId: uuid("group_id")
-      .references(() => posterPresentationGroups.id, { onDelete: "cascade" })
-      .notNull(),
     submissionId: uuid("submission_id")
       .references(() => submissions.id, { onDelete: "cascade" })
-      .notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => [
-    index("poster_group_members_group_idx").on(table.groupId),
-    uniqueIndex("poster_group_members_submission_unique").on(table.submissionId),
-    uniqueIndex("poster_group_members_group_submission_unique").on(
-      table.groupId,
-      table.submissionId
-    ),
-  ]
-);
-
-export const posterGroupJudges = pgTable(
-  "poster_group_judges",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    groupId: uuid("group_id")
-      .references(() => posterPresentationGroups.id, { onDelete: "cascade" })
       .notNull(),
     judgeId: text("judge_id")
       .references(() => user.id, { onDelete: "cascade" })
       .notNull(),
-    judgeOrder: integer("judge_order").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => [
-    index("poster_group_judges_group_idx").on(table.groupId),
-    index("poster_group_judges_judge_idx").on(table.judgeId),
-    uniqueIndex("poster_group_judges_group_judge_unique").on(
-      table.groupId,
-      table.judgeId
-    ),
-    uniqueIndex("poster_group_judges_group_order_unique").on(
-      table.groupId,
-      table.judgeOrder
-    ),
-  ]
-);
-
-export const posterGroupSlots = pgTable(
-  "poster_group_slots",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    groupId: uuid("group_id")
-      .references(() => posterPresentationGroups.id, { onDelete: "cascade" })
-      .notNull(),
-    judgeId: text("judge_id").references(() => user.id, { onDelete: "set null" }),
     startsAt: timestamp("starts_at").notNull(),
     endsAt: timestamp("ends_at").notNull(),
     status: posterSlotStatusEnum("status").default("PLANNED").notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    index("poster_group_slots_group_idx").on(table.groupId),
-    index("poster_group_slots_judge_idx").on(table.judgeId),
+    index("poster_slot_judges_submission_idx").on(table.submissionId),
+    index("poster_slot_judges_judge_idx").on(table.judgeId),
+    uniqueIndex("poster_slot_judges_unique").on(
+      table.submissionId,
+      table.judgeId,
+      table.startsAt,
+      table.endsAt
+    ),
   ]
 );
 
@@ -730,7 +669,7 @@ export const submissionsRelations = relations(
     reviewAssignments: many(reviewAssignments),
     discussions: many(discussions),
     files: many(storedFiles),
-    posterGroupMemberships: many(posterGroupMembers),
+    posterSlotJudges: many(posterSlotJudges),
   })
 );
 
@@ -814,56 +753,15 @@ export const presentationCommitteeRelations = relations(
   })
 );
 
-export const posterPresentationGroupsRelations = relations(
-  posterPresentationGroups,
-  ({ one, many }) => ({
-    track: one(tracks, {
-      fields: [posterPresentationGroups.trackId],
-      references: [tracks.id],
-    }),
-    members: many(posterGroupMembers),
-    judges: many(posterGroupJudges),
-    slots: many(posterGroupSlots),
-  })
-);
-
-export const posterGroupMembersRelations = relations(
-  posterGroupMembers,
+export const posterSlotJudgesRelations = relations(
+  posterSlotJudges,
   ({ one }) => ({
-    group: one(posterPresentationGroups, {
-      fields: [posterGroupMembers.groupId],
-      references: [posterPresentationGroups.id],
-    }),
     submission: one(submissions, {
-      fields: [posterGroupMembers.submissionId],
+      fields: [posterSlotJudges.submissionId],
       references: [submissions.id],
     }),
-  })
-);
-
-export const posterGroupJudgesRelations = relations(
-  posterGroupJudges,
-  ({ one }) => ({
-    group: one(posterPresentationGroups, {
-      fields: [posterGroupJudges.groupId],
-      references: [posterPresentationGroups.id],
-    }),
     judge: one(user, {
-      fields: [posterGroupJudges.judgeId],
-      references: [user.id],
-    }),
-  })
-);
-
-export const posterGroupSlotsRelations = relations(
-  posterGroupSlots,
-  ({ one }) => ({
-    group: one(posterPresentationGroups, {
-      fields: [posterGroupSlots.groupId],
-      references: [posterPresentationGroups.id],
-    }),
-    judge: one(user, {
-      fields: [posterGroupSlots.judgeId],
+      fields: [posterSlotJudges.judgeId],
       references: [user.id],
     }),
   })

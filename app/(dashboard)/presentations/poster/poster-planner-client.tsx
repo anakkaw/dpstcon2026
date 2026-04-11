@@ -10,12 +10,12 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { RubricManager } from "@/components/presentations/rubric-manager";
 import { SectionTitle } from "@/components/ui/section-title";
-import { Select } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
 import type {
-  PosterPlannerGroup,
-  PosterPlannerPaper,
+  PosterPlannerSubmission,
   PosterPlannerSessionSettings,
+  AuthorPosterSlot,
+  CommitteePosterSlot,
 } from "@/server/poster-planner-data";
 import type { CriterionData } from "@/server/presentation-data";
 import {
@@ -24,7 +24,6 @@ import {
   Clock,
   FolderKanban,
   LayoutPanelTop,
-  MapPin,
   Plus,
   Trash2,
   Users,
@@ -36,53 +35,13 @@ type AdminCommitteeUser = {
   trackId: string | null;
 };
 
-type AuthorPosterGroup = {
-  membershipId: string;
-  submissionId: string;
-  title: string;
-  paperCode: string | null;
-  groupId: string;
-  groupName: string;
-  room: string | null;
-  trackName: string;
-  judges: string[];
-  slots: {
-    id: string;
-    startsAt: string;
-    endsAt: string;
-    status: string;
-    judgeId: string | null;
-  }[];
-};
-
-type CommitteePosterGroup = {
-  groupId: string;
-  groupName: string;
-  room: string | null;
-  trackName: string;
-  judgeOrder: number;
-  members: {
-    submissionId: string;
-    title: string;
-    paperCode: string | null;
-    authorName: string;
-  }[];
-  slots: {
-    id: string;
-    startsAt: string;
-    endsAt: string;
-    status: string;
-  }[];
-};
-
 interface PosterPlannerClientProps {
   mode: "admin" | "author" | "committee" | "hybrid";
   initialSessionSettings?: PosterPlannerSessionSettings;
-  initialGroups?: PosterPlannerGroup[];
-  initialUngroupedPosters?: PosterPlannerPaper[];
+  initialPosterSubmissions?: PosterPlannerSubmission[];
   initialCommitteeUsers?: AdminCommitteeUser[];
-  authorGroups?: AuthorPosterGroup[];
-  committeeGroups?: CommitteePosterGroup[];
+  authorSlots?: AuthorPosterSlot[];
+  committeeSlots?: CommitteePosterSlot[];
   criteria?: CriterionData[];
   canEditCriteria?: boolean;
 }
@@ -115,10 +74,8 @@ function addMinutes(isoString: string, minutes: number): string {
   return d.toISOString();
 }
 
-// ── Flattened paper row for the schedule table ──
+// ── Schedule row for the table ──
 interface ScheduleRow {
-  groupId: string;
-  memberId: string;
   submissionId: string;
   paperCode: string | null;
   title: string;
@@ -126,26 +83,24 @@ interface ScheduleRow {
   trackId: string;
   trackName: string;
   /** Map from slot template id → { slotId, judgeId } */
-  slotAssignments: Record<string, { slotId: string; judgeId: string | null }>;
+  slotAssignments: Record<string, { slotId: string; judgeId: string }>;
 }
 
 export function PosterPlannerClient({
   mode,
   initialSessionSettings = { room: "", slotTemplates: [] },
-  initialGroups = [],
-  initialUngroupedPosters = [],
+  initialPosterSubmissions = [],
   initialCommitteeUsers = [],
-  authorGroups = [],
-  committeeGroups = [],
+  authorSlots = [],
+  committeeSlots = [],
   criteria = [],
   canEditCriteria = false,
 }: PosterPlannerClientProps) {
   const { t } = useI18n();
   const plannerId = useId();
-  const [groups, setGroups] = useState(initialGroups);
   const [adminTab, setAdminTab] = useState<"planner" | "criteria">("planner");
+  const [posterSubmissions, setPosterSubmissions] = useState(initialPosterSubmissions);
   const [sessionSettings, setSessionSettings] = useState(initialSessionSettings);
-  const [ungroupedPosters, setUngroupedPosters] = useState(initialUngroupedPosters);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("success");
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -161,16 +116,13 @@ export function PosterPlannerClient({
   // ── Track list ──
   const trackSections = useMemo(() => {
     const trackMap = new Map<string, { id: string; name: string }>();
-    for (const group of groups) {
-      trackMap.set(group.track.id, group.track);
-    }
-    for (const paper of ungroupedPosters) {
-      if (paper.track) {
-        trackMap.set(paper.track.id, paper.track);
+    for (const sub of posterSubmissions) {
+      if (sub.track) {
+        trackMap.set(sub.track.id, sub.track);
       }
     }
     return Array.from(trackMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [groups, ungroupedPosters]);
+  }, [posterSubmissions]);
 
   // Auto-select first track
   useEffect(() => {
@@ -181,47 +133,24 @@ export function PosterPlannerClient({
 
   // ── Build schedule rows ──
   const scheduleRows = useMemo((): ScheduleRow[] => {
-    const rows: ScheduleRow[] = [];
-
-    for (const group of groups) {
-      for (const member of group.members) {
-        const slotAssignments: Record<string, { slotId: string; judgeId: string | null }> = {};
-        for (const slot of group.slots) {
-          const templateId = `${slot.startsAt}__${slot.endsAt}`;
-          slotAssignments[templateId] = { slotId: slot.id, judgeId: slot.judgeId };
-        }
-
-        rows.push({
-          groupId: group.id,
-          memberId: member.id,
-          submissionId: member.submissionId,
-          paperCode: member.paperCode,
-          title: member.title,
-          authorName: member.authorName,
-          trackId: group.track.id,
-          trackName: group.track.name,
-          slotAssignments,
-        });
+    return posterSubmissions.map((sub) => {
+      const slotAssignments: Record<string, { slotId: string; judgeId: string }> = {};
+      for (const sj of sub.slotJudges) {
+        const templateId = `${sj.startsAt}__${sj.endsAt}`;
+        slotAssignments[templateId] = { slotId: sj.id, judgeId: sj.judgeId };
       }
-    }
 
-    // Also include ungrouped posters (no group yet, no slot assignments)
-    for (const paper of ungroupedPosters) {
-      rows.push({
-        groupId: "",
-        memberId: "",
-        submissionId: paper.submissionId,
-        paperCode: paper.paperCode,
-        title: paper.title,
-        authorName: paper.author.name,
-        trackId: paper.track?.id || "",
-        trackName: paper.track?.name || "",
-        slotAssignments: {},
-      });
-    }
-
-    return rows;
-  }, [groups, ungroupedPosters]);
+      return {
+        submissionId: sub.submissionId,
+        paperCode: sub.paperCode,
+        title: sub.title,
+        authorName: sub.author.name,
+        trackId: sub.track?.id || "",
+        trackName: sub.track?.name || "",
+        slotAssignments,
+      };
+    });
+  }, [posterSubmissions]);
 
   // ── Filtered rows by selected track ──
   const filteredRows = useMemo(() => {
@@ -243,22 +172,20 @@ export function PosterPlannerClient({
     for (const cu of initialCommitteeUsers) {
       counts.set(cu.id, { name: cu.name, count: 0 });
     }
-    for (const group of groups) {
-      for (const slot of group.slots) {
-        if (slot.judgeId) {
-          const entry = counts.get(slot.judgeId);
-          if (entry) {
-            entry.count += 1;
-          } else {
-            counts.set(slot.judgeId, { name: slot.judgeId, count: 1 });
-          }
+    for (const sub of posterSubmissions) {
+      for (const sj of sub.slotJudges) {
+        const entry = counts.get(sj.judgeId);
+        if (entry) {
+          entry.count += 1;
+        } else {
+          counts.set(sj.judgeId, { name: sj.judgeName, count: 1 });
         }
       }
     }
     return Array.from(counts.entries())
       .map(([id, { name, count }]) => ({ id, name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [initialCommitteeUsers, groups]);
+  }, [initialCommitteeUsers, posterSubmissions]);
 
   // ── API helpers ──
   async function refreshPlanner() {
@@ -266,8 +193,7 @@ export function PosterPlannerClient({
     const data = await response.json();
     setSessionSettings(data.sessionSettings || { room: "", slotTemplates: [] });
     setSessionDraft(data.sessionSettings || { room: "", slotTemplates: [] });
-    setGroups(data.groups || []);
-    setUngroupedPosters(data.ungroupedPosters || []);
+    setPosterSubmissions(data.posterSubmissions || []);
   }
 
   async function runAction(key: string, action: () => Promise<void>) {
@@ -366,44 +292,6 @@ export function PosterPlannerClient({
     setMessage(t("poster.slotRemovedSave"));
   }
 
-  // ── Auto-create group for ungrouped paper ──
-  async function ensureGroupForPaper(
-    row: ScheduleRow
-  ): Promise<string> {
-    if (row.groupId) return row.groupId;
-
-    // Create a new group for this track
-    const createGroupRes = await fetch("/api/presentations/poster-groups", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        trackId: row.trackId,
-        name: `${row.trackName} — ${row.paperCode || row.submissionId.slice(0, 8)}`,
-      }),
-    });
-    if (!createGroupRes.ok) {
-      const d = await createGroupRes.json().catch(() => null);
-      throw new Error(d?.error || t("poster.unableToCreateGroup"));
-    }
-    const { group: newGroup } = await createGroupRes.json();
-
-    // Add the paper to the group
-    const addMemberRes = await fetch(
-      `/api/presentations/poster-groups/${newGroup.id}/members`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionIds: [row.submissionId] }),
-      }
-    );
-    if (!addMemberRes.ok) {
-      const d = await addMemberRes.json().catch(() => null);
-      throw new Error(d?.error || t("poster.unableToAddPapers"));
-    }
-
-    return newGroup.id as string;
-  }
-
   // ── Judge assignment handler ──
   const handleJudgeChange = useCallback(
     async (row: ScheduleRow, templateId: string, newJudgeId: string) => {
@@ -413,48 +301,38 @@ export function PosterPlannerClient({
 
       const actionKey = `assign-${row.submissionId}-${templateId}`;
       await runAction(actionKey, async () => {
-        // Ensure the paper has a group (auto-create if needed)
-        const groupId = await ensureGroupForPaper(row);
-
         if (existing && newJudgeId === "") {
           // Remove slot
-          const response = await fetch(
-            `/api/presentations/poster-groups/${groupId}/slots/${existing.slotId}`,
-            { method: "DELETE" }
-          );
+          const response = await fetch(`/api/presentations/poster-slots/${existing.slotId}`, {
+            method: "DELETE",
+          });
           if (!response.ok) {
             const data = await response.json().catch(() => null);
             throw new Error(data?.error || t("poster.unableToSaveJudge"));
           }
         } else if (existing && newJudgeId) {
           // Update slot
-          const response = await fetch(
-            `/api/presentations/poster-groups/${groupId}/slots/${existing.slotId}`,
-            {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ judgeId: newJudgeId }),
-            }
-          );
+          const response = await fetch(`/api/presentations/poster-slots/${existing.slotId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ judgeId: newJudgeId }),
+          });
           if (!response.ok) {
             const data = await response.json().catch(() => null);
             throw new Error(data?.error || t("poster.unableToSaveJudge"));
           }
         } else if (!existing && newJudgeId) {
           // Create slot
-          const response = await fetch(
-            `/api/presentations/poster-groups/${groupId}/slots`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                startsAt: template.startsAt,
-                endsAt: template.endsAt,
-                judgeId: newJudgeId,
-                status: "PLANNED",
-              }),
-            }
-          );
+          const response = await fetch("/api/presentations/poster-slots", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              submissionId: row.submissionId,
+              judgeId: newJudgeId,
+              startsAt: template.startsAt,
+              endsAt: template.endsAt,
+            }),
+          });
           if (!response.ok) {
             const data = await response.json().catch(() => null);
             throw new Error(data?.error || t("poster.unableToSaveJudge"));
@@ -473,44 +351,36 @@ export function PosterPlannerClient({
   if (mode === "author") {
     return (
       <div className="space-y-6">
-        <SectionTitle
-          title={t("poster.presentationTitle")}
-          subtitle={t("poster.presentationSubtitle")}
-        />
+        <SectionTitle title={t("poster.presentationTitle")} subtitle={t("poster.presentationSubtitle")} />
         <RubricManager criteria={rubricCriteria} defaultExpanded={false} />
-        {authorGroups.length === 0 ? (
-          <EmptyState
-            icon={<FolderKanban className="h-12 w-12" />}
-            title={t("poster.noGroup")}
-            body={t("poster.noGroupDesc")}
-          />
+        {authorSlots.length === 0 ? (
+          <EmptyState icon={<FolderKanban className="h-12 w-12" />} title={t("poster.noGroup")} body={t("poster.noGroupDesc")} />
         ) : (
-          authorGroups.map((group) => (
-            <Card key={group.membershipId}>
+          authorSlots.map((slot) => (
+            <Card key={slot.submissionId}>
               <CardHeader>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge>{group.paperCode || "NO-CODE"}</Badge>
-                  <Badge tone="info">{group.trackName}</Badge>
-                  <Badge tone="success">{group.groupName}</Badge>
+                  <Badge>{slot.paperCode || "NO-CODE"}</Badge>
+                  <Badge tone="info">{slot.trackName}</Badge>
                 </div>
-                <h3 className="text-lg font-semibold text-ink">{group.title}</h3>
+                <h3 className="text-lg font-semibold text-ink">{slot.title}</h3>
                 <p className="text-sm text-ink-muted">
-                  {t("poster.roomLabel")}: {group.room || t("poster.tba")} | {t("poster.judgesLabel")}: {group.judges.join(", ") || t("poster.tba")}
+                  {t("poster.roomLabel")}: {slot.room || t("poster.tba")}
                 </p>
               </CardHeader>
               <CardBody className="space-y-3">
-                {group.slots.length === 0 ? (
+                {slot.slotJudges.length === 0 ? (
                   <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {group.slots.map((slot, i) => (
-                      <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
-                        <Badge tone="info">{formatSlotCode(i)}</Badge>
+                    {slot.slotJudges.map((sj, i) => (
+                      <div key={`${sj.startsAt}-${sj.judgeName}`} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
                         <span className="text-sm font-medium text-ink">
-                          {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                          {formatTime(sj.startsAt)} - {formatTime(sj.endsAt)}
                         </span>
-                        <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
-                          {slot.status}
+                        <Badge tone="info">{sj.judgeName}</Badge>
+                        <Badge tone={sj.status === "COMPLETED" ? "success" : sj.status === "CONFIRMED" ? "info" : "neutral"}>
+                          {sj.status}
                         </Badge>
                       </div>
                     ))}
@@ -528,55 +398,31 @@ export function PosterPlannerClient({
   if (mode === "committee") {
     return (
       <div className="space-y-6">
-        <SectionTitle
-          title={t("poster.reviewTitle")}
-          subtitle={t("poster.reviewSubtitle")}
-        />
+        <SectionTitle title={t("poster.reviewTitle")} subtitle={t("poster.reviewSubtitle")} />
         <RubricManager criteria={rubricCriteria} defaultExpanded={false} />
-        {committeeGroups.length === 0 ? (
-          <EmptyState
-            icon={<Users className="h-12 w-12" />}
-            title={t("poster.noAssigned")}
-            body={t("poster.noAssignedDesc")}
-          />
+        {committeeSlots.length === 0 ? (
+          <EmptyState icon={<Users className="h-12 w-12" />} title={t("poster.noAssigned")} body={t("poster.noAssignedDesc")} />
         ) : (
-          committeeGroups.map((group) => (
-            <Card key={`${group.groupId}-${group.judgeOrder}`}>
+          committeeSlots.map((slot) => (
+            <Card key={slot.slotId}>
               <CardHeader>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="info">{group.trackName}</Badge>
-                  <Badge tone="success">{group.groupName}</Badge>
-                  <Badge>{t("poster.judge")} {group.judgeOrder}</Badge>
+                  <Badge tone="info">{slot.trackName}</Badge>
+                  <Badge>{slot.paperCode || "NO-CODE"}</Badge>
                 </div>
-                <p className="text-sm text-ink-muted">{t("poster.roomLabel")}: {group.room || t("poster.tba")}</p>
+                <h3 className="text-lg font-semibold text-ink">{slot.title}</h3>
+                <p className="text-sm text-ink-muted">
+                  {t("poster.roomLabel")}: {slot.room || t("poster.tba")} | {slot.authorName}
+                </p>
               </CardHeader>
-              <CardBody className="space-y-4">
-                <div className="space-y-2">
-                  {group.members.map((member) => (
-                    <div key={member.submissionId} className="rounded-xl border border-border/60 bg-surface-alt p-3">
-                      <p className="text-sm font-medium text-ink">
-                        {member.paperCode || "NO-CODE"} · {member.title}
-                      </p>
-                      <p className="text-xs text-ink-muted">{member.authorName}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {group.slots.length === 0 ? (
-                    <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
-                  ) : (
-                    group.slots.map((slot, i) => (
-                      <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
-                        <Badge tone="info">{formatSlotCode(i)}</Badge>
-                        <span className="text-sm font-medium text-ink">
-                          {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
-                        </span>
-                        <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
-                          {slot.status}
-                        </Badge>
-                      </div>
-                    ))
-                  )}
+              <CardBody>
+                <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
+                  <span className="text-sm font-medium text-ink">
+                    {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
+                  </span>
+                  <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
+                    {slot.status}
+                  </Badge>
                 </div>
               </CardBody>
             </Card>
@@ -592,44 +438,30 @@ export function PosterPlannerClient({
       <div className="space-y-8">
         <RubricManager criteria={rubricCriteria} defaultExpanded={false} />
         <div className="space-y-6">
-          <SectionTitle
-            title={t("poster.presentationTitle")}
-            subtitle={t("poster.presentationSubtitle")}
-          />
-          {authorGroups.length === 0 ? (
-            <EmptyState
-              icon={<FolderKanban className="h-12 w-12" />}
-              title={t("poster.noGroup")}
-              body={t("poster.noGroupDesc")}
-            />
+          <SectionTitle title={t("poster.presentationTitle")} subtitle={t("poster.presentationSubtitle")} />
+          {authorSlots.length === 0 ? (
+            <EmptyState icon={<FolderKanban className="h-12 w-12" />} title={t("poster.noGroup")} body={t("poster.noGroupDesc")} />
           ) : (
-            authorGroups.map((group) => (
-              <Card key={group.membershipId}>
+            authorSlots.map((slot) => (
+              <Card key={slot.submissionId}>
                 <CardHeader>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge>{group.paperCode || "NO-CODE"}</Badge>
-                    <Badge tone="info">{group.trackName}</Badge>
-                    <Badge tone="success">{group.groupName}</Badge>
+                    <Badge>{slot.paperCode || "NO-CODE"}</Badge>
+                    <Badge tone="info">{slot.trackName}</Badge>
                   </div>
-                  <h3 className="text-lg font-semibold text-ink">{group.title}</h3>
-                  <p className="text-sm text-ink-muted">
-                    {t("poster.roomLabel")}: {group.room || t("poster.tba")} | {t("poster.judgesLabel")}: {group.judges.join(", ") || t("poster.tba")}
-                  </p>
+                  <h3 className="text-lg font-semibold text-ink">{slot.title}</h3>
+                  <p className="text-sm text-ink-muted">{t("poster.roomLabel")}: {slot.room || t("poster.tba")}</p>
                 </CardHeader>
                 <CardBody className="space-y-3">
-                  {group.slots.length === 0 ? (
+                  {slot.slotJudges.length === 0 ? (
                     <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      {group.slots.map((slot, i) => (
-                        <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
-                          <Badge tone="info">{formatSlotCode(i)}</Badge>
-                          <span className="text-sm font-medium text-ink">
-                            {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
-                          </span>
-                          <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
-                            {slot.status}
-                          </Badge>
+                      {slot.slotJudges.map((sj) => (
+                        <div key={`${sj.startsAt}-${sj.judgeName}`} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
+                          <span className="text-sm font-medium text-ink">{formatTime(sj.startsAt)} - {formatTime(sj.endsAt)}</span>
+                          <Badge tone="info">{sj.judgeName}</Badge>
+                          <Badge tone={sj.status === "COMPLETED" ? "success" : sj.status === "CONFIRMED" ? "info" : "neutral"}>{sj.status}</Badge>
                         </div>
                       ))}
                     </div>
@@ -639,56 +471,25 @@ export function PosterPlannerClient({
             ))
           )}
         </div>
-
         <div className="space-y-6">
-          <SectionTitle
-            title={t("poster.reviewTitle")}
-            subtitle={t("poster.reviewSubtitle")}
-          />
-          {committeeGroups.length === 0 ? (
-            <EmptyState
-              icon={<Users className="h-12 w-12" />}
-              title={t("poster.noAssigned")}
-              body={t("poster.noAssignedDesc")}
-            />
+          <SectionTitle title={t("poster.reviewTitle")} subtitle={t("poster.reviewSubtitle")} />
+          {committeeSlots.length === 0 ? (
+            <EmptyState icon={<Users className="h-12 w-12" />} title={t("poster.noAssigned")} body={t("poster.noAssignedDesc")} />
           ) : (
-            committeeGroups.map((group) => (
-              <Card key={`${group.groupId}-${group.judgeOrder}`}>
+            committeeSlots.map((slot) => (
+              <Card key={slot.slotId}>
                 <CardHeader>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone="info">{group.trackName}</Badge>
-                    <Badge tone="success">{group.groupName}</Badge>
-                    <Badge>{t("poster.judge")} {group.judgeOrder}</Badge>
+                    <Badge tone="info">{slot.trackName}</Badge>
+                    <Badge>{slot.paperCode || "NO-CODE"}</Badge>
                   </div>
-                  <p className="text-sm text-ink-muted">{t("poster.roomLabel")}: {group.room || t("poster.tba")}</p>
+                  <h3 className="text-lg font-semibold text-ink">{slot.title}</h3>
+                  <p className="text-sm text-ink-muted">{t("poster.roomLabel")}: {slot.room || t("poster.tba")} | {slot.authorName}</p>
                 </CardHeader>
-                <CardBody className="space-y-4">
-                  <div className="space-y-2">
-                    {group.members.map((member) => (
-                      <div key={member.submissionId} className="rounded-xl border border-border/60 bg-surface-alt p-3">
-                        <p className="text-sm font-medium text-ink">
-                          {member.paperCode || "NO-CODE"} · {member.title}
-                        </p>
-                        <p className="text-xs text-ink-muted">{member.authorName}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {group.slots.length === 0 ? (
-                      <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
-                    ) : (
-                      group.slots.map((slot, i) => (
-                        <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
-                          <Badge tone="info">{formatSlotCode(i)}</Badge>
-                          <span className="text-sm font-medium text-ink">
-                            {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
-                          </span>
-                          <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>
-                            {slot.status}
-                          </Badge>
-                        </div>
-                      ))
-                    )}
+                <CardBody>
+                  <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
+                    <span className="text-sm font-medium text-ink">{formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}</span>
+                    <Badge tone={slot.status === "COMPLETED" ? "success" : slot.status === "CONFIRMED" ? "info" : "neutral"}>{slot.status}</Badge>
                   </div>
                 </CardBody>
               </Card>
@@ -702,10 +503,7 @@ export function PosterPlannerClient({
   // ──────────────── ADMIN VIEW ────────────────
   return (
     <div className="space-y-6">
-      <SectionTitle
-        title={t("poster.scheduleTitle")}
-        subtitle={t("poster.scheduleSubtitle")}
-      />
+      <SectionTitle title={t("poster.scheduleTitle")} subtitle={t("poster.scheduleSubtitle")} />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
 
@@ -731,16 +529,12 @@ export function PosterPlannerClient({
       </div>
 
       {adminTab === "criteria" && (
-        <RubricManager
-          criteria={rubricCriteria}
-          canEdit={canEditCriteria}
-          onSave={handleSaveCriteria}
-        />
+        <RubricManager criteria={rubricCriteria} canEdit={canEditCriteria} onSave={handleSaveCriteria} />
       )}
 
       {adminTab === "planner" && (
         <>
-          {/* ── Session Settings: Slot Templates ── */}
+          {/* ── Session Settings ── */}
           <Card>
             <CardHeader>
               <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -753,41 +547,28 @@ export function PosterPlannerClient({
             </CardHeader>
             <CardBody className="space-y-4">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
-                {/* Room */}
                 <Field label={t("poster.roomLabel")} htmlFor={sessionRoomId}>
                   <Input
                     id={sessionRoomId}
                     value={sessionDraft.room}
-                    onChange={(event) =>
-                      setSessionDraft((prev) => ({ ...prev, room: event.target.value }))
-                    }
+                    onChange={(event) => setSessionDraft((prev) => ({ ...prev, room: event.target.value }))}
                     placeholder="e.g. Poster Hall A"
                     name="sharedRoom"
                     autoComplete="off"
                   />
                 </Field>
-
-                {/* Slot grid */}
                 <div className="space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                     {t("poster.timeSlots", { n: SLOT_DURATION_MINUTES })}
                   </p>
-
                   {sessionDraft.slotTemplates.length === 0 ? (
                     <p className="text-sm text-ink-muted">{t("poster.noSlotsYet")}</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {sessionDraft.slotTemplates.map((slot, index) => (
-                        <div
-                          key={slot.id}
-                          className="group flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface-alt px-2.5 py-1.5"
-                        >
-                          <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">
-                            {formatSlotCode(index)}
-                          </span>
-                          <span className="text-sm font-medium text-ink">
-                            {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
-                          </span>
+                        <div key={slot.id} className="group flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface-alt px-2.5 py-1.5">
+                          <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">{formatSlotCode(index)}</span>
+                          <span className="text-sm font-medium text-ink">{formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}</span>
                           <button
                             type="button"
                             onClick={() => removeSessionSlotTemplate(slot.id)}
@@ -800,16 +581,9 @@ export function PosterPlannerClient({
                       ))}
                     </div>
                   )}
-
                   <div className="flex items-end gap-2">
                     <Field label={t("poster.addSlotTime")} htmlFor={`${plannerId}-new-slot-time`}>
-                      <Input
-                        id={`${plannerId}-new-slot-time`}
-                        type="time"
-                        value={newSlotTime}
-                        onChange={(event) => setNewSlotTime(event.target.value)}
-                        name="newSlotTime"
-                      />
+                      <Input id={`${plannerId}-new-slot-time`} type="time" value={newSlotTime} onChange={(event) => setNewSlotTime(event.target.value)} name="newSlotTime" />
                     </Field>
                     <Button size="sm" variant="outline" onClick={addSessionSlotTemplate}>
                       <Plus className="h-3.5 w-3.5" />
@@ -818,13 +592,8 @@ export function PosterPlannerClient({
                   </div>
                 </div>
               </div>
-
               <div className="flex justify-end border-t border-border/40 pt-3">
-                <Button
-                  size="sm"
-                  onClick={saveSessionSettings}
-                  loading={savingKey === "session-settings"}
-                >
+                <Button size="sm" onClick={saveSessionSettings} loading={savingKey === "session-settings"}>
                   {t("poster.saveSessionSettings")}
                 </Button>
               </div>
@@ -842,15 +611,11 @@ export function PosterPlannerClient({
                     key={track.id}
                     onClick={() => setSelectedTrackId(track.id)}
                     className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                      isActive
-                        ? "bg-white text-brand-600 shadow-sm"
-                        : "text-ink-muted hover:text-ink hover:bg-white/60"
+                      isActive ? "bg-white text-brand-600 shadow-sm" : "text-ink-muted hover:text-ink hover:bg-white/60"
                     }`}
                   >
                     {track.name}
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                      isActive ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
-                    }`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${isActive ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"}`}>
                       {trackPaperCount}
                     </span>
                   </button>
@@ -866,11 +631,7 @@ export function PosterPlannerClient({
               {t("poster.addSlotsFirst")}
             </Alert>
           ) : filteredRows.length === 0 ? (
-            <EmptyState
-              icon={<FolderKanban className="h-12 w-12" />}
-              title={t("poster.noPapersInTrack")}
-              body={t("poster.noRecordsDesc")}
-            />
+            <EmptyState icon={<FolderKanban className="h-12 w-12" />} title={t("poster.noPapersInTrack")} body={t("poster.noRecordsDesc")} />
           ) : (
             <Card>
               <CardBody className="overflow-x-auto p-0">
@@ -884,17 +645,10 @@ export function PosterPlannerClient({
                         {t("poster.authorColumn")}
                       </th>
                       {sessionSettings.slotTemplates.map((slot, index) => (
-                        <th
-                          key={slot.id}
-                          className="px-3 py-3 text-center font-semibold text-ink min-w-[160px]"
-                        >
+                        <th key={slot.id} className="px-3 py-3 text-center font-semibold text-ink min-w-[160px]">
                           <div className="flex flex-col items-center gap-0.5">
-                            <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">
-                              {formatSlotCode(index)}
-                            </span>
-                            <span className="text-xs text-ink-muted">
-                              {formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}
-                            </span>
+                            <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">{formatSlotCode(index)}</span>
+                            <span className="text-xs text-ink-muted">{formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}</span>
                           </div>
                         </th>
                       ))}
@@ -902,28 +656,17 @@ export function PosterPlannerClient({
                   </thead>
                   <tbody>
                     {filteredRows.map((row) => (
-                      <tr
-                        key={`${row.groupId}-${row.submissionId}`}
-                        className="border-b border-border/40 hover:bg-gray-50/50 transition-colors"
-                      >
-                        {/* Paper */}
+                      <tr key={row.submissionId} className="border-b border-border/40 hover:bg-gray-50/50 transition-colors">
                         <td className="sticky left-0 z-10 bg-white px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <Badge>{row.paperCode || "NO-CODE"}</Badge>
-                            <span className="truncate font-medium text-ink max-w-[200px]" title={row.title}>
-                              {row.title}
-                            </span>
+                            <span className="truncate font-medium text-ink max-w-[200px]" title={row.title}>{row.title}</span>
                           </div>
                         </td>
-                        {/* Author */}
-                        <td className="px-3 py-2.5 text-ink-muted whitespace-nowrap">
-                          {row.authorName}
-                        </td>
-                        {/* Slot cells */}
+                        <td className="px-3 py-2.5 text-ink-muted whitespace-nowrap">{row.authorName}</td>
                         {sessionSettings.slotTemplates.map((slot) => {
                           const assignment = row.slotAssignments[slot.id];
                           const currentJudgeId = assignment?.judgeId || "";
-                          const cellKey = `${row.submissionId}-${slot.id}`;
                           const isSaving = savingKey === `assign-${row.submissionId}-${slot.id}`;
 
                           return (
@@ -940,9 +683,7 @@ export function PosterPlannerClient({
                               >
                                 <option value="">{t("poster.selectJudgeOption")}</option>
                                 {trackCommitteeUsers.map((cu) => (
-                                  <option key={cu.id} value={cu.id}>
-                                    {cu.name}
-                                  </option>
+                                  <option key={cu.id} value={cu.id}>{cu.name}</option>
                                 ))}
                               </select>
                             </td>
@@ -969,31 +710,22 @@ export function PosterPlannerClient({
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border/60 bg-gray-50/80">
-                      <th className="px-4 py-2.5 text-left font-semibold text-ink">
-                        {t("poster.judgeName")}
-                      </th>
-                      <th className="px-4 py-2.5 text-center font-semibold text-ink w-[160px]">
-                        {t("poster.assignedSlots")}
-                      </th>
+                      <th className="px-4 py-2.5 text-left font-semibold text-ink">{t("poster.judgeName")}</th>
+                      <th className="px-4 py-2.5 text-center font-semibold text-ink w-[160px]">{t("poster.assignedSlots")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {judgeWorkload.map((judge) => (
-                      <tr
-                        key={judge.id}
-                        className="border-b border-border/40 hover:bg-gray-50/50 transition-colors"
-                      >
+                      <tr key={judge.id} className="border-b border-border/40 hover:bg-gray-50/50 transition-colors">
                         <td className="px-4 py-2 text-ink">{judge.name}</td>
                         <td className="px-4 py-2 text-center">
-                          <span
-                            className={`inline-flex min-w-[2rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
-                              judge.count === 0
-                                ? "bg-gray-100 text-gray-400"
-                                : judge.count >= 6
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-brand-100 text-brand-700"
-                            }`}
-                          >
+                          <span className={`inline-flex min-w-[2rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                            judge.count === 0
+                              ? "bg-gray-100 text-gray-400"
+                              : judge.count >= 6
+                                ? "bg-red-100 text-red-700"
+                                : "bg-brand-100 text-brand-700"
+                          }`}>
                             {judge.count}
                           </span>
                         </td>

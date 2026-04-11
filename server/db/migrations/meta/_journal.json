@@ -57,6 +57,13 @@
       "when": 1775091600000,
       "tag": "0007_mellow_oracle",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1775566800000,
+      "tag": "0008_remove_poster_groups",
+      "breakpoints": true
     }
   ]
 }

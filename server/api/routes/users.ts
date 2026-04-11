@@ -16,9 +16,7 @@ import {
   presentationCommitteeAssignments,
   presentationAssignments,
   presentationEvaluations,
-  posterGroupJudges,
-  posterGroupSlots,
-  posterGroupMembers,
+  posterSlotJudges,
   session as sessionTable,
   account as accountTable,
   tracks,
@@ -739,7 +737,7 @@ app.delete("/:id", requireRole("ADMIN"), async (c) => {
 
       // Explicitly delete submission-related data that may not cascade in DB.
       await db.delete(storedFiles).where(inArray(storedFiles.submissionId, subIds));
-      await db.delete(posterGroupMembers).where(inArray(posterGroupMembers.submissionId, subIds));
+      await db.delete(posterSlotJudges).where(inArray(posterSlotJudges.submissionId, subIds));
 
       // Fetch presentation IDs to clean up committee assignments & evaluations
       const presRows = await db
@@ -779,12 +777,11 @@ app.delete("/:id", requireRole("ADMIN"), async (c) => {
     await db.update(tracks).set({ headUserId: null }).where(eq(tracks.headUserId, id));
     await db.update(storedFiles).set({ uploadedById: null }).where(eq(storedFiles.uploadedById, id));
     await db.update(auditLogs).set({ actorId: null }).where(eq(auditLogs.actorId, id));
-    await db.update(posterGroupSlots).set({ judgeId: null }).where(eq(posterGroupSlots.judgeId, id));
+    await db.delete(posterSlotJudges).where(eq(posterSlotJudges.judgeId, id));
 
     // Explicitly delete all referencing rows to avoid FK constraint errors.
     await db.delete(presentationEvaluations).where(eq(presentationEvaluations.judgeId, id));
     await db.delete(presentationCommitteeAssignments).where(eq(presentationCommitteeAssignments.judgeId, id));
-    await db.delete(posterGroupJudges).where(eq(posterGroupJudges.judgeId, id));
     await db.delete(reviews).where(eq(reviews.reviewerId, id));
     await db.delete(decisions).where(eq(decisions.decidedBy, id));
     await db.delete(conflicts).where(eq(conflicts.userId, id));

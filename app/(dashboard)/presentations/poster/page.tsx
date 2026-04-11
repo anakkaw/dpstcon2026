@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { PosterPlannerClient } from "@/app/(dashboard)/presentations/poster/poster-planner-client";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import {
-  getPosterGroupsForAuthor,
-  getPosterGroupsForCommittee,
+  getPosterSlotsForAuthor,
+  getPosterSlotsForCommittee,
   getPosterPlannerPageData,
 } from "@/server/poster-planner-data";
 import { hasRole } from "@/lib/permissions";
@@ -26,8 +26,7 @@ export default async function PosterPresentationPage() {
       <PosterPlannerClient
         mode="admin"
         initialSessionSettings={data.sessionSettings}
-        initialGroups={data.groups}
-        initialUngroupedPosters={data.ungroupedPosters}
+        initialPosterSubmissions={data.posterSubmissions}
         initialCommitteeUsers={data.committeeUsers}
         criteria={criteria}
         canEditCriteria={hasRole(currentUser, "ADMIN")}
@@ -39,9 +38,9 @@ export default async function PosterPresentationPage() {
   const hasCommitteeRole = hasRole(currentUser, "COMMITTEE");
 
   if (hasAuthorRole || hasCommitteeRole) {
-    const [authorGroups, committeeGroups] = await Promise.all([
-      hasAuthorRole ? getPosterGroupsForAuthor(currentUser.id) : Promise.resolve([]),
-      hasCommitteeRole ? getPosterGroupsForCommittee(currentUser.id) : Promise.resolve([]),
+    const [authorSlots, committeeSlots] = await Promise.all([
+      hasAuthorRole ? getPosterSlotsForAuthor(currentUser.id) : Promise.resolve([]),
+      hasCommitteeRole ? getPosterSlotsForCommittee(currentUser.id) : Promise.resolve([]),
     ]);
 
     const mode =
@@ -54,8 +53,8 @@ export default async function PosterPresentationPage() {
     return (
       <PosterPlannerClient
         mode={mode}
-        authorGroups={authorGroups}
-        committeeGroups={committeeGroups}
+        authorSlots={authorSlots}
+        committeeSlots={committeeSlots}
         criteria={criteria}
       />
     );

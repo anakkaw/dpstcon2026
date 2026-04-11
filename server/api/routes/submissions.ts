@@ -15,7 +15,7 @@ import {
   presentationAssignments,
   presentationCommitteeAssignments,
   presentationEvaluations,
-  posterGroupMembers,
+  posterSlotJudges,
 } from "@/server/db/schema";
 import { eq, desc, and, ne, sql, inArray } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
@@ -173,7 +173,7 @@ async function deleteSubmissionCascade(submissionId: string) {
   }
 
   await db.delete(storedFiles).where(eq(storedFiles.submissionId, submissionId));
-  await db.delete(posterGroupMembers).where(eq(posterGroupMembers.submissionId, submissionId));
+  await db.delete(posterSlotJudges).where(eq(posterSlotJudges.submissionId, submissionId));
   await db.delete(reviews).where(eq(reviews.submissionId, submissionId));
   await db.delete(reviewAssignments).where(eq(reviewAssignments.submissionId, submissionId));
   await db.delete(decisions).where(eq(decisions.submissionId, submissionId));
