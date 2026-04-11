@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createSubmission } from "@/server/actions/submission";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/workspace-section";
 import { useI18n } from "@/lib/i18n";
 import { useDashboardAuth } from "@/components/dashboard-auth-context";
+import { useUnsavedChanges } from "@/lib/hooks/use-unsaved-changes";
 
 interface Track {
   id: string;
@@ -51,6 +52,11 @@ export function NewSubmissionClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [formDirty, setFormDirty] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Warn user before leaving if form has unsaved data
+  useUnsavedChanges(formDirty);
 
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [draftFiles, setDraftFiles] = useState<DraftFile[]>([]);
@@ -75,7 +81,7 @@ export function NewSubmissionClient() {
   if (!canCreateSubmission) {
     return (
       <Alert tone="danger">
-        เฉพาะผู้ใช้ที่มีบทบาท Author เท่านั้นที่ส่งบทความใหม่ได้
+        {t("submissions.new.authorOnly")}
       </Alert>
     );
   }
@@ -109,6 +115,7 @@ export function NewSubmissionClient() {
     try {
       const result = await createSubmission(formData);
       if (result?.id) {
+        setFormDirty(false);
         setSubmissionId(result.id);
         setDraftFiles([]);
         setDraftSummary({
@@ -180,7 +187,8 @@ export function NewSubmissionClient() {
       {error && <Alert tone="danger">{error}</Alert>}
 
       {!submissionId && (
-        <form action={handleSubmit} className="space-y-6">
+        <fieldset disabled={loading}>
+        <form ref={formRef} action={handleSubmit} className="space-y-6" onChange={() => setFormDirty(true)}>
           <WorkspaceSection
             title={t("submissions.new.stepDetailsTitle")}
             description={t("submissions.new.stepDetailsDesc")}
@@ -332,6 +340,7 @@ export function NewSubmissionClient() {
             </WorkspaceSurface>
           </WorkspaceSection>
         </form>
+        </fieldset>
       )}
 
       {submissionId && (
@@ -415,6 +424,7 @@ export function NewSubmissionClient() {
                       type="button"
                       onClick={handleContinue}
                       disabled={!hasUploadedManuscript}
+                      title={!hasUploadedManuscript ? t("submissions.new.continueDisabledHint") : undefined}
                     >
                       {t("submissions.new.continueToDetail")}
                     </Button>

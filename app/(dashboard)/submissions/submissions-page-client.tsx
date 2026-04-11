@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,6 +17,7 @@ import { useI18n } from "@/lib/i18n";
 import { formatDate, truncate } from "@/lib/utils";
 import { displayNameTh } from "@/lib/display-name";
 import { useDashboardAuth } from "@/components/dashboard-auth-context";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import {
   Plus, FileText, Download, ChevronUp, ChevronDown, ArrowUpDown,
   ExternalLink, Users, Search, X, CheckCircle2, XCircle, Clock,
@@ -54,12 +56,14 @@ export function SubmissionsPageClient({
   const [trackFilter, setTrackFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
   const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
   const [paperCodeDraft, setPaperCodeDraft] = useState("");
   const [savingPaperCode, setSavingPaperCode] = useState(false);
   const [generatingCodes, setGeneratingCodes] = useState(false);
+  const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
 
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -151,8 +155,8 @@ export function SubmissionsPageClient({
     .filter((s) => {
       if (trackFilter && s.track?.id !== trackFilter) return false;
       if (statusFilter !== "ALL" && s.status !== statusFilter) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase();
         return s.title.toLowerCase().includes(q) ||
           displayNameTh(s.author).toLowerCase().includes(q) ||
           s.author.email.toLowerCase().includes(q) ||
@@ -239,13 +243,26 @@ export function SubmissionsPageClient({
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={showGenerateConfirm}
+        title={t("admin.generatePaperCodesConfirm")}
+        description={t("admin.generatePaperCodesDesc")}
+        confirmLabel={t("common.confirm")}
+        cancelLabel={t("common.cancel")}
+        loading={generatingCodes}
+        onConfirm={async () => {
+          await generatePaperCodes();
+          setShowGenerateConfirm(false);
+        }}
+        onCancel={() => setShowGenerateConfirm(false)}
+      />
       <SectionTitle
         title={t("submissions.submissions")}
         subtitle={t("submissions.managementSubtitle", { n: totalFiltered })}
         action={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={generatePaperCodes} loading={generatingCodes}>
-              <CheckCircle2 className="h-3.5 w-3.5" />Generate Paper IDs
+            <Button variant="outline" size="sm" onClick={() => setShowGenerateConfirm(true)} loading={generatingCodes}>
+              <CheckCircle2 className="h-3.5 w-3.5" />{t("submissions.generatePaperCodes")}
             </Button>
             <a href="/api/exports/proceedings?format=csv" download>
               <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />{t("common.exportCSV")}</Button>

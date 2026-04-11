@@ -13,6 +13,7 @@ import { RubricManager } from "@/components/presentations/rubric-manager";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Select } from "@/components/ui/select";
 import { SummaryStatCard } from "@/components/ui/summary-stat-card";
+import { useI18n } from "@/lib/i18n";
 import type {
   PosterPlannerGroup,
   PosterPlannerPaper,
@@ -23,6 +24,7 @@ import {
   CalendarRange,
   Check,
   CircleAlert,
+  ClipboardList,
   Clock,
   FolderKanban,
   LayoutPanelTop,
@@ -129,8 +131,10 @@ export function PosterPlannerClient({
   criteria = [],
   canEditCriteria = false,
 }: PosterPlannerClientProps) {
+  const { t } = useI18n();
   const plannerId = useId();
   const [groups, setGroups] = useState(initialGroups);
+  const [adminTab, setAdminTab] = useState<"planner" | "criteria">("planner");
   const [sessionSettings, setSessionSettings] = useState(initialSessionSettings);
   const [ungroupedPosters, setUngroupedPosters] = useState(initialUngroupedPosters);
   const [message, setMessage] = useState("");
@@ -184,12 +188,12 @@ export function PosterPlannerClient({
 
     const data = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error(data?.error || "Unable to save poster rubric");
+      throw new Error(data?.error || t("poster.unableToSaveRubric"));
     }
 
     setRubricCriteria(data?.criteria || nextCriteria);
     setMessageTone("success");
-    setMessage("Poster rubric updated");
+    setMessage(t("poster.rubricUpdated"));
   }
 
   const trackSections = useMemo(() => {
@@ -227,10 +231,10 @@ export function PosterPlannerClient({
   }
 
   function getGroupLabel(group: PosterPlannerGroup) {
-    if (group.members.length === 0) return "No papers yet";
-    if (group.judges.length < 3) return "Missing judges";
-    if (group.slots.length === 0) return "Need slots";
-    return "Ready";
+    if (group.members.length === 0) return t("poster.noPapersYet");
+    if (group.judges.length < 3) return t("poster.missingJudges");
+    if (group.slots.length === 0) return t("poster.needSlots");
+    return t("poster.readyGroups");
   }
 
   async function refreshPlanner() {
@@ -276,7 +280,7 @@ export function PosterPlannerClient({
       setMessageTone("success");
     } catch (error) {
       setMessageTone("danger");
-      setMessage(error instanceof Error ? error.message : "Something went wrong");
+      setMessage(error instanceof Error ? error.message : t("poster.somethingWentWrong"));
     } finally {
       setSavingKey(null);
     }
@@ -292,11 +296,11 @@ export function PosterPlannerClient({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Unable to save group");
+        throw new Error(data?.error || t("poster.unableToSaveGroup"));
       }
 
       await refreshPlanner();
-      setMessage("Poster group updated");
+      setMessage(t("poster.groupUpdated"));
     });
   }
 
@@ -316,19 +320,19 @@ export function PosterPlannerClient({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Unable to save poster session");
+        throw new Error(data?.error || t("poster.unableToSaveSession"));
       }
 
       await refreshPlanner();
       setNewSlotTime("");
-      setMessage("Poster session settings updated");
+      setMessage(t("poster.sessionUpdated"));
     });
   }
 
   function addSessionSlotTemplate() {
     if (!newSlotTime) {
       setMessageTone("danger");
-      setMessage("Please enter a start time for the slot");
+      setMessage(t("poster.enterStartTime"));
       return;
     }
 
@@ -339,7 +343,7 @@ export function PosterPlannerClient({
     const endsAt = new Date(endsAtIso);
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
       setMessageTone("danger");
-      setMessage("Invalid time format");
+      setMessage(t("poster.invalidTimeFormat"));
       return;
     }
 
@@ -347,7 +351,7 @@ export function PosterPlannerClient({
     const duplicate = sessionDraft.slotTemplates.some((slot) => slot.id === id);
     if (duplicate) {
       setMessageTone("danger");
-      setMessage("This slot already exists");
+      setMessage(t("poster.slotAlreadyExists"));
       return;
     }
 
@@ -361,7 +365,7 @@ export function PosterPlannerClient({
     }));
     setNewSlotTime("");
     setMessageTone("success");
-    setMessage("Slot added. Save session to publish.");
+    setMessage(t("poster.slotAddedSave"));
   }
 
   function removeSessionSlotTemplate(slotId: string) {
@@ -370,14 +374,14 @@ export function PosterPlannerClient({
       slotTemplates: prev.slotTemplates.filter((slot) => slot.id !== slotId),
     }));
     setMessageTone("success");
-    setMessage("Slot removed. Save session to publish.");
+    setMessage(t("poster.slotRemovedSave"));
   }
 
   async function createGroup(trackId: string) {
     await runAction(`create-${trackId}`, async () => {
       const name = newGroupNameByTrack[trackId]?.trim();
       if (!name) {
-        throw new Error("Group name is required");
+        throw new Error(t("poster.groupNameRequired"));
       }
 
       const response = await fetch("/api/presentations/poster-groups", {
@@ -388,12 +392,12 @@ export function PosterPlannerClient({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Unable to create group");
+        throw new Error(data?.error || t("poster.unableToCreateGroup"));
       }
 
       setNewGroupNameByTrack((prev) => ({ ...prev, [trackId]: "" }));
       await refreshPlanner();
-      setMessage("Poster group created");
+      setMessage(t("poster.groupCreated"));
     });
   }
 
@@ -403,7 +407,7 @@ export function PosterPlannerClient({
       const submissionIds = selectedPosterIdsByTrack[trackId] || [];
 
       if (!groupId || submissionIds.length === 0) {
-        throw new Error("Select a group and at least one paper");
+        throw new Error(t("poster.selectGroupAndPaper"));
       }
 
       const response = await fetch(`/api/presentations/poster-groups/${groupId}/members`, {
@@ -414,12 +418,12 @@ export function PosterPlannerClient({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Unable to add papers");
+        throw new Error(data?.error || t("poster.unableToAddPapers"));
       }
 
       setSelectedPosterIdsByTrack((prev) => ({ ...prev, [trackId]: [] }));
       await refreshPlanner();
-      setMessage("Papers added to the group");
+      setMessage(t("poster.papersAdded"));
     });
   }
 
@@ -432,11 +436,11 @@ export function PosterPlannerClient({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Unable to remove paper");
+        throw new Error(data?.error || t("poster.unableToRemovePaper"));
       }
 
       await refreshPlanner();
-      setMessage("Paper removed from the group");
+      setMessage(t("poster.paperRemoved"));
     });
   }
 
@@ -444,7 +448,7 @@ export function PosterPlannerClient({
     await runAction(`judges-${groupId}`, async () => {
       const judgeIds = (judgeDrafts[groupId] || []).filter(Boolean);
       if (new Set(judgeIds).size !== judgeIds.length) {
-        throw new Error("Judges must be unique");
+        throw new Error(t("poster.judgesMustBeUnique"));
       }
 
       const response = await fetch(`/api/presentations/poster-groups/${groupId}/judges`, {
@@ -455,11 +459,11 @@ export function PosterPlannerClient({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Unable to save judges");
+        throw new Error(data?.error || t("poster.unableToSaveJudges"));
       }
 
       await refreshPlanner();
-      setMessage("Group judges updated");
+      setMessage(t("poster.judgesUpdated"));
     });
   }
 
@@ -468,7 +472,7 @@ export function PosterPlannerClient({
       const draft = slotDrafts[groupId];
       const template = sessionSettings.slotTemplates.find((slot) => slot.id === draft?.templateId);
       if (!template) {
-        throw new Error("Select one slot");
+        throw new Error(t("poster.selectOneSlot"));
       }
 
       const response = await fetch(`/api/presentations/poster-groups/${groupId}/slots`, {
@@ -484,11 +488,11 @@ export function PosterPlannerClient({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Unable to add slot");
+        throw new Error(data?.error || t("poster.unableToAddSlot"));
       }
 
       await refreshPlanner();
-      setMessage("Slot added");
+      setMessage(t("poster.slotAdded"));
     });
   }
 
@@ -500,11 +504,11 @@ export function PosterPlannerClient({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Unable to delete slot");
+        throw new Error(data?.error || t("poster.unableToDeleteSlot"));
       }
 
       await refreshPlanner();
-      setMessage("Slot deleted");
+      setMessage(t("poster.slotDeleted"));
     });
   }
 
@@ -517,15 +521,15 @@ export function PosterPlannerClient({
     return (
       <div className="space-y-6">
         <SectionTitle
-          title="Poster Presentation"
-          subtitle="Your poster group, judges, and planned presentation slots"
+          title={t("poster.presentationTitle")}
+          subtitle={t("poster.presentationSubtitle")}
         />
-        <RubricManager criteria={rubricCriteria} />
+        <RubricManager criteria={rubricCriteria} defaultExpanded={false} />
         {authorGroups.length === 0 ? (
           <EmptyState
             icon={<FolderKanban className="h-12 w-12" />}
-            title="No poster group yet"
-            body="You will see your poster group here once the organizers finish planning."
+            title={t("poster.noGroup")}
+            body={t("poster.noGroupDesc")}
           />
         ) : (
           authorGroups.map((group) => (
@@ -538,12 +542,12 @@ export function PosterPlannerClient({
                 </div>
                 <h3 className="text-lg font-semibold text-ink">{group.title}</h3>
                 <p className="text-sm text-ink-muted">
-                  Room: {group.room || "TBA"} | Judges: {group.judges.join(", ") || "TBA"}
+                  {t("poster.roomLabel")}: {group.room || t("poster.tba")} | {t("poster.judgesLabel")}: {group.judges.join(", ") || t("poster.tba")}
                 </p>
               </CardHeader>
               <CardBody className="space-y-3">
                 {group.slots.length === 0 ? (
-                  <p className="text-sm text-ink-muted">Your presentation slots have not been scheduled yet.</p>
+                  <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {group.slots.map((slot, i) => (
@@ -572,15 +576,15 @@ export function PosterPlannerClient({
     return (
       <div className="space-y-6">
         <SectionTitle
-          title="Poster Review Queue"
-          subtitle="Groups and slots assigned to you for poster review"
+          title={t("poster.reviewTitle")}
+          subtitle={t("poster.reviewSubtitle")}
         />
-        <RubricManager criteria={rubricCriteria} />
+        <RubricManager criteria={rubricCriteria} defaultExpanded={false} />
         {committeeGroups.length === 0 ? (
           <EmptyState
             icon={<Users className="h-12 w-12" />}
-            title="No poster groups assigned"
-            body="Your assigned poster groups will appear here once scheduling is ready."
+            title={t("poster.noAssigned")}
+            body={t("poster.noAssignedDesc")}
           />
         ) : (
           committeeGroups.map((group) => (
@@ -589,9 +593,9 @@ export function PosterPlannerClient({
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone="info">{group.trackName}</Badge>
                   <Badge tone="success">{group.groupName}</Badge>
-                  <Badge>Judge {group.judgeOrder}</Badge>
+                  <Badge>{t("poster.judge")} {group.judgeOrder}</Badge>
                 </div>
-                <p className="text-sm text-ink-muted">Room: {group.room || "TBA"}</p>
+                <p className="text-sm text-ink-muted">{t("poster.roomLabel")}: {group.room || t("poster.tba")}</p>
               </CardHeader>
               <CardBody className="space-y-4">
                 <div className="space-y-2">
@@ -606,7 +610,7 @@ export function PosterPlannerClient({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {group.slots.length === 0 ? (
-                    <p className="text-sm text-ink-muted">No slots planned for this group yet.</p>
+                    <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
                   ) : (
                     group.slots.map((slot, i) => (
                       <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
@@ -632,18 +636,18 @@ export function PosterPlannerClient({
   if (mode === "hybrid") {
     return (
       <div className="space-y-8">
-        <RubricManager criteria={rubricCriteria} />
+        <RubricManager criteria={rubricCriteria} defaultExpanded={false} />
         {showAuthorView && (
           <div className="space-y-6">
             <SectionTitle
-              title="Poster Presentation"
-              subtitle="Your poster group, judges, and planned presentation slots"
+              title={t("poster.presentationTitle")}
+              subtitle={t("poster.presentationSubtitle")}
             />
             {authorGroups.length === 0 ? (
               <EmptyState
                 icon={<FolderKanban className="h-12 w-12" />}
-                title="No poster group yet"
-                body="You will see your poster group here once the organizers finish planning."
+                title={t("poster.noGroup")}
+                body={t("poster.noGroupDesc")}
               />
             ) : (
               authorGroups.map((group) => (
@@ -656,12 +660,12 @@ export function PosterPlannerClient({
                     </div>
                     <h3 className="text-lg font-semibold text-ink">{group.title}</h3>
                     <p className="text-sm text-ink-muted">
-                      Room: {group.room || "TBA"} | Judges: {group.judges.join(", ") || "TBA"}
+                      {t("poster.roomLabel")}: {group.room || t("poster.tba")} | {t("poster.judgesLabel")}: {group.judges.join(", ") || t("poster.tba")}
                     </p>
                   </CardHeader>
                   <CardBody className="space-y-3">
                     {group.slots.length === 0 ? (
-                      <p className="text-sm text-ink-muted">Your presentation slots have not been scheduled yet.</p>
+                      <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {group.slots.map((slot, i) => (
@@ -687,14 +691,14 @@ export function PosterPlannerClient({
         {showCommitteeView && (
           <div className="space-y-6">
             <SectionTitle
-              title="Poster Review Queue"
-              subtitle="Groups and slots assigned to you for poster review"
+              title={t("poster.reviewTitle")}
+              subtitle={t("poster.reviewSubtitle")}
             />
             {committeeGroups.length === 0 ? (
               <EmptyState
                 icon={<Users className="h-12 w-12" />}
-                title="No poster groups assigned"
-                body="Your assigned poster groups will appear here once scheduling is ready."
+                title={t("poster.noAssigned")}
+                body={t("poster.noAssignedDesc")}
               />
             ) : (
               committeeGroups.map((group) => (
@@ -703,9 +707,9 @@ export function PosterPlannerClient({
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone="info">{group.trackName}</Badge>
                       <Badge tone="success">{group.groupName}</Badge>
-                      <Badge>Judge {group.judgeOrder}</Badge>
+                      <Badge>{t("poster.judge")} {group.judgeOrder}</Badge>
                     </div>
-                    <p className="text-sm text-ink-muted">Room: {group.room || "TBA"}</p>
+                    <p className="text-sm text-ink-muted">{t("poster.roomLabel")}: {group.room || t("poster.tba")}</p>
                   </CardHeader>
                   <CardBody className="space-y-4">
                     <div className="space-y-2">
@@ -720,7 +724,7 @@ export function PosterPlannerClient({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {group.slots.length === 0 ? (
-                        <p className="text-sm text-ink-muted">No slots planned for this group yet.</p>
+                        <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
                       ) : (
                         group.slots.map((slot, i) => (
                           <div key={slot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
@@ -749,46 +753,71 @@ export function PosterPlannerClient({
   return (
     <div className="space-y-6">
       <SectionTitle
-        title="Poster Group Planner"
-        subtitle="Set up shared slots, group papers by track, assign judges, and schedule presentations."
+        title={t("poster.plannerTitle")}
+        subtitle={t("poster.plannerSubtitle")}
       />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
 
-      <RubricManager
-        criteria={rubricCriteria}
-        canEdit={canEditCriteria}
-        onSave={handleSaveCriteria}
-      />
+      {/* ── Admin Tabs ── */}
+      <div className="flex gap-0.5 overflow-x-auto border-b border-border/60">
+        {([
+          { key: "planner" as const, label: t("presentations.schedule"), icon: <LayoutPanelTop className="h-3.5 w-3.5" /> },
+          { key: "criteria" as const, label: t("presentations.criteria"), icon: <ClipboardList className="h-3.5 w-3.5" /> },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setAdminTab(tab.key)}
+            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors duration-150 ${
+              adminTab === tab.key
+                ? "border-brand-500 text-brand-600"
+                : "border-transparent text-ink-muted hover:text-ink hover:border-gray-200"
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      {/* ── Summary Stats ── */}
+      {adminTab === "criteria" && (
+        <RubricManager
+          criteria={rubricCriteria}
+          canEdit={canEditCriteria}
+          onSave={handleSaveCriteria}
+        />
+      )}
+
+      {adminTab === "planner" ? (
+        <>
+          {/* ── Summary Stats ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <SummaryStatCard
-          label="Poster groups"
+          label={t("poster.groups")}
           value={plannerStats.totalGroups}
           icon={<FolderKanban className="h-5 w-5" />}
           color="blue"
         />
         <SummaryStatCard
-          label="Ready groups"
+          label={t("poster.readyGroups")}
           value={plannerStats.readyGroups}
           icon={<Check className="h-5 w-5" />}
           color="emerald"
         />
         <SummaryStatCard
-          label="Need follow-up"
+          label={t("poster.needFollowUp")}
           value={plannerStats.incompleteGroups}
           icon={<CircleAlert className="h-5 w-5" />}
           color="amber"
         />
         <SummaryStatCard
-          label="Ungrouped papers"
+          label={t("poster.ungroupedPapers")}
           value={plannerStats.ungroupedPosters}
           icon={<Presentation className="h-5 w-5" />}
           color="red"
         />
         <SummaryStatCard
-          label="Shared slots"
+          label={t("poster.sharedSlots")}
           value={plannerStats.sharedSlots}
           icon={<CalendarRange className="h-5 w-5" />}
           color="indigo"
@@ -800,16 +829,16 @@ export function PosterPlannerClient({
         <CardHeader>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <MapPin className="h-4 w-4 text-ink-muted" />
-            Session Settings
+            {t("poster.sessionSettings")}
           </h3>
           <p className="text-sm text-ink-muted">
-            Shared room and time slots (each slot = {SLOT_DURATION_MINUTES} min). All groups share these settings.
+            {t("poster.sessionSettingsDesc", { n: SLOT_DURATION_MINUTES })}
           </p>
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
             {/* Room */}
-            <Field label="Room" htmlFor={sessionRoomId}>
+            <Field label={t("poster.roomLabel")} htmlFor={sessionRoomId}>
               <Input
                 id={sessionRoomId}
                 value={sessionDraft.room}
@@ -828,11 +857,11 @@ export function PosterPlannerClient({
             {/* Slot grid */}
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                Time Slots ({SLOT_DURATION_MINUTES} min each)
+                {t("poster.timeSlots", { n: SLOT_DURATION_MINUTES })}
               </p>
 
               {sessionDraft.slotTemplates.length === 0 ? (
-                <p className="text-sm text-ink-muted">No slots yet. Add a start time below.</p>
+                <p className="text-sm text-ink-muted">{t("poster.noSlotsYet")}</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {sessionDraft.slotTemplates.map((slot, index) => (
@@ -860,7 +889,7 @@ export function PosterPlannerClient({
               )}
 
               <div className="flex items-end gap-2">
-                <Field label="Add slot (start time)" htmlFor={`${plannerId}-new-slot-time`}>
+                <Field label={t("poster.addSlotTime")} htmlFor={`${plannerId}-new-slot-time`}>
                   <Input
                     id={`${plannerId}-new-slot-time`}
                     type="time"
@@ -871,7 +900,7 @@ export function PosterPlannerClient({
                 </Field>
                 <Button size="sm" variant="outline" onClick={addSessionSlotTemplate}>
                   <Plus className="h-3.5 w-3.5" />
-                  Add
+                  {t("poster.add")}
                 </Button>
               </div>
             </div>
@@ -883,7 +912,7 @@ export function PosterPlannerClient({
               onClick={saveSessionSettings}
               loading={savingKey === "session-settings"}
             >
-              Save session settings
+              {t("poster.saveSessionSettings")}
             </Button>
           </div>
         </CardBody>
@@ -895,14 +924,14 @@ export function PosterPlannerClient({
         <div className="space-y-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <LayoutPanelTop className="h-4 w-4 text-ink-muted" />
-            Group Accepted Posters
+            {t("poster.groupPosters")}
           </h3>
 
           {trackSections.length === 0 ? (
             <EmptyState
               icon={<FolderKanban className="h-10 w-10" />}
-              title="No poster records yet"
-              body="Accepted poster papers will appear here."
+              title={t("poster.noRecords")}
+              body={t("poster.noRecordsDesc")}
             />
           ) : (
             trackSections.map((track) => {
@@ -938,14 +967,14 @@ export function PosterPlannerClient({
                         loading={savingKey === `create-${track.id}`}
                       >
                         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                        Create
+                        {t("poster.create")}
                       </Button>
                     </div>
 
                     {/* Group badges */}
                     <div className="flex flex-wrap gap-2">
                       {trackGroups.length === 0 ? (
-                        <Badge tone="warning">No groups yet</Badge>
+                        <Badge tone="warning">{t("poster.noGroupsYet")}</Badge>
                       ) : (
                         trackGroups.map((group) => (
                           <Badge key={group.id} tone={getGroupTone(group)}>
@@ -957,10 +986,10 @@ export function PosterPlannerClient({
 
                     {/* Ungrouped papers */}
                     {trackPosters.length === 0 ? (
-                      <p className="text-sm text-ink-muted">All papers in this track are grouped.</p>
+                      <p className="text-sm text-ink-muted">{t("poster.allGrouped")}</p>
                     ) : (
                       <>
-                        <Field label="Move to group" htmlFor={`${plannerId}-target-group-${track.id}`}>
+                        <Field label={t("poster.moveToGroup")} htmlFor={`${plannerId}-target-group-${track.id}`}>
                           <Select
                             id={`${plannerId}-target-group-${track.id}`}
                             value={selectedGroupByTrack[track.id] || ""}
@@ -972,7 +1001,7 @@ export function PosterPlannerClient({
                             }
                             name={`targetGroup-${track.id}`}
                           >
-                            <option value="">Select a group</option>
+                            <option value="">{t("poster.selectGroup")}</option>
                             {trackGroups.map((group) => (
                               <option key={group.id} value={group.id}>
                                 {group.name}
@@ -1050,8 +1079,8 @@ export function PosterPlannerClient({
           {groups.length === 0 ? (
             <EmptyState
               icon={<FolderKanban className="h-12 w-12" />}
-              title="No poster groups yet"
-              body="Create your first track-based poster group from the left panel."
+              title={t("poster.noGroupsCreated")}
+              body={t("poster.noGroupsCreatedDesc")}
             />
           ) : (
             groups.map((group) => {
@@ -1088,11 +1117,11 @@ export function PosterPlannerClient({
                           <p className="text-sm font-bold text-ink">{group.judges.length}/3</p>
                         </div>
                         <div>
-                          <p className="text-[11px] uppercase tracking-wide text-ink-muted">Slots</p>
+                          <p className="text-[11px] uppercase tracking-wide text-ink-muted">{t("poster.slotsLabel")}</p>
                           <p className="text-sm font-bold text-ink">{group.slots.length}</p>
                         </div>
                         <div>
-                          <p className="text-[11px] uppercase tracking-wide text-ink-muted">Room</p>
+                          <p className="text-[11px] uppercase tracking-wide text-ink-muted">{t("poster.roomLabel")}</p>
                           <p className="text-sm font-bold text-ink">{sessionSettings.room || "—"}</p>
                         </div>
                       </div>
@@ -1102,7 +1131,7 @@ export function PosterPlannerClient({
                   <CardBody className="space-y-5">
                     {/* ── Group name edit ── */}
                     <div className="flex items-end gap-3">
-                      <Field label="Group name" htmlFor={`${plannerId}-group-name-${group.id}`} className="flex-1">
+                      <Field label={t("poster.groupName")} htmlFor={`${plannerId}-group-name-${group.id}`} className="flex-1">
                         <Input
                           id={`${plannerId}-group-name-${group.id}`}
                           value={groupDrafts[group.id]?.name || ""}
@@ -1125,7 +1154,7 @@ export function PosterPlannerClient({
                         onClick={() => saveGroup(group.id)}
                         loading={savingKey === `group-${group.id}`}
                       >
-                        Rename
+                        {t("poster.saveGroup")}
                       </Button>
                     </div>
 
@@ -1135,7 +1164,7 @@ export function PosterPlannerClient({
                         Papers ({group.members.length})
                       </h4>
                       {group.members.length === 0 ? (
-                        <p className="text-sm text-ink-muted">No papers in this group yet.</p>
+                        <p className="text-sm text-ink-muted">{t("poster.noMembers")}</p>
                       ) : (
                         <div className="space-y-1.5">
                           {group.members.map((member) => (
@@ -1172,7 +1201,7 @@ export function PosterPlannerClient({
                         {[0, 1, 2].map((index) => (
                           <Field
                             key={index}
-                            label={`Judge ${index + 1}`}
+                            label={`${t("poster.judge")} ${index + 1}`}
                             htmlFor={`${plannerId}-judge-${group.id}-${index + 1}`}
                           >
                             <Select
@@ -1203,7 +1232,7 @@ export function PosterPlannerClient({
                           onClick={() => saveJudges(group.id)}
                           loading={savingKey === `judges-${group.id}`}
                         >
-                          Save judges
+                          {t("poster.saveJudges")}
                         </Button>
                       </div>
                     </section>
@@ -1219,7 +1248,7 @@ export function PosterPlannerClient({
 
                       {sessionSettings.slotTemplates.length === 0 && (
                         <Alert tone="danger">
-                          Add shared slots in Session Settings first.
+                          {t("poster.addSharedSlotsFirst")}
                         </Alert>
                       )}
 
@@ -1266,7 +1295,7 @@ export function PosterPlannerClient({
 
                       {sessionSettings.slotTemplates.length > 0 && (
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                          <Field label="Slot" htmlFor={`${plannerId}-slot-template-${group.id}`}>
+                          <Field label={t("poster.slot")} htmlFor={`${plannerId}-slot-template-${group.id}`}>
                             <Select
                               id={`${plannerId}-slot-template-${group.id}`}
                               value={slotDraft.templateId}
@@ -1295,7 +1324,7 @@ export function PosterPlannerClient({
                               })}
                             </Select>
                           </Field>
-                          <Field label="Judge" htmlFor={`${plannerId}-slot-judge-${group.id}`}>
+                          <Field label={t("poster.judge")} htmlFor={`${plannerId}-slot-judge-${group.id}`}>
                             <Select
                               id={`${plannerId}-slot-judge-${group.id}`}
                               value={slotDraft.judgeId}
@@ -1315,7 +1344,7 @@ export function PosterPlannerClient({
                               ))}
                             </Select>
                           </Field>
-                          <Field label="Status" htmlFor={`${plannerId}-slot-status-${group.id}`}>
+                          <Field label={t("poster.status")} htmlFor={`${plannerId}-slot-status-${group.id}`}>
                             <Select
                               id={`${plannerId}-slot-status-${group.id}`}
                               value={slotDraft.status}
@@ -1343,7 +1372,7 @@ export function PosterPlannerClient({
                             loading={savingKey === `slot-${group.id}`}
                           >
                             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                            Add slot
+                            {t("poster.addSlot")}
                           </Button>
                         </div>
                       )}
@@ -1355,6 +1384,8 @@ export function PosterPlannerClient({
           )}
         </div>
       </div>
+        </>
+      ) : null}
     </div>
   );
 }

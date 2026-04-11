@@ -115,6 +115,14 @@ export function AppShellClient({
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100">
+      {/* Skip to main content link for keyboard/screen reader users */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-xl focus:bg-brand-500 focus:px-4 focus:py-2 focus:text-white focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
+
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden animate-fade-in"
@@ -217,7 +225,7 @@ export function AppShellClient({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-slate-50 px-4 py-6 lg:px-8 lg:py-8">
+        <main id="main-content" className="flex-1 overflow-y-auto bg-slate-50 px-4 py-6 lg:px-8 lg:py-8">
           <div className="mx-auto w-full max-w-7xl">
             {children}
             <Footer

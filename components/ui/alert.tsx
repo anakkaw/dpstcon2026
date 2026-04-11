@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+import { AlertCircle, CheckCircle2, AlertTriangle, Info, X } from "lucide-react";
 
 type Tone = "info" | "success" | "warning" | "danger";
 
@@ -8,6 +8,7 @@ interface AlertProps {
   title?: string;
   children: React.ReactNode;
   className?: string;
+  onDismiss?: () => void;
 }
 
 /* Full static class strings */
@@ -32,7 +33,7 @@ const iconComponents: Record<Tone, typeof Info> = {
   danger: AlertCircle,
 };
 
-export function Alert({ tone = "info", title, children, className }: AlertProps) {
+export function Alert({ tone = "info", title, children, className, onDismiss }: AlertProps) {
   const Icon = iconComponents[tone];
 
   return (
@@ -48,10 +49,20 @@ export function Alert({ tone = "info", title, children, className }: AlertProps)
       <div className="shrink-0 mt-0.5">
         <Icon className={cn("h-5 w-5", iconStyles[tone])} aria-hidden="true" />
       </div>
-      <div>
+      <div className="flex-1">
         {title && <p className="font-semibold mb-0.5">{title}</p>}
         <div className="leading-relaxed">{children}</div>
       </div>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="shrink-0 rounded-lg p-0.5 opacity-60 transition-opacity hover:opacity-100"
+          aria-label="Dismiss"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }

@@ -191,11 +191,21 @@ export function FileUpload({
       )}
 
       <div
+        role="button"
+        tabIndex={disabled || state === "uploading" ? -1 : 0}
+        aria-label={resolvedLabel}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         onClick={() => !disabled && state !== "uploading" && inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !disabled && state !== "uploading") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
         className={cn(
           "relative border-2 border-dashed rounded-xl p-6 text-center transition-all duration-200",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2",
           disabled
             ? "opacity-50 cursor-not-allowed border-gray-200 bg-gray-50"
             : state === "uploading"
@@ -230,10 +240,10 @@ export function FileUpload({
         )}
 
         {state === "uploading" && (
-          <div className="space-y-3">
-            <Loader2 className="h-8 w-8 mx-auto text-brand-500 animate-spin" />
+          <div className="space-y-3" aria-live="polite">
+            <Loader2 className="h-8 w-8 mx-auto text-brand-500 animate-spin" aria-hidden="true" />
             <p className="text-sm text-ink">{t("fileUpload.uploading", { name: fileName })}</p>
-            <div className="w-full bg-gray-200 rounded-full h-2 max-w-xs mx-auto">
+            <div className="w-full bg-gray-200 rounded-full h-2 max-w-xs mx-auto" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
               <div
                 className="bg-brand-500 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${progress}%` }}

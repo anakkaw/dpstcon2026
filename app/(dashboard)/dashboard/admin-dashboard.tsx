@@ -100,7 +100,7 @@ export default function AdminDashboard({ stats }: { stats: Record<string, unknow
                     <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                       <div
                         className={`h-full rounded-full transition-all duration-700 ${barClasses[index % barClasses.length]}`}
-                        style={{ width: `${Math.max(pct, 6)}%` }}
+                        style={{ width: `${Math.max(pct, 2)}%` }}
                       />
                     </div>
                   </div>
@@ -130,7 +130,7 @@ export default function AdminDashboard({ stats }: { stats: Record<string, unknow
                     <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                       <div
                         className={`h-full rounded-full transition-all duration-700 ${barClasses[i % barClasses.length]}`}
-                        style={{ width: `${Math.max(pct, 6)}%` }}
+                        style={{ width: `${Math.max(pct, 2)}%` }}
                       />
                     </div>
                   </div>

@@ -313,9 +313,11 @@ export function PresentationsClient({
       </div>
 
       {activeTab === "schedule" && (
-        filteredPresentations.length === 0 ? (
-          <EmptyState icon={<TitleIcon className="h-12 w-12" />} title={t("presentations.noPresentations")} body={t("presentations.autoCreated")} />
-        ) : (
+        <>
+          {!canManage && <RubricManager criteria={criteria} defaultExpanded={false} />}
+          {filteredPresentations.length === 0 ? (
+            <EmptyState icon={<TitleIcon className="h-12 w-12" />} title={t("presentations.noPresentations")} body={t("presentations.autoCreated")} />
+          ) : (
           <>
             <div className="space-y-3 lg:hidden">
               {sortedPresentations.map((presentation) => (
@@ -445,7 +447,7 @@ export function PresentationsClient({
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100"
+                                  className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
                                   onClick={() => {
                                     setEditingId(presentation.id);
                                     setEditForm({
@@ -485,11 +487,9 @@ export function PresentationsClient({
               </CardBody>
             </Card>
           </>
-        )
-      )}
-
-      {!canManage && activeTab === "schedule" && (
-        <RubricManager criteria={criteria} />
+          )
+        }
+        </>
       )}
 
       {activeTab === "criteria" && (
@@ -698,7 +698,7 @@ export function PresentationsClient({
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-ink">{t("presentations.scoringResults", { n: filteredScoring.length })}</h3>
                 <a href="/api/exports/proceedings?format=csv" download>
-                  <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />Export CSV</Button>
+                  <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />{t("presentations.exportCSV")}</Button>
                 </a>
               </div>
             </CardHeader>
@@ -717,7 +717,7 @@ export function PresentationsClient({
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Committee</p>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.committeeLabel")}</p>
                           <p className="mt-1 text-ink">{presentation.evaluations.length}</p>
                         </div>
                         <div>
@@ -739,7 +739,7 @@ export function PresentationsClient({
                       <th className="w-[35%] px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.paper")}</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("reviews.author")}</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("submissions.track")}</th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-ink-muted">Committee</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.committeeLabel")}</th>
                       <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.avgScore")}</th>
                     </tr>
                   </thead>

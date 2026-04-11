@@ -173,8 +173,8 @@ export function TrackTeamClient({
             </Field>
             <Field label={t("common.role")}>
               <Select value={addRole} onChange={(e) => setAddRole(e.target.value as "REVIEWER" | "COMMITTEE")}>
-                <option value="REVIEWER">Reviewer</option>
-                <option value="COMMITTEE">Committee</option>
+                <option value="REVIEWER">{t("trackTeam.reviewerLabel")}</option>
+                <option value="COMMITTEE">{t("trackTeam.committeeLabel")}</option>
               </Select>
             </Field>
             <div className="flex items-end">
@@ -202,7 +202,7 @@ export function TrackTeamClient({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge tone="info">Reviewer</Badge>
+                    <Badge tone="info">{t("trackTeam.reviewerLabel")}</Badge>
                     <Button variant="ghost" size="sm" onClick={() => setMemberToRemove(member)}>
                       <Trash2 className="h-3.5 w-3.5 text-red-500" />
                     </Button>
@@ -230,7 +230,7 @@ export function TrackTeamClient({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge tone="success">Committee</Badge>
+                    <Badge tone="success">{t("trackTeam.committeeLabel")}</Badge>
                     <Button variant="ghost" size="sm" onClick={() => setMemberToRemove(member)}>
                       <Trash2 className="h-3.5 w-3.5 text-red-500" />
                     </Button>

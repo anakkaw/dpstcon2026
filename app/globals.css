@@ -173,6 +173,12 @@ input[type="checkbox"] {
 .animate-fade-in { animation: fadeIn 0.3s ease-out both; }
 .animate-scale-in { animation: scaleIn 0.25s ease-out both; }
 .animate-slide-down { animation: slideDown 0.25s ease-out both; }
+.animate-slide-up { animation: slideUp 0.3s ease-out both; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* Landing page hero animations */
 @keyframes float {
