@@ -786,6 +786,21 @@ const en: Record<TranslationKey, string> = {
   "poster.unableToDeleteSlot": "Unable to delete slot",
   "poster.slotDeleted": "Slot deleted",
   "poster.slotsLabel": "Slots",
+  "poster.scheduleTitle": "Poster Presentation Schedule",
+  "poster.scheduleSubtitle": "Select a track, then assign judges to each time slot",
+  "poster.allTracks": "All Tracks",
+  "poster.paperColumn": "Paper",
+  "poster.authorColumn": "Presenter",
+  "poster.selectJudgeOption": "-- Select judge --",
+  "poster.workloadSummary": "Judge Workload Summary",
+  "poster.judgeName": "Judge",
+  "poster.assignedSlots": "Assigned Slots",
+  "poster.noJudgesAvailable": "No committee members available for this track",
+  "poster.noPapersInTrack": "No poster papers in this track yet",
+  "poster.addSlotsFirst": "Please add time slots in Session Settings first",
+  "poster.judgeSaved": "Judge assignment saved",
+  "poster.unableToSaveJudge": "Unable to save judge assignment",
+  "poster.track": "Track",
 };
 
 export default en;

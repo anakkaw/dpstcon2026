@@ -788,6 +788,21 @@ const th = {
   "poster.unableToDeleteSlot": "ไม่สามารถลบ slot ได้",
   "poster.slotDeleted": "ลบ slot แล้ว",
   "poster.slotsLabel": "Slots",
+  "poster.scheduleTitle": "จัดตารางนำเสนอโปสเตอร์",
+  "poster.scheduleSubtitle": "เลือกสาขาวิชา จากนั้นมอบหมายกรรมการตัดสินในแต่ละ slot",
+  "poster.allTracks": "ทุกสาขา",
+  "poster.paperColumn": "ผลงาน",
+  "poster.authorColumn": "ผู้นำเสนอ",
+  "poster.selectJudgeOption": "-- เลือกกรรมการ --",
+  "poster.workloadSummary": "สรุปภาระงานกรรมการ",
+  "poster.judgeName": "ชื่อกรรมการ",
+  "poster.assignedSlots": "จำนวน slot ที่มอบหมาย",
+  "poster.noJudgesAvailable": "ยังไม่มีกรรมการในสาขานี้",
+  "poster.noPapersInTrack": "ยังไม่มีผลงานโปสเตอร์ในสาขานี้",
+  "poster.addSlotsFirst": "กรุณาเพิ่ม slot เวลาในตั้งค่าเซสชันก่อน",
+  "poster.judgeSaved": "บันทึกการมอบหมายกรรมการแล้ว",
+  "poster.unableToSaveJudge": "ไม่สามารถบันทึกการมอบหมายกรรมการได้",
+  "poster.track": "สาขาวิชา",
 } as const;
 
 export type TranslationKey = keyof typeof th;
