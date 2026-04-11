@@ -37,9 +37,15 @@ export interface AppShellNavItem {
   icon: string;
 }
 
+export interface AppShellNavGroup {
+  role: string;
+  items: AppShellNavItem[];
+}
+
 interface AppShellClientProps {
   appTitle: string;
   navItems: AppShellNavItem[];
+  navGroups?: AppShellNavGroup[];
   user: DashboardAuthUser;
   children: React.ReactNode;
 }
@@ -62,6 +68,7 @@ const iconMap: Record<string, React.ReactNode> = {
 export function AppShellClient({
   appTitle,
   navItems,
+  navGroups,
   user,
   children,
 }: AppShellClientProps) {
@@ -70,7 +77,10 @@ export function AppShellClient({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const roleLabels = getRoleLabels(t);
 
-  const activeItem = navItems.find(
+  const allItems = navGroups
+    ? navGroups.flatMap((g) => g.items)
+    : navItems;
+  const activeItem = allItems.find(
     (item) => pathname === item.href || pathname.startsWith(item.href + "/")
   );
   const activeLabel = activeItem
@@ -81,6 +91,27 @@ export function AppShellClient({
     .join(", ");
   const displayName = displayNameTh(user);
   const initials = nameInitial(user);
+
+  const renderNavLink = (item: AppShellNavItem) => {
+    const isActive =
+      pathname === item.href || pathname.startsWith(item.href + "/");
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setSidebarOpen(false)}
+        className={cn(
+          "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200",
+          isActive
+            ? "bg-white text-slate-950 shadow-sm"
+            : "text-slate-300 hover:bg-white/5 hover:text-white"
+        )}
+      >
+        {iconMap[item.icon] || <LayoutDashboard className="h-5 w-5" />}
+        {t(item.labelKey)}
+      </Link>
+    );
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100">
@@ -116,27 +147,23 @@ export function AppShellClient({
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(item.href + "/");
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-white text-slate-950 shadow-sm"
-                    : "text-slate-300 hover:bg-white/5 hover:text-white"
+          {navGroups && navGroups.length > 0 ? (
+            navGroups.map((group, idx) => (
+              <div key={group.role}>
+                {idx > 0 && (
+                  <div className="mx-3 my-2 border-t border-white/10" />
                 )}
-              >
-                {iconMap[item.icon] || <LayoutDashboard className="h-5 w-5" />}
-                {t(item.labelKey)}
-              </Link>
-            );
-          })}
+                {group.role !== "_COMMON" && (
+                  <p className="mb-1 mt-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    {roleLabels[group.role] || group.role}
+                  </p>
+                )}
+                {group.items.map(renderNavLink)}
+              </div>
+            ))
+          ) : (
+            navItems.map(renderNavLink)
+          )}
         </nav>
       </aside>
 

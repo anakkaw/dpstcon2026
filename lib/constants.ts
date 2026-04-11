@@ -73,3 +73,55 @@ export function getNavItemsForRoles(
 
   return merged.length > 0 ? merged : [...NAV_ITEMS.AUTHOR];
 }
+
+export type NavItemType = (typeof NAV_ITEMS)[keyof typeof NAV_ITEMS][number];
+
+export interface NavGroup {
+  role: string;
+  items: NavItemType[];
+}
+
+/** Group navigation items by role, with shared items (dashboard, schedule) shown once at top */
+export function getNavItemsGroupedByRole(roles: string[]): NavGroup[] {
+  const ROLE_ORDER = ["ADMIN", "PROGRAM_CHAIR", "COMMITTEE", "REVIEWER", "AUTHOR"];
+  const sortedRoles = [...roles]
+    .filter((r) => NAV_ITEMS[r as keyof typeof NAV_ITEMS])
+    .sort((a, b) => ROLE_ORDER.indexOf(a) - ROLE_ORDER.indexOf(b));
+
+  if (sortedRoles.length === 0) sortedRoles.push("AUTHOR");
+
+  // Single role — no grouping needed
+  if (sortedRoles.length === 1) {
+    return [{ role: sortedRoles[0], items: [...NAV_ITEMS[sortedRoles[0] as keyof typeof NAV_ITEMS]] }];
+  }
+
+  // Shared hrefs that appear in every role the user has
+  const roleSets = sortedRoles.map(
+    (r) => new Set(NAV_ITEMS[r as keyof typeof NAV_ITEMS].map((i) => i.href))
+  );
+  const sharedHrefs = new Set(
+    [...roleSets[0]].filter((href) => roleSets.every((s) => s.has(href)))
+  );
+
+  const groups: NavGroup[] = [];
+
+  // Common group (items shared across all roles)
+  const commonItems = NAV_ITEMS[sortedRoles[0] as keyof typeof NAV_ITEMS].filter(
+    (item) => sharedHrefs.has(item.href)
+  );
+  if (commonItems.length > 0) {
+    groups.push({ role: "_COMMON", items: commonItems });
+  }
+
+  // Per-role groups (only unique items)
+  for (const role of sortedRoles) {
+    const items = NAV_ITEMS[role as keyof typeof NAV_ITEMS].filter(
+      (item) => !sharedHrefs.has(item.href)
+    );
+    if (items.length > 0) {
+      groups.push({ role, items });
+    }
+  }
+
+  return groups;
+}
