@@ -1,7 +1,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
 import { submissions, storedFiles, user as userTable } from "@/server/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import { z } from "zod";
 import { getDownloadUrl } from "@/server/r2";
 import { rateLimit } from "../middleware/rate-limit";
@@ -129,27 +129,9 @@ app.post("/:token/respond", async (c) => {
     return c.json({ error: "Invalid request" }, 400);
   }
 
-  const submission = await db.query.submissions.findFirst({
-    where: eq(submissions.advisorApprovalToken, token),
-  });
-
-  if (!submission) {
-    return c.json({ error: "Invalid or expired token" }, 404);
-  }
-
-  // M3: Check token expiry
-  if (isTokenExpired(submission.submittedAt)) {
-    return c.json({ error: "ลิงก์รับรองหมดอายุแล้ว" }, 410);
-  }
-
-  if (submission.advisorApprovalStatus !== "PENDING") {
-    return c.json({ error: "Already responded" }, 409);
-  }
-
   const newStatus =
     parsed.data.decision === "APPROVED" ? "SUBMITTED" : "DRAFT";
 
-  // Update status + clear token (one-time use)
   const [updated] = await db
     .update(submissions)
     .set({
@@ -159,8 +141,37 @@ app.post("/:token/respond", async (c) => {
       status: newStatus,
       updatedAt: new Date(),
     })
-    .where(eq(submissions.id, submission.id))
+    .where(
+      and(
+        eq(submissions.advisorApprovalToken, token),
+        eq(submissions.advisorApprovalStatus, "PENDING"),
+        gt(
+          submissions.submittedAt,
+          new Date(Date.now() - ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
+        )
+      )
+    )
     .returning();
+
+  if (!updated) {
+    const existing = await db.query.submissions.findFirst({
+      where: eq(submissions.advisorApprovalToken, token),
+      columns: {
+        advisorApprovalStatus: true,
+        submittedAt: true,
+      },
+    });
+
+    if (!existing) {
+      return c.json({ error: "Invalid or expired token" }, 404);
+    }
+
+    if (isTokenExpired(existing.submittedAt)) {
+      return c.json({ error: "ลิงก์รับรองหมดอายุแล้ว" }, 410);
+    }
+
+    return c.json({ error: "Already responded" }, 409);
+  }
 
   // Send notification email to author
   try {
@@ -169,18 +180,18 @@ app.post("/:token/respond", async (c) => {
 
     // Fetch author info
     const author = await db.query.user.findFirst({
-      where: eq(userTable.id, submission.authorId),
+      where: eq(userTable.id, updated.authorId),
       columns: { name: true, email: true },
     });
 
     if (author) {
       const emailContent = advisorResponseEmail({
         authorName: author.name,
-        advisorName: submission.advisorName || "Advisor",
-        paperTitle: submission.title,
+        advisorName: updated.advisorName || "Advisor",
+        paperTitle: updated.title,
         decision: parsed.data.decision,
         comments: parsed.data.comments,
-        submissionUrl: `${appUrl}/submissions/${submission.id}`,
+        submissionUrl: `${appUrl}/submissions/${updated.id}`,
       });
       await queueEmail({
         to: author.email,

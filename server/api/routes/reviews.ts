@@ -6,7 +6,7 @@ import {
   submissions,
   decisions,
 } from "@/server/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, ne } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -272,10 +272,21 @@ app.post("/reviews", async (c) => {
 
   // Mark assignment as completed
   if (assignmentIdToComplete) {
-    await db
+    const [completedAssignment] = await db
       .update(reviewAssignments)
       .set({ status: "COMPLETED", respondedAt: new Date() })
-      .where(eq(reviewAssignments.id, assignmentIdToComplete));
+      .where(
+        and(
+          eq(reviewAssignments.id, assignmentIdToComplete),
+          ne(reviewAssignments.status, "COMPLETED")
+        )
+      )
+      .returning({ id: reviewAssignments.id });
+
+    if (!completedAssignment) {
+      await db.delete(reviews).where(eq(reviews.id, review.id));
+      return c.json({ error: "มีรีวิวสำหรับรอบการพิจารณานี้แล้ว" }, 409);
+    }
   }
 
   return c.json({ review }, 201);

@@ -1,7 +1,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { db } from "@/server/db";
 import { user, account } from "@/server/db/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { auth } from "@/server/auth";
 import { z } from "zod";
 import { rateLimit } from "../middleware/rate-limit";
@@ -89,43 +89,60 @@ app.post("/:token", async (c) => {
   const ctx = await auth.$context;
   const hashedPassword = await ctx.password.hash(parsed.data.password);
 
-  // Check if account row already exists
-  const existingAccount = await db.query.account.findFirst({
-    where: and(
-      eq(account.userId, found.id),
-      eq(account.providerId, "credential")
+  const activationResult = await db.execute(sql<{
+    user_id: string;
+    account_id: string | null;
+  }>`
+    WITH activated_user AS (
+      UPDATE "user"
+      SET
+        is_active = true,
+        invite_token = null,
+        invite_expires_at = null,
+        updated_at = NOW()
+      WHERE
+        invite_token = ${token}
+        AND invite_expires_at > NOW()
+        AND is_active = false
+      RETURNING id
     ),
-  });
+    updated_account AS (
+      UPDATE account
+      SET
+        password = ${hashedPassword},
+        updated_at = NOW()
+      FROM activated_user
+      WHERE
+        account.user_id = activated_user.id
+        AND account.provider_id = 'credential'
+      RETURNING account.id
+    )
+    SELECT
+      activated_user.id AS user_id,
+      updated_account.id AS account_id
+    FROM activated_user
+    LEFT JOIN updated_account ON TRUE
+  `);
 
-  if (existingAccount) {
-    // Update existing account with password
-    await db
-      .update(account)
-      .set({ password: hashedPassword, updatedAt: new Date() })
-      .where(eq(account.id, existingAccount.id));
-  } else {
-    // Create new credential account
+  const activated = activationResult.rows[0] as
+    | { user_id: string; account_id: string | null }
+    | undefined;
+
+  if (!activated) {
+    return c.json({ error: "ลิงก์เชิญไม่ถูกต้องหรือถูกใช้งานไปแล้ว" }, 409);
+  }
+
+  if (!activated.account_id) {
     await db.insert(account).values({
       id: crypto.randomUUID(),
-      accountId: found.id,
+      accountId: activated.user_id,
       providerId: "credential",
-      userId: found.id,
+      userId: activated.user_id,
       password: hashedPassword,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
   }
-
-  // Activate user and clear invite token
-  await db
-    .update(user)
-    .set({
-      isActive: true,
-      inviteToken: null,
-      inviteExpiresAt: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(user.id, found.id));
 
   return c.json({ ok: true, message: "เปิดใช้งานบัญชีสำเร็จ กรุณาเข้าสู่ระบบ" });
 });

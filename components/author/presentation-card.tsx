@@ -3,9 +3,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Collapsible } from "@/components/ui/collapsible";
+import { RubricManager } from "@/components/presentations/rubric-manager";
 import { formatDateTime } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-import { Mic, Image as ImageIcon, MapPin, Clock, Award } from "lucide-react";
+import type { PresentationRubricCriterion } from "@/server/presentation-rubrics";
+import { Mic, Image as ImageIcon, MapPin, Clock } from "lucide-react";
 
 interface PresentationData {
   type: string;
@@ -16,20 +18,15 @@ interface PresentationData {
   duration?: number | null;
 }
 
-interface CriterionData {
-  id: string;
-  name: string;
-  description?: string | null;
-  maxScore: number;
-  weight: number;
-}
-
 interface PresentationCardProps {
   presentations: PresentationData[];
-  criteria: CriterionData[];
+  criteriaByType: Record<"ORAL" | "POSTER", PresentationRubricCriterion[]>;
 }
 
-export function PresentationCard({ presentations, criteria }: PresentationCardProps) {
+export function PresentationCard({
+  presentations,
+  criteriaByType,
+}: PresentationCardProps) {
   const { t } = useI18n();
   if (presentations.length === 0) return null;
 
@@ -84,28 +81,28 @@ export function PresentationCard({ presentations, criteria }: PresentationCardPr
           </div>
         ))}
 
-        {criteria.length > 0 && (
-          <Collapsible title={t("presentations.evaluationCriteria")} defaultOpen={false}>
-            <div className="space-y-2">
-              {criteria.map((c) => (
-                <div key={c.id} className="flex items-start gap-2">
-                  <Award className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-ink">{c.name}</span>
-                      <span className="text-[10px] text-ink-muted">
-                        {t("presentations.points", { n: c.maxScore, w: c.weight })}
-                      </span>
-                    </div>
-                    {c.description && (
-                      <p className="text-[11px] text-ink-muted mt-0.5">{c.description}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Collapsible>
-        )}
+        {presentations.map((presentation, index) => {
+          const criteria =
+            presentation.type === "POSTER"
+              ? criteriaByType.POSTER
+              : criteriaByType.ORAL;
+
+          if (!criteria || criteria.length === 0) return null;
+
+          return (
+            <Collapsible
+              key={`${presentation.type}-${index}`}
+              title={`${t("presentations.evaluationCriteria")} · ${
+                presentation.type === "POSTER"
+                  ? t("presentations.poster")
+                  : t("presentations.oral")
+              }`}
+              defaultOpen={false}
+            >
+              <RubricManager criteria={criteria} />
+            </Collapsible>
+          );
+        })}
       </CardBody>
     </Card>
   );

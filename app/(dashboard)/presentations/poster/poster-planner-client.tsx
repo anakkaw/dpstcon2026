@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Collapsible } from "@/components/ui/collapsible";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { RubricManager } from "@/components/presentations/rubric-manager";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Select } from "@/components/ui/select";
 import { SummaryStatCard } from "@/components/ui/summary-stat-card";
@@ -17,6 +18,7 @@ import type {
   PosterPlannerPaper,
   PosterPlannerSessionSettings,
 } from "@/server/poster-planner-data";
+import type { CriterionData } from "@/server/presentation-data";
 import {
   CalendarRange,
   Check,
@@ -84,6 +86,8 @@ interface PosterPlannerClientProps {
   initialCommitteeUsers?: AdminCommitteeUser[];
   authorGroups?: AuthorPosterGroup[];
   committeeGroups?: CommitteePosterGroup[];
+  criteria?: CriterionData[];
+  canEditCriteria?: boolean;
 }
 
 type MessageTone = "success" | "danger";
@@ -122,6 +126,8 @@ export function PosterPlannerClient({
   initialCommitteeUsers = [],
   authorGroups = [],
   committeeGroups = [],
+  criteria = [],
+  canEditCriteria = false,
 }: PosterPlannerClientProps) {
   const plannerId = useId();
   const [groups, setGroups] = useState(initialGroups);
@@ -130,6 +136,7 @@ export function PosterPlannerClient({
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("success");
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [rubricCriteria, setRubricCriteria] = useState(criteria);
   const [groupDrafts, setGroupDrafts] = useState<Record<string, { name: string }>>(
     Object.fromEntries(
       initialGroups.map((group) => [group.id, { name: group.name }])
@@ -160,6 +167,30 @@ export function PosterPlannerClient({
       ])
     )
   );
+
+  useEffect(() => {
+    setRubricCriteria(criteria);
+  }, [criteria]);
+
+  async function handleSaveCriteria(nextCriteria: CriterionData[]) {
+    const response = await fetch("/api/presentations/criteria", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "POSTER",
+        criteria: nextCriteria,
+      }),
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(data?.error || "Unable to save poster rubric");
+    }
+
+    setRubricCriteria(data?.criteria || nextCriteria);
+    setMessageTone("success");
+    setMessage("Poster rubric updated");
+  }
 
   const trackSections = useMemo(() => {
     const trackMap = new Map<string, { id: string; name: string }>();
@@ -489,6 +520,7 @@ export function PosterPlannerClient({
           title="Poster Presentation"
           subtitle="Your poster group, judges, and planned presentation slots"
         />
+        <RubricManager criteria={rubricCriteria} />
         {authorGroups.length === 0 ? (
           <EmptyState
             icon={<FolderKanban className="h-12 w-12" />}
@@ -543,6 +575,7 @@ export function PosterPlannerClient({
           title="Poster Review Queue"
           subtitle="Groups and slots assigned to you for poster review"
         />
+        <RubricManager criteria={rubricCriteria} />
         {committeeGroups.length === 0 ? (
           <EmptyState
             icon={<Users className="h-12 w-12" />}
@@ -599,6 +632,7 @@ export function PosterPlannerClient({
   if (mode === "hybrid") {
     return (
       <div className="space-y-8">
+        <RubricManager criteria={rubricCriteria} />
         {showAuthorView && (
           <div className="space-y-6">
             <SectionTitle
@@ -720,6 +754,12 @@ export function PosterPlannerClient({
       />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
+
+      <RubricManager
+        criteria={rubricCriteria}
+        canEdit={canEditCriteria}
+        onSave={handleSaveCriteria}
+      />
 
       {/* ── Summary Stats ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">

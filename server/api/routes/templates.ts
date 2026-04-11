@@ -47,7 +47,19 @@ app.post("/", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
 app.patch("/:id", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
   const { id } = c.req.param();
   const body = await c.req.json();
-  const [updated] = await db.update(templates).set(body).where(eq(templates.id, id)).returning();
+  const schema = z.object({
+    name: z.string().min(1).optional(),
+    description: z.string().optional(),
+    mimeType: z.string().min(1).optional(),
+  });
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const [updated] = await db
+    .update(templates)
+    .set(parsed.data)
+    .where(eq(templates.id, id))
+    .returning();
   if (!updated) return c.json({ error: "Not found" }, 404);
   return c.json({ template: updated });
 });

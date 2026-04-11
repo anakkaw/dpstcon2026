@@ -338,6 +338,17 @@ const en: Record<TranslationKey, string> = {
   "presentations.completedStatus": "Completed",
   "presentations.pendingAnnouncement": "Awaiting schedule and venue announcement",
   "presentations.evaluationCriteria": "Evaluation Criteria",
+  "presentations.rubricTitle": "Bilingual Rubric (TH / EN)",
+  "presentations.rubricSubtitle": "This rubric is shown to every role. Admin can update the wording and point allocation here.",
+  "presentations.editRubric": "Edit Rubric",
+  "presentations.saveRubric": "Save Rubric",
+  "presentations.totalPoints": "Total Points",
+  "presentations.totalPointsValue": "{n} points",
+  "presentations.levelLabel": "Level {n}",
+  "presentations.levelTitle": "Level Title",
+  "presentations.levelDescriptor": "Descriptor",
+  "presentations.thaiLabel": "TH",
+  "presentations.englishLabel": "EN",
 
   // ─── Users ────────────────────────────────────────────
   "users.title": "User Management",

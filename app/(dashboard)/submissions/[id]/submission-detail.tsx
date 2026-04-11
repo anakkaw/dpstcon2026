@@ -28,6 +28,7 @@ import { ReviewProgress } from "@/components/author/review-progress";
 import { PresentationCard } from "@/components/author/presentation-card";
 import { getNextAction, getRelevantDeadlineKey, getDaysUntil } from "@/lib/author-utils";
 import { displayNameTh } from "@/lib/display-name";
+import type { PresentationRubricCriterion } from "@/server/presentation-rubrics";
 import {
   UserPlus, Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
@@ -93,19 +94,13 @@ interface Props {
     room: string | null;
     duration: number | null;
   }[];
-  criteria?: {
-    id: string;
-    name: string;
-    description: string | null;
-    maxScore: number;
-    weight: number;
-  }[];
+  criteriaByType?: Record<"ORAL" | "POSTER", PresentationRubricCriterion[]>;
   deadlines?: Record<string, string>;
 }
 
 export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
-  reviewCounts, decision, presentations, criteria, deadlines,
+  reviewCounts, decision, presentations, criteriaByType, deadlines,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -660,8 +655,11 @@ export function SubmissionDetail({
       )}
 
       {/* Presentation Info (author view) */}
-      {presentations && presentations.length > 0 && criteria && (
-        <PresentationCard presentations={presentations} criteria={criteria} />
+      {presentations && presentations.length > 0 && criteriaByType && (
+        <PresentationCard
+          presentations={presentations}
+          criteriaByType={criteriaByType}
+        />
       )}
 
       {/* Admin: Assign Reviewer */}

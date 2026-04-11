@@ -6,7 +6,6 @@ import {
   storedFiles,
   decisions,
   presentationAssignments,
-  presentationCriteria,
   reviewAssignments,
   settings,
   userRoles,
@@ -16,6 +15,10 @@ import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasTrackRole, hasRole } from "@/lib/permissions";
 import { canRevealReviewerIdentity } from "@/server/access-policies";
+import {
+  getPresentationRubrics,
+  type PresentationType,
+} from "@/server/presentation-rubrics";
 
 export default async function SubmissionDetailPage({
   params,
@@ -97,7 +100,7 @@ export default async function SubmissionDetailPage({
   }
 
   // Fetch all supplementary data in parallel (was 7 sequential queries)
-  const [reviewers, files, assignmentRows, decision, presRows, criteria, deadlineRows] = await Promise.all([
+  const [reviewers, files, assignmentRows, decision, presRows, deadlineRows] = await Promise.all([
     // Reviewers list (admin only)
     canManageSubmission
       ? (async () => {
@@ -171,13 +174,19 @@ export default async function SubmissionDetailPage({
     db.query.decisions.findFirst({ where: eq(decisions.submissionId, id) }),
     // Presentation assignments
     db.select().from(presentationAssignments).where(eq(presentationAssignments.submissionId, id)),
-    // Presentation criteria
-    db.select().from(presentationCriteria),
     // Deadlines from settings
     db.select().from(settings).where(
       sql`${settings.key} IN ('submissionDeadline', 'reviewDeadline', 'notificationDate', 'cameraReadyDeadline')`
     ),
   ]);
+
+  const presentationTypes = Array.from(
+    new Set(presRows.map((presentation) => presentation.type as PresentationType))
+  );
+  const criteriaByType =
+    presentationTypes.length > 0
+      ? await getPresentationRubrics(presentationTypes)
+      : { ORAL: [], POSTER: [] };
 
   const reviewCounts = {
     total: assignmentRows.length,
@@ -216,13 +225,7 @@ export default async function SubmissionDetailPage({
         room: p.room,
         duration: p.duration,
       }))}
-      criteria={criteria.map((c) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description,
-        maxScore: c.maxScore,
-        weight: c.weight,
-      }))}
+      criteriaByType={criteriaByType}
       deadlines={deadlineMap}
     />
   );

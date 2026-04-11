@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Image as ImageIcon, Calendar, Plus, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download, Mic } from "lucide-react";
+import { Image as ImageIcon, Calendar, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download, Mic } from "lucide-react";
 import { TrackFilter } from "@/components/track-filter";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { RubricManager } from "@/components/presentations/rubric-manager";
 import { SectionTitle } from "@/components/ui/section-title";
 import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { displayNameTh } from "@/lib/display-name";
@@ -52,6 +53,7 @@ interface PresentationsClientProps {
   initialCriteria: CriterionData[];
   initialCommitteeUsers: CommitteeUser[];
   canManage: boolean;
+  canEditCriteria: boolean;
 }
 
 export function PresentationsClient({
@@ -60,6 +62,7 @@ export function PresentationsClient({
   initialCriteria,
   initialCommitteeUsers,
   canManage,
+  canEditCriteria,
 }: PresentationsClientProps) {
   const { t } = useI18n();
   const [presentations, setPresentations] = useState(initialPresentations);
@@ -72,9 +75,6 @@ export function PresentationsClient({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ scheduledAt: "", room: "", duration: "" });
   const [saving, setSaving] = useState(false);
-  const [showAddCriteria, setShowAddCriteria] = useState(false);
-  const [criteriaForm, setCriteriaForm] = useState({ name: "", description: "", maxScore: "10", weight: "1" });
-  const [addingCriteria, setAddingCriteria] = useState(false);
   const [trackFilter, setTrackFilter] = useState("");
   const [scoringLoaded, setScoringLoaded] = useState(false);
   const [assignPresId, setAssignPresId] = useState<string | null>(null);
@@ -181,40 +181,32 @@ export function PresentationsClient({
     setSaving(false);
   }
 
-  async function handleAddCriteria() {
-    if (!criteriaForm.name.trim()) return;
-
-    setAddingCriteria(true);
-
+  async function handleSaveCriteria(nextCriteria: CriterionData[]) {
     try {
       const res = await fetch("/api/presentations/criteria", {
-        method: "POST",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: criteriaForm.name,
-          description: criteriaForm.description || undefined,
-          maxScore: Number(criteriaForm.maxScore),
-          weight: Number(criteriaForm.weight),
+          type,
+          criteria: nextCriteria,
         }),
       });
 
+      const data = await res.json().catch(() => null);
+
       if (res.ok) {
-        const data = await res.json();
-        setCriteria([...criteria, data.criterion]);
-        setCriteriaForm({ name: "", description: "", maxScore: "10", weight: "1" });
-        setShowAddCriteria(false);
+        setCriteria(data?.criteria || nextCriteria);
         setMessageTone("success");
         setMessage(t("presentations.criteriaSaved"));
-      } else {
-        setMessageTone("danger");
-        setMessage(t("presentations.criteriaSaveError"));
+        return;
       }
+
+      setMessageTone("danger");
+      setMessage(data?.error || t("presentations.criteriaSaveError"));
     } catch {
       setMessageTone("danger");
       setMessage(t("presentations.criteriaSaveError"));
     }
-
-    setAddingCriteria(false);
   }
 
   async function handleAssignCommittee(presentationId: string) {
@@ -496,94 +488,16 @@ export function PresentationsClient({
         )
       )}
 
+      {!canManage && activeTab === "schedule" && (
+        <RubricManager criteria={criteria} />
+      )}
+
       {activeTab === "criteria" && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-ink">{t("presentations.criteriaCount", { n: criteria.length })}</h3>
-              <Button size="sm" onClick={() => setShowAddCriteria(!showAddCriteria)}>
-                <Plus className="h-3.5 w-3.5" />{showAddCriteria ? t("presentations.hide") : t("presentations.addCriteria")}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardBody className="space-y-3">
-            {showAddCriteria && (
-              <div className="space-y-3 rounded-xl border border-brand-200/60 bg-brand-50/30 p-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label={t("presentations.criteriaName")} required>
-                    <Input value={criteriaForm.name} onChange={(e) => setCriteriaForm({ ...criteriaForm, name: e.target.value })} placeholder={t("presentations.criteriaNamePlaceholder")} />
-                  </Field>
-                  <Field label={t("presentations.criteriaDesc")}>
-                    <Input value={criteriaForm.description} onChange={(e) => setCriteriaForm({ ...criteriaForm, description: e.target.value })} placeholder={t("presentations.criteriaDescPlaceholder")} />
-                  </Field>
-                  <Field label={t("presentations.maxScore")} hint={t("presentations.defaultMaxScore")}>
-                    <Input type="number" value={criteriaForm.maxScore} onChange={(e) => setCriteriaForm({ ...criteriaForm, maxScore: e.target.value })} />
-                  </Field>
-                  <Field label={t("presentations.weight")} hint={t("presentations.weightDesc")}>
-                    <Input type="number" value={criteriaForm.weight} onChange={(e) => setCriteriaForm({ ...criteriaForm, weight: e.target.value })} />
-                  </Field>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => setShowAddCriteria(false)}>{t("common.cancel")}</Button>
-                  <Button size="sm" onClick={handleAddCriteria} loading={addingCriteria} disabled={!criteriaForm.name.trim()}>{t("presentations.saveCriteria")}</Button>
-                </div>
-              </div>
-            )}
-
-            {criteria.length === 0 ? (
-              <EmptyState icon={<ClipboardList className="h-10 w-10" />} title={t("presentations.noCriteria")} body={t("presentations.noCriteriaDesc")} />
-            ) : (
-              <>
-                <div className="space-y-3 lg:hidden">
-                  {criteria.map((criterion, index) => (
-                    <div key={criterion.id} className="rounded-xl border border-border/60 bg-surface-alt p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
-                            {t("presentations.order")} #{index + 1}
-                          </p>
-                          <p className="mt-1 text-base font-semibold text-ink">{criterion.name}</p>
-                        </div>
-                        <Badge tone="info">x{criterion.weight}</Badge>
-                      </div>
-                      {criterion.description && (
-                        <p className="mt-3 text-sm leading-relaxed text-ink-muted">{criterion.description}</p>
-                      )}
-                      <p className="mt-3 text-sm text-ink">
-                        {t("presentations.maxScore")}: <span className="font-semibold">{criterion.maxScore}</span>
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="hidden overflow-x-auto rounded-lg border border-border/60 lg:block">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-surface-alt/80">
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.order")}</th>
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.criteriaName")}</th>
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.criteriaDesc")}</th>
-                        <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.maxScore")}</th>
-                        <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.weight")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {criteria.map((criterion, index) => (
-                        <tr key={criterion.id} className="border-t border-border/40 transition-colors hover:bg-surface-hover/50">
-                          <td className="px-4 py-2.5 text-ink-muted">{index + 1}</td>
-                          <td className="px-4 py-2.5 font-medium text-ink">{criterion.name}</td>
-                          <td className="px-4 py-2.5 text-ink-light">{criterion.description || "—"}</td>
-                          <td className="px-4 py-2.5 text-center"><Badge>{criterion.maxScore}</Badge></td>
-                          <td className="px-4 py-2.5 text-center"><Badge tone="info">x{criterion.weight}</Badge></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </CardBody>
-        </Card>
+        <RubricManager
+          criteria={criteria}
+          canEdit={canEditCriteria}
+          onSave={handleSaveCriteria}
+        />
       )}
 
       {activeTab === "committee" && (

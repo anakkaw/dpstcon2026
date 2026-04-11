@@ -3,7 +3,6 @@ import { db } from "@/server/db";
 import {
   presentationAssignments,
   presentationCommitteeAssignments,
-  presentationCriteria,
   presentationEvaluations,
   posterGroupJudges,
   posterGroupMembers,
@@ -24,6 +23,11 @@ import {
   getPosterSessionSettings,
 } from "@/server/poster-planner-data";
 import type { ServerAuthUser } from "@/server/auth-helpers";
+import {
+  getPresentationRubric,
+  savePresentationRubric,
+  type PresentationRubricCriterion,
+} from "@/server/presentation-rubrics";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -266,29 +270,47 @@ app.get("/", async (c) => {
 });
 
 app.get("/criteria", async (c) => {
-  const criteria = await db.select().from(presentationCriteria);
+  const type = (c.req.query("type") as "ORAL" | "POSTER" | undefined) ?? "ORAL";
+  const criteria = await getPresentationRubric(type);
   return c.json({ criteria });
 });
 
-app.post("/criteria", async (c) => {
+app.put("/criteria", async (c) => {
   const currentUser = c.get("user");
   if (!hasRole(currentUser, "ADMIN")) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
   const body = await c.req.json();
+  const levelSchema = z.object({
+    level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    titleTh: z.string().min(1),
+    titleEn: z.string().min(1),
+    descriptionTh: z.string().min(1),
+    descriptionEn: z.string().min(1),
+  });
+  const criterionSchema = z.object({
+    id: z.string().min(1),
+    nameTh: z.string().min(1),
+    nameEn: z.string().min(1),
+    descriptionTh: z.string().min(1),
+    descriptionEn: z.string().min(1),
+    totalPoints: z.number().min(0),
+    levels: z.array(levelSchema).length(5),
+  });
   const schema = z.object({
-    name: z.string().min(1),
-    description: z.string().optional(),
-    maxScore: z.number().min(1).default(10),
-    weight: z.number().min(1).default(1),
+    type: z.enum(["ORAL", "POSTER"]),
+    criteria: z.array(criterionSchema).min(1),
   });
 
   const parsed = schema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
 
-  const [criterion] = await db.insert(presentationCriteria).values(parsed.data).returning();
-  return c.json({ criterion }, 201);
+  const criteria = await savePresentationRubric(
+    parsed.data.type,
+    parsed.data.criteria as PresentationRubricCriterion[]
+  );
+  return c.json({ criteria });
 });
 
 app.post("/schedule", async (c) => {
@@ -942,7 +964,7 @@ app.get("/scoring-dashboard", async (c) => {
           with: { judge: { columns: { id: true, name: true } } },
         })
       : Promise.resolve([]),
-    db.select().from(presentationCriteria),
+    getPresentationRubric("ORAL"),
   ]);
 
   const scoresByPresentation: Record<string, (typeof evaluations)[number][]> = {};

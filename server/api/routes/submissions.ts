@@ -223,6 +223,20 @@ async function canAccessSubmission(
   return false;
 }
 
+function canManageSubmissionAsStaff(
+  currentUser: AuthEnv["Variables"]["user"],
+  submission: { trackId: string | null }
+) {
+  if (hasRole(currentUser, "ADMIN")) {
+    return true;
+  }
+
+  return (
+    !!submission.trackId &&
+    hasTrackRole(currentUser, submission.trackId, "PROGRAM_CHAIR")
+  );
+}
+
 async function getSubmissionAccessFlags(
   currentUser: AuthEnv["Variables"]["user"],
   submission: { id: string; authorId: string; trackId: string | null }
@@ -475,20 +489,21 @@ app.patch("/:id", async (c) => {
   if (!existing) return c.json({ error: "Not found" }, 404);
 
   // Only admin/chair can update others' submissions; status changes require admin/chair
-  if (existing.authorId !== currentUser.id && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+  const canManageAsStaff = canManageSubmissionAsStaff(currentUser, existing);
+  if (existing.authorId !== currentUser.id && !canManageAsStaff) {
     return c.json({ error: "Forbidden" }, 403);
   }
   if (
     existing.authorId === currentUser.id &&
-    !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR") &&
+    !canManageAsStaff &&
     (!hasAuthorSubmissionRole(currentUser) || !canAuthorEditSubmission(existing.status))
   ) {
     return c.json({ error: "Authors can only edit submission metadata while the paper is in draft" }, 403);
   }
-  if (parsed.data.status && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+  if (parsed.data.status && !canManageAsStaff) {
     return c.json({ error: "Forbidden — only chairs can change status" }, 403);
   }
-  if (parsed.data.paperCode && !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+  if (parsed.data.paperCode && !canManageAsStaff) {
     return c.json({ error: "Forbidden — only chairs can change Paper ID" }, 403);
   }
 
@@ -597,7 +612,7 @@ app.post("/:id/resend-advisor-approval", async (c) => {
   });
   if (!submission) return c.json({ error: "Not found" }, 404);
 
-  const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const isStaff = canManageSubmissionAsStaff(currentUser, submission);
   const isOwner = submission.authorId === currentUser.id;
   if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
     return c.json({ error: "Forbidden" }, 403);
@@ -808,7 +823,7 @@ app.post("/:id/upload-url", async (c) => {
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
-  const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const isStaff = canManageSubmissionAsStaff(currentUser, submission);
   const isOwner = submission.authorId === currentUser.id;
   if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
     return c.json({ error: "Forbidden" }, 403);
@@ -1000,7 +1015,7 @@ app.delete("/:id/files/:fileId", async (c) => {
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
 
-  const canManageAsStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const canManageAsStaff = canManageSubmissionAsStaff(currentUser, submission);
   const canManageOwnDraft =
     submission.authorId === currentUser.id &&
     submission.status === "DRAFT" &&

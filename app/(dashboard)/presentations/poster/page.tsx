@@ -7,6 +7,7 @@ import {
   getPosterPlannerPageData,
 } from "@/server/poster-planner-data";
 import { hasRole } from "@/lib/permissions";
+import { getPresentationRubric } from "@/server/presentation-rubrics";
 
 export default async function PosterPresentationPage() {
   const authContext = await getServerAuthContext();
@@ -16,6 +17,7 @@ export default async function PosterPresentationPage() {
   }
 
   const currentUser = authContext.user;
+  const criteria = await getPresentationRubric("POSTER");
 
   if (hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
     const data = await getPosterPlannerPageData(currentUser);
@@ -27,6 +29,8 @@ export default async function PosterPresentationPage() {
         initialGroups={data.groups}
         initialUngroupedPosters={data.ungroupedPosters}
         initialCommitteeUsers={data.committeeUsers}
+        criteria={criteria}
+        canEditCriteria={hasRole(currentUser, "ADMIN")}
       />
     );
   }
@@ -52,6 +56,7 @@ export default async function PosterPresentationPage() {
         mode={mode}
         authorGroups={authorGroups}
         committeeGroups={committeeGroups}
+        criteria={criteria}
       />
     );
   }

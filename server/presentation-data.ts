@@ -5,11 +5,14 @@ import { db } from "@/server/db";
 import {
   presentationAssignments,
   presentationCommitteeAssignments,
-  presentationCriteria,
   submissions,
   user,
   userRoles,
 } from "@/server/db/schema";
+import {
+  getPresentationRubric,
+  type PresentationRubricCriterion,
+} from "@/server/presentation-rubrics";
 
 export type PresentationType = "ORAL" | "POSTER";
 
@@ -39,13 +42,7 @@ export interface PresentationData {
   };
 }
 
-export interface CriterionData {
-  id: string;
-  name: string;
-  description: string | null;
-  maxScore: number;
-  weight: number;
-}
+export type CriterionData = PresentationRubricCriterion;
 
 export interface CommitteeUser {
   id: string;
@@ -168,13 +165,13 @@ async function getCommitteeUsers(currentUser: ServerAuthUser): Promise<Committee
 export async function getPresentationPageData(currentUser: ServerAuthUser, type: PresentationType) {
   const [presentations, criteria, committeeUsers] = await Promise.all([
     getPresentations(currentUser, type),
-    db.select().from(presentationCriteria),
+    getPresentationRubric(type),
     getCommitteeUsers(currentUser),
   ]);
 
   return {
     presentations,
-    criteria: criteria as CriterionData[],
+    criteria,
     committeeUsers,
   };
 }

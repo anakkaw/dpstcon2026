@@ -732,6 +732,10 @@ app.delete("/:id", requireRole("ADMIN"), async (c) => {
     // If force-deleting, remove all submissions and their cascading data first.
     if (userSubs.length > 0) {
       const subIds = userSubs.map((s) => s.id);
+      const filesToDelete = await db
+        .select({ storedKey: storedFiles.storedKey })
+        .from(storedFiles)
+        .where(inArray(storedFiles.submissionId, subIds));
 
       // Explicitly delete submission-related data that may not cascade in DB.
       await db.delete(storedFiles).where(inArray(storedFiles.submissionId, subIds));
@@ -760,6 +764,15 @@ app.delete("/:id", requireRole("ADMIN"), async (c) => {
 
       // Finally delete the submissions themselves
       await db.delete(submissions).where(inArray(submissions.id, subIds));
+
+      for (const file of filesToDelete) {
+        try {
+          const { deleteFile } = await import("@/server/r2");
+          await deleteFile(file.storedKey);
+        } catch {
+          // Best-effort cleanup to avoid blocking user deletion on storage failures.
+        }
+      }
     }
 
     // Preserve historical records that keep optional user references (SET NULL).

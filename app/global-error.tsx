@@ -40,15 +40,11 @@ export default function GlobalError({
   error: Error & { digest?: string };
   unstable_retry: () => void;
 }) {
-  const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
+  const [locale] = useState<Locale>(() => getClientLocale());
 
   useEffect(() => {
     console.error(error);
   }, [error]);
-
-  useEffect(() => {
-    setLocale(getClientLocale());
-  }, []);
 
   const copy = COPY[locale];
 

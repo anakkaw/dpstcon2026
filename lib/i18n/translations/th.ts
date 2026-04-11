@@ -340,6 +340,17 @@ const th = {
   "presentations.completedStatus": "เสร็จสิ้น",
   "presentations.pendingAnnouncement": "รอประกาศกำหนดการและสถานที่",
   "presentations.evaluationCriteria": "เกณฑ์การประเมิน",
+  "presentations.rubricTitle": "รูบริกสองภาษา (TH / EN)",
+  "presentations.rubricSubtitle": "รูบริกชุดนี้จะแสดงให้ทุกบทบาทเห็น และผู้ดูแลระบบสามารถแก้ไขข้อความรวมถึงคะแนนของแต่ละเกณฑ์ได้จากส่วนนี้",
+  "presentations.editRubric": "แก้ไขรูบริก",
+  "presentations.saveRubric": "บันทึกรูบริก",
+  "presentations.totalPoints": "คะแนนรวมของเกณฑ์",
+  "presentations.totalPointsValue": "{n} คะแนน",
+  "presentations.levelLabel": "ระดับ {n}",
+  "presentations.levelTitle": "ชื่อระดับ",
+  "presentations.levelDescriptor": "คำอธิบายระดับ",
+  "presentations.thaiLabel": "TH",
+  "presentations.englishLabel": "EN",
 
   // ─── Users ────────────────────────────────────────────
   "users.title": "จัดการผู้ใช้",

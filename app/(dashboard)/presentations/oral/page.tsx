@@ -13,6 +13,7 @@ export default async function OralPresentationPage() {
 
   const data = await getPresentationPageData(authContext.user, "ORAL");
   const canManage = hasRole(authContext.user, "ADMIN", "PROGRAM_CHAIR");
+  const canEditCriteria = hasRole(authContext.user, "ADMIN");
 
   return (
     <PresentationsClient
@@ -21,6 +22,7 @@ export default async function OralPresentationPage() {
       initialCriteria={data.criteria}
       initialCommitteeUsers={data.committeeUsers}
       canManage={canManage}
+      canEditCriteria={canEditCriteria}
     />
   );
 }
