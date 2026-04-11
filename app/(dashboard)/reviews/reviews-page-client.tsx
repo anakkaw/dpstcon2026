@@ -4,7 +4,7 @@ import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
@@ -72,8 +72,9 @@ export function ReviewsPageClient({
 }) {
   const { t, locale } = useI18n();
   const assignmentLabels = getAssignmentStatusLabels(t);
-  const { roles } = useDashboardAuth();
-  const isAdmin = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
+  const { roles, id: currentUserId } = useDashboardAuth();
+  const isAdmin = roles.includes("ADMIN");
+  const canManageReviews = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
 
   const [assignments, setAssignments] = useState<AssignmentData[]>(initialAssignments);
   const [reviewerUsers] = useState<ReviewerUser[]>(initialReviewerUsers);
@@ -231,7 +232,7 @@ export function ReviewsPageClient({
       }
     });
 
-  if (!isAdmin) {
+  if (!canManageReviews) {
     const myFiltered = assignments.filter((assignment) => !trackFilter || assignment.submission.track?.id === trackFilter);
     return (
       <div className="space-y-5">
@@ -292,6 +293,44 @@ export function ReviewsPageClient({
         title={t("reviews.management")}
         subtitle={t("reviews.summary", { submissions: groups.length, assignments: totalAssignments })}
       />
+
+      {/* Personal review tasks for PROGRAM_CHAIR who is also a reviewer */}
+      {roles.includes("REVIEWER") && (() => {
+        const myTasks = assignments.filter((a) => a.reviewer?.id === currentUserId && a.status !== "COMPLETED");
+        if (myTasks.length === 0) return null;
+        return (
+          <Card accent="info">
+            <CardHeader>
+              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <ClipboardCheck className="h-4 w-4" />
+                {t("reviews.myReviewTasks")} ({myTasks.length})
+              </h3>
+            </CardHeader>
+            <CardBody className="space-y-2">
+              {myTasks.map((assignment) => (
+                <Link key={assignment.id} href={`/submissions/${assignment.submission.id}`}>
+                  <div className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-alt transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-ink truncate block">{assignment.submission.title}</span>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-ink-muted">
+                        {assignment.submission.track && <Badge tone="info">{assignment.submission.track.name}</Badge>}
+                        {assignment.dueDate && (
+                          <span className={isOverdue(assignment.dueDate) ? "text-danger font-medium" : isDueSoon(assignment.dueDate) ? "text-amber-600 font-medium" : ""}>
+                            {t("reviews.due")} {formatDate(assignment.dueDate, locale)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Badge tone={STATUS_COLORS[assignment.status] || "neutral"}>
+                      {assignmentLabels[assignment.status] || assignment.status}
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+            </CardBody>
+          </Card>
+        );
+      })()}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <SummaryStatCard label={t("reviews.submissions")} value={groups.length} icon={<ClipboardCheck className="h-5 w-5" />} color="blue" />

@@ -96,11 +96,14 @@ interface Props {
   }[];
   criteriaByType?: Record<"ORAL" | "POSTER", PresentationRubricCriterion[]>;
   deadlines?: Record<string, string>;
+  isAssignedReviewer?: boolean;
+  reviewerAssignmentId?: string | null;
 }
 
 export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
   reviewCounts, decision, presentations, criteriaByType, deadlines,
+  isAssignedReviewer, reviewerAssignmentId,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -130,6 +133,12 @@ export function SubmissionDetail({
   const [discussionMsg, setDiscussionMsg] = useState("");
   const [posting, setPosting] = useState(false);
   const [resendingAdvisor, setResendingAdvisor] = useState(false);
+
+  // Review form state
+  const [reviewRecommendation, setReviewRecommendation] = useState("");
+  const [reviewCommentsToAuthor, setReviewCommentsToAuthor] = useState("");
+  const [reviewCommentsToChair, setReviewCommentsToChair] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   // Computed values for author view
   const nextAction = isAuthor ? getNextAction(submission.status, !!submission.fileUrl) : null;
@@ -244,6 +253,37 @@ export function SubmissionDetail({
       router.refresh();
     } catch {}
     setPosting(false);
+  }
+
+  async function handleSubmitReview() {
+    if (!reviewRecommendation || !reviewCommentsToAuthor.trim()) return;
+    setSubmittingReview(true);
+    try {
+      const res = await fetch("/api/reviews/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: submission.id,
+          assignmentId: reviewerAssignmentId || undefined,
+          commentsToAuthor: reviewCommentsToAuthor,
+          commentsToChair: reviewCommentsToChair || undefined,
+          recommendation: reviewRecommendation,
+        }),
+      });
+      if (res.ok) {
+        setMessage("ส่งผลรีวิวเรียบร้อยแล้ว");
+        setReviewRecommendation("");
+        setReviewCommentsToAuthor("");
+        setReviewCommentsToChair("");
+        router.refresh();
+      } else {
+        const data = await res.json();
+        setMessage(data.error || "เกิดข้อผิดพลาดในการส่งรีวิว");
+      }
+    } catch {
+      setMessage("เกิดข้อผิดพลาดในการส่งรีวิว");
+    }
+    setSubmittingReview(false);
   }
 
   async function handleResendAdvisorApproval() {
@@ -608,6 +648,56 @@ export function SubmissionDetail({
               </div>
             )}
           </CardBody>
+        </Card>
+      )}
+
+      {/* Review Submission Form — for assigned reviewers */}
+      {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (
+        <Card accent="brand">
+          <CardHeader>
+            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+              <Send className="h-4 w-4" />
+              ส่งผลรีวิว
+            </h3>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Field label="คำแนะนำ" htmlFor="reviewRecommendation" required>
+              <Select id="reviewRecommendation" value={reviewRecommendation} onChange={(e) => setReviewRecommendation(e.target.value)}>
+                <option value="">— เลือกคำแนะนำ —</option>
+                {Object.entries(RECOMMENDATION_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="ความคิดเห็นถึง Author" htmlFor="reviewCommentsToAuthor" required>
+              <Textarea
+                id="reviewCommentsToAuthor"
+                value={reviewCommentsToAuthor}
+                onChange={(e) => setReviewCommentsToAuthor(e.target.value)}
+                placeholder="ระบุความคิดเห็นและข้อเสนอแนะถึงผู้เขียน..."
+                rows={5}
+              />
+            </Field>
+            <Field label="ความคิดเห็นถึงประธานสาขา (ไม่บังคับ)" htmlFor="reviewCommentsToChair">
+              <Textarea
+                id="reviewCommentsToChair"
+                value={reviewCommentsToChair}
+                onChange={(e) => setReviewCommentsToChair(e.target.value)}
+                placeholder="ข้อความลับเฉพาะประธานสาขา (author จะไม่เห็น)..."
+                rows={3}
+              />
+            </Field>
+          </CardBody>
+          <CardFooter className="flex justify-end">
+            <Button
+              onClick={handleSubmitReview}
+              loading={submittingReview}
+              disabled={!reviewRecommendation || !reviewCommentsToAuthor.trim()}
+            >
+              <Send className="h-3.5 w-3.5" />
+              ส่งผลรีวิว
+            </Button>
+          </CardFooter>
         </Card>
       )}
 

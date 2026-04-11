@@ -31,6 +31,7 @@ export default async function SubmissionDetailPage({
 
   const currentUser = authContext.user;
   let isAssignedReviewer = false;
+  let reviewerAssignmentId: string | null = null;
   let isTrackHead = false;
   let canManageSubmission = hasRole(currentUser, "ADMIN");
 
@@ -51,22 +52,28 @@ export default async function SubmissionDetailPage({
 
   if (!submission) notFound();
 
-  let hasAccess = hasRole(currentUser, "ADMIN");
-
-  if (!hasAccess && submission.authorId === currentUser.id) {
-    hasAccess = true;
-  }
-
-  if (!hasAccess && hasRole(currentUser, "REVIEWER")) {
-    const assignment = await db.query.reviewAssignments.findFirst({
+  // Check reviewer assignment independently of access chain
+  // so PROGRAM_CHAIR who is also a reviewer gets isAssignedReviewer set correctly
+  if (hasRole(currentUser, "REVIEWER")) {
+    const reviewerAssignment = await db.query.reviewAssignments.findFirst({
       where: and(
         eq(reviewAssignments.submissionId, id),
         eq(reviewAssignments.reviewerId, currentUser.id)
       ),
       columns: { id: true },
     });
-    isAssignedReviewer = !!assignment;
-    hasAccess = !!assignment;
+    isAssignedReviewer = !!reviewerAssignment;
+    reviewerAssignmentId = reviewerAssignment?.id ?? null;
+  }
+
+  let hasAccess = hasRole(currentUser, "ADMIN");
+
+  if (!hasAccess && submission.authorId === currentUser.id) {
+    hasAccess = true;
+  }
+
+  if (!hasAccess && isAssignedReviewer) {
+    hasAccess = true;
   }
 
   if (!hasAccess && hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
@@ -227,6 +234,8 @@ export default async function SubmissionDetailPage({
       }))}
       criteriaByType={criteriaByType}
       deadlines={deadlineMap}
+      isAssignedReviewer={isAssignedReviewer}
+      reviewerAssignmentId={reviewerAssignmentId}
     />
   );
 }
