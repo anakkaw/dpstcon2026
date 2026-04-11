@@ -1,8 +1,25 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Noto_Sans_Thai } from "next/font/google";
+import clsx from "clsx";
 import { I18nProvider } from "@/lib/i18n";
 import { getServerLocale, getServerTranslator } from "@/lib/i18n/server";
 import "./globals.css";
+
+const notoSansThai = Noto_Sans_Thai({
+  subsets: ["latin", "thai"],
+  display: "swap",
+  variable: "--font-dpst-body",
+  weight: "variable",
+  fallback: [
+    "ui-sans-serif",
+    "system-ui",
+    "Segoe UI",
+    "Tahoma",
+    "Leelawadee UI",
+    "sans-serif",
+  ],
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getServerTranslator();
@@ -21,7 +38,7 @@ export default async function RootLayout({
   const locale = await getServerLocale();
 
   return (
-    <html lang={locale} className="h-full">
+    <html lang={locale} className={clsx("h-full", notoSansThai.variable)}>
       <body className="min-h-full flex flex-col antialiased">
         <I18nProvider initialLocale={locale}>
           {children}

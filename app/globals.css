@@ -37,10 +37,10 @@
   --color-side-hover: rgba(255, 255, 255, 0.08);
   --color-side-divider: rgba(255, 255, 255, 0.08);
 
-  /* Typography */
-  --font-sans: var(--font-dpst-body), "Segoe UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-dpst-heading), var(--font-dpst-body), "Segoe UI", Tahoma, system-ui, sans-serif;
-  --font-body: var(--font-dpst-body), "Segoe UI", Tahoma, system-ui, sans-serif;
+  /* Typography: --font-dpst-body is set by next/font in app/layout.tsx */
+  --font-sans: var(--font-dpst-body), "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-dpst-body), "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-dpst-body), "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
 
   /* Shadows */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
@@ -57,11 +57,6 @@
   --shadow-amber-glow: 0 8px 16px -4px rgba(245, 158, 11, 0.35);
   --shadow-red-glow: 0 8px 16px -4px rgba(239, 68, 68, 0.35);
   --shadow-violet-glow: 0 8px 16px -4px rgba(139, 92, 246, 0.35);
-}
-
-:root {
-  --font-dpst-body: "Segoe UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
-  --font-dpst-heading: var(--font-dpst-body);
 }
 
 body {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -10,23 +10,32 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 import type { CriterionData } from "@/server/presentation-data";
-import { ClipboardList, PencilLine } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ChevronDown, ClipboardList, PencilLine } from "lucide-react";
 
 interface RubricManagerProps {
   criteria: CriterionData[];
   canEdit?: boolean;
   onSave?: (criteria: CriterionData[]) => Promise<void>;
+  /** When true, users can collapse the criteria body (header stays visible). */
+  collapsible?: boolean;
+  /** Initial expanded state when `collapsible` is true. */
+  defaultExpanded?: boolean;
 }
 
 export function RubricManager({
   criteria,
   canEdit = false,
   onSave,
+  collapsible = true,
+  defaultExpanded = true,
 }: RubricManagerProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<CriterionData[]>(criteria);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const panelId = useId();
 
   useEffect(() => {
     setDraft(criteria);
@@ -44,19 +53,50 @@ export function RubricManager({
   }
 
   const items = editing ? draft : criteria;
+  const showDetails = !collapsible || expanded || editing;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <ClipboardList className="h-4 w-4" />
-              {t("presentations.rubricTitle")}
-            </h3>
-            <p className="mt-1 text-sm text-ink-muted">
-              {t("presentations.rubricSubtitle")}
-            </p>
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            {collapsible ? (
+              <button
+                type="button"
+                onClick={() => setExpanded((prev) => !prev)}
+                disabled={editing}
+                aria-expanded={showDetails}
+                aria-controls={panelId}
+                aria-label={
+                  showDetails ? t("presentations.rubricHideDetails") : t("presentations.rubricShowDetails")
+                }
+                title={
+                  showDetails ? t("presentations.rubricHideDetails") : t("presentations.rubricShowDetails")
+                }
+                className={cn(
+                  "mt-0.5 shrink-0 rounded-lg p-1 text-ink-muted transition-colors",
+                  "hover:bg-surface-hover hover:text-ink",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40",
+                  editing && "cursor-not-allowed opacity-40"
+                )}
+              >
+                <ChevronDown
+                  className={cn("h-4 w-4 transition-transform duration-200", showDetails && "rotate-180")}
+                  aria-hidden
+                />
+              </button>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <ClipboardList className="h-4 w-4 shrink-0" />
+                {t("presentations.rubricTitle")}
+              </h3>
+              {showDetails ? (
+                <p className="mt-1 text-sm text-ink-muted">
+                  {t("presentations.rubricSubtitle")}
+                </p>
+              ) : null}
+            </div>
           </div>
           {canEdit ? (
             <div className="flex gap-2">
@@ -77,7 +117,13 @@ export function RubricManager({
                   </Button>
                 </>
               ) : (
-                <Button size="sm" onClick={() => setEditing(true)}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setExpanded(true);
+                    setEditing(true);
+                  }}
+                >
                   <PencilLine className="h-3.5 w-3.5" />
                   {t("presentations.editRubric")}
                 </Button>
@@ -86,7 +132,8 @@ export function RubricManager({
           ) : null}
         </div>
       </CardHeader>
-      <CardBody className="space-y-4">
+      {showDetails ? (
+      <CardBody id={panelId} className="space-y-4">
         {items.length === 0 ? (
           <EmptyState
             icon={<ClipboardList className="h-10 w-10" />}
@@ -338,6 +385,7 @@ export function RubricManager({
           ))
         )}
       </CardBody>
+      ) : null}
     </Card>
   );
 }
