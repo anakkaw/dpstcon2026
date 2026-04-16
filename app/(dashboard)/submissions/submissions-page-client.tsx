@@ -8,7 +8,6 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
 import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { TrackFilter } from "@/components/track-filter";
 import { Alert } from "@/components/ui/alert";
@@ -21,7 +20,7 @@ import { useDebounce } from "@/lib/hooks/use-debounce";
 import {
   Plus, FileText, Download, ChevronUp, ChevronDown, ArrowUpDown,
   ExternalLink, Users, Search, X, CheckCircle2, XCircle, Clock,
-  Eye, Trash2,
+  Eye, Trash2, MoreHorizontal, Pencil,
 } from "lucide-react";
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { getNextAction } from "@/lib/author-utils";
@@ -58,6 +57,11 @@ export function SubmissionsPageClient({
   const [trackFilter, setTrackFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Reset to page 1 whenever filters change
+  const setTrackFilterAndReset = useCallback((v: string) => { setTrackFilter(v); setPage(1); }, []);
+  const setStatusFilterAndReset = useCallback((v: string) => { setStatusFilter(v); setPage(1); }, []);
+  const setSearchQueryAndReset = useCallback((v: string) => { setSearchQuery(v); setPage(1); }, []);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
@@ -72,6 +76,10 @@ export function SubmissionsPageClient({
 
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [actionsOpenId, setActionsOpenId] = useState<string | null>(null);
+
+  const PAGE_SIZE = 25;
 
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((prev) => {
@@ -82,6 +90,7 @@ export function SubmissionsPageClient({
       setSortDir("desc");
       return key;
     });
+    setPage(1);
   }, []);
 
   async function savePaperCode(submissionId: string) {
@@ -246,6 +255,9 @@ export function SubmissionsPageClient({
       }),
     [submissions, trackFilter, statusFilter, debouncedSearch, sortKey, sortDir, statusLabels]);
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pagedFiltered = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   if (!isAdmin) {
     return (
       <div className="space-y-5">
@@ -356,30 +368,31 @@ export function SubmissionsPageClient({
         <SummaryStatCard label={t("dashboard.pending")} value={pending} icon={<Clock className="h-5 w-5" />} color="gray" />
       </div>
 
-      <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-        <div className="relative w-full lg:max-w-xl xl:max-w-2xl">
+      {/* ── Unified toolbar: search + track + status in one row ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1 lg:max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted pointer-events-none" />
           <input
             type="text"
             placeholder={t("submissions.searchPlaceholder")}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQueryAndReset(e.target.value)}
             className="w-full pl-9 pr-8 py-2 text-sm border border-border/60 rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink">
+            <button type="button" aria-label={t("common.clear")} onClick={() => setSearchQueryAndReset("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink">
               <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
-        <div className="flex w-full gap-1 overflow-x-auto pb-1 lg:flex-wrap">
+        <TrackFilter value={trackFilter} onChange={setTrackFilterAndReset} counts={trackCounts} />
+        <div className="flex flex-wrap gap-1">
           {statusTabs.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
+              type="button"
+              onClick={() => setStatusFilterAndReset(tab.key)}
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                 statusFilter === tab.key
                   ? "bg-brand-500 text-white shadow-sm"
                   : "bg-surface-alt text-ink-muted hover:text-ink hover:bg-gray-200/80"
@@ -518,157 +531,152 @@ export function SubmissionsPageClient({
             })}
           </div>
 
+          {/* ── Desktop 7-column table ── */}
           <Card className="hidden lg:block">
             <CardBody className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50/80 border-b border-border/60">
-                    <th className="w-10 px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id))}
-                        onChange={() => toggleSelectAll(filtered.map((s) => s.id))}
-                        className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
-                      />
-                    </th>
-                    <th className="w-12 px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">#</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">Paper ID</th>
-                    <SortTh label={t("submissions.title")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%]" />
-                    <SortTh label={t("submissions.author")} sortKey_="author" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortTh label={t("submissions.track")} sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortTh label={t("submissions.reviewsCol")} sortKey_="reviews" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
-                    <SortTh label={t("submissions.submitted")} sortKey_="createdAt" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortTh label={t("submissions.status")} sortKey_="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("submissions.advisorCol")}</th>
-                    <th className="w-10" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((sub, idx) => {
-                    const totalAssign = sub.reviewAssignments?.length || 0;
-                    const completedAssign = sub.reviewAssignments?.filter((a) => a.status === "COMPLETED").length || 0;
-                    return (
-                      <tr key={sub.id} className={`border-t border-border/40 transition-colors group ${selectedIds.has(sub.id) ? "bg-red-50/40" : "hover:bg-blue-50/30"}`}>
-                        <td className="px-4 py-3.5">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(sub.id)}
-                            onChange={() => toggleSelect(sub.id)}
-                            className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
-                          />
-                        </td>
-                        <td className="px-4 py-3.5 text-xs text-ink-muted font-medium">{idx + 1}</td>
-                        <td className="px-4 py-3.5">
-                          {editingPaperId === sub.id ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                value={paperCodeDraft}
-                                onChange={(event) => setPaperCodeDraft(event.target.value.toUpperCase())}
-                                className="min-w-[120px]"
-                              />
-                              <Button size="sm" onClick={() => savePaperCode(sub.id)} loading={savingPaperCode}>
-                                Save
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => setEditingPaperId(null)}>
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              className="font-mono text-xs font-semibold text-brand-700 hover:text-brand-800"
-                              onClick={() => {
-                                setEditingPaperId(sub.id);
-                                setPaperCodeDraft(sub.paperCode || "");
-                              }}
-                            >
-                              {sub.paperCode || "Set ID"}
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <Link href={`/submissions/${sub.id}`} className="group/link">
-                            <p className="font-medium text-ink leading-snug line-clamp-2 group-hover/link:text-brand-600 transition-colors">{sub.title}</p>
-                            {sub.abstract && <p className="text-[11px] text-ink-muted mt-0.5 line-clamp-1">{truncate(sub.abstract, 80)}</p>}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <div>
-                            <p className="text-xs font-medium text-ink whitespace-nowrap">{displayNameTh(sub.author)}</p>
-                            <p className="text-[11px] text-ink-muted">{sub.author.email}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {sub.track ? <Badge tone="info">{sub.track.name}</Badge> : <span className="text-ink-muted text-xs">—</span>}
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          {totalAssign > 0 ? (
-                            <div className="flex items-center justify-center gap-1.5">
-                              <div className="flex items-center gap-1 text-xs font-medium text-ink">
-                                <Users className="h-3 w-3 text-ink-muted" />
-                                <span className={completedAssign === totalAssign ? "text-emerald-600" : ""}>{completedAssign}/{totalAssign}</span>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50/80 border-b border-border/60">
+                      <th className="w-10 px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id))}
+                          onChange={() => toggleSelectAll(filtered.map((s) => s.id))}
+                          aria-label={t("submissions.selectAll")}
+                          className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                        />
+                      </th>
+                      <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">
+                        Paper ID
+                      </th>
+                      <SortTh label={t("submissions.title")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%]" />
+                      <SortTh label={t("submissions.track")} sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                      <SortTh label={t("submissions.reviewsCol")} sortKey_="reviews" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                      <SortTh label={t("submissions.status")} sortKey_="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                      <th className="w-10" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedFiltered.map((sub) => {
+                      const totalAssign = sub.reviewAssignments?.length || 0;
+                      const completedAssign = sub.reviewAssignments?.filter((a) => a.status === "COMPLETED").length || 0;
+                      return (
+                        <tr key={sub.id} className={`border-t border-border/40 transition-colors group ${selectedIds.has(sub.id) ? "bg-brand-50/40" : "hover:bg-surface-1"}`}>
+                          {/* checkbox */}
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(sub.id)}
+                              onChange={() => toggleSelect(sub.id)}
+                              className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                            />
+                          </td>
+                          {/* paper code — popover edit */}
+                          <td className="relative px-3 py-3">
+                            <PaperCodeCell
+                              submissionId={sub.id}
+                              paperCode={sub.paperCode}
+                              open={editingPaperId === sub.id}
+                              draft={paperCodeDraft}
+                              saving={savingPaperCode}
+                              onOpen={() => { setEditingPaperId(sub.id); setPaperCodeDraft(sub.paperCode || ""); }}
+                              onClose={() => setEditingPaperId(null)}
+                              onDraftChange={(v) => setPaperCodeDraft(v.toUpperCase())}
+                              onSave={() => savePaperCode(sub.id)}
+                            />
+                          </td>
+                          {/* title + author + time */}
+                          <td className="px-4 py-3">
+                            <Link href={`/submissions/${sub.id}`} className="group/link block">
+                              <p className="font-medium text-ink leading-snug line-clamp-2 group-hover/link:text-brand-600 transition-colors">{sub.title}</p>
+                              <p className="mt-0.5 text-[11px] text-ink-muted">
+                                {displayNameTh(sub.author)} · {formatDate(sub.createdAt, locale)}
+                              </p>
+                            </Link>
+                          </td>
+                          {/* track */}
+                          <td className="px-4 py-3">
+                            {sub.track ? <Badge tone="info">{sub.track.name}</Badge> : <span className="text-ink-muted text-xs">—</span>}
+                          </td>
+                          {/* reviews */}
+                          <td className="px-4 py-3 text-center">
+                            {totalAssign > 0 ? (
+                              <div className="inline-flex items-center gap-1.5">
+                                <Users className="h-3 w-3 text-ink-muted" aria-hidden="true" />
+                                <span className={`text-xs font-medium ${completedAssign === totalAssign ? "text-emerald-600" : "text-ink"}`}>{completedAssign}/{totalAssign}</span>
+                                <div className="w-10 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${completedAssign === totalAssign ? "bg-emerald-500" : "bg-blue-500"}`}
+                                    style={{ width: `${(completedAssign / totalAssign) * 100}%` }}
+                                  />
+                                </div>
                               </div>
-                              <div className="w-10 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${completedAssign === totalAssign ? "bg-emerald-500" : "bg-blue-500"}`}
-                                  style={{ width: `${totalAssign > 0 ? (completedAssign / totalAssign) * 100 : 0}%` }}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-ink-muted text-xs">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-xs text-ink-muted whitespace-nowrap">{formatDate(sub.createdAt, locale)}</td>
-                        <td className="px-4 py-3.5 text-center">
-                          <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"} dot>
-                            {statusLabels[sub.status] || sub.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {sub.advisorApprovalStatus === "APPROVED" ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              {sub.advisorName ? truncate(sub.advisorName, 20) : "—"}
-                            </span>
-                          ) : sub.advisorApprovalStatus === "PENDING" ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-amber-600">
-                              <Clock className="h-3.5 w-3.5" />
-                              {sub.advisorName ? truncate(sub.advisorName, 20) : "—"}
-                            </span>
-                          ) : sub.advisorApprovalStatus === "REJECTED" ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-red-500">
-                              <XCircle className="h-3.5 w-3.5" />
-                              {sub.advisorName ? truncate(sub.advisorName, 20) : "—"}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-ink-muted">—</span>
-                          )}
-                        </td>
-                        <td className="pr-4 py-3.5">
-                          <Link
-                            href={`/submissions/${sub.id}`}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-surface-hover inline-flex"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5 text-ink-muted" />
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            ) : (
+                              <span className="text-ink-muted text-xs">—</span>
+                            )}
+                          </td>
+                          {/* status + advisor stacked */}
+                          <td className="px-4 py-3">
+                            <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"}>
+                              {statusLabels[sub.status] || sub.status}
+                            </Badge>
+                            {sub.advisorName && (
+                              <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-ink-muted">
+                                {sub.advisorApprovalStatus === "APPROVED" ? <CheckCircle2 className="h-3 w-3 text-emerald-500" aria-hidden="true" /> :
+                                  sub.advisorApprovalStatus === "REJECTED" ? <XCircle className="h-3 w-3 text-red-500" aria-hidden="true" /> :
+                                  <Clock className="h-3 w-3 text-amber-400" aria-hidden="true" />}
+                                {truncate(sub.advisorName, 22)}
+                              </p>
+                            )}
+                          </td>
+                          {/* ⋮ actions */}
+                          <td className="pr-3 py-3">
+                            <RowActionsMenu
+                              submissionId={sub.id}
+                              open={actionsOpenId === sub.id}
+                              onToggle={() => setActionsOpenId((prev) => prev === sub.id ? null : sub.id)}
+                              onClose={() => setActionsOpenId(null)}
+                              viewLabel={t("common.viewAll")}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </CardBody>
           </Card>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between text-xs text-ink-muted">
+              <span>
+                {t("submissions.showingCount", {
+                  shown: Math.min(page * PAGE_SIZE, filtered.length),
+                  total: filtered.length,
+                })}
+              </span>
+              <div className="flex items-center gap-1">
+                <button type="button" disabled={page === 1} onClick={() => setPage((p) => p - 1)}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-border/60 disabled:opacity-40 hover:bg-surface-hover transition-colors">
+                  <ChevronDown className="h-3.5 w-3.5 rotate-90" aria-hidden="true" />
+                </button>
+                <span className="px-2 font-medium text-ink">{page} / {totalPages}</span>
+                <button type="button" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-border/60 disabled:opacity-40 hover:bg-surface-hover transition-colors">
+                  <ChevronDown className="h-3.5 w-3.5 -rotate-90" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
-      {filtered.length > 0 && (
+      {filtered.length > 0 && totalPages <= 1 && (
         <p className="text-xs text-ink-muted text-center">
           {t("submissions.showingCount", { shown: filtered.length, total: totalFiltered })}
-          {searchQuery ? ` ${t("submissions.matchingQuery", { query: searchQuery })}` : ""}
         </p>
       )}
     </div>
@@ -682,13 +690,94 @@ const SortTh = memo(function SortTh({ label, sortKey_, currentKey, dir, onSort, 
   const active = currentKey === sortKey_;
   return (
     <th
-      className={`${align === "center" ? "text-center" : "text-left"} px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider cursor-pointer select-none hover:text-ink transition-colors ${className || ""}`}
-      onClick={() => onSort(sortKey_ as never)}
+      className={`${align === "center" ? "text-center" : "text-left"} px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider ${className || ""}`}
+      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
     >
-      <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onSort(sortKey_ as never)}
+        className="inline-flex items-center gap-1 select-none hover:text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded"
+        aria-label={`${label}${active ? (dir === "asc" ? ", sorted ascending" : ", sorted descending") : ""}`}
+      >
         {label}
-        {active ? (dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-      </span>
+        {active ? (dir === "asc" ? <ChevronUp className="h-3 w-3" aria-hidden="true" /> : <ChevronDown className="h-3 w-3" aria-hidden="true" />) : <ArrowUpDown className="h-3 w-3 opacity-30" aria-hidden="true" />}
+      </button>
     </th>
+  );
+});
+
+const PaperCodeCell = memo(function PaperCodeCell({
+  paperCode, open, draft, saving, onOpen, onClose, onDraftChange, onSave,
+}: {
+  submissionId: string; paperCode?: string | null; open: boolean; draft: string; saving: boolean;
+  onOpen: () => void; onClose: () => void; onDraftChange: (v: string) => void; onSave: () => void;
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={open ? onClose : onOpen}
+        className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-brand-700 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded"
+        title="Edit paper code"
+      >
+        {paperCode || <span className="text-ink-muted font-normal">Set ID</span>}
+        <Pencil className="h-2.5 w-2.5 opacity-50" aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-52 rounded-card border border-border bg-white p-3 shadow-elev-3">
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Paper ID</label>
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onClose(); }}
+            className="w-full rounded-lg border border-border/60 px-2.5 py-1.5 font-mono text-xs text-ink focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="text-xs text-ink-muted hover:text-ink">Cancel</button>
+            <button type="button" onClick={onSave} disabled={saving} className="rounded-button bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50">
+              {saving ? "…" : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+const RowActionsMenu = memo(function RowActionsMenu({
+  submissionId, open, onToggle, onClose, viewLabel,
+}: {
+  submissionId: string; open: boolean; onToggle: () => void; onClose: () => void; viewLabel: string;
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Row actions"
+        onClick={onToggle}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-surface-hover focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+      >
+        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" aria-hidden="true" onClick={onClose} />
+          <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-32 rounded-card border border-border bg-white py-1 shadow-elev-3">
+            <Link
+              href={`/submissions/${submissionId}`}
+              role="menuitem"
+              onClick={onClose}
+              className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-surface-1 transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              {viewLabel}
+            </Link>
+          </div>
+        </>
+      )}
+    </div>
   );
 });

@@ -877,6 +877,7 @@ const en: Record<TranslationKey, string> = {
   "dashboard.reviewerOverdue": "Overdue",
   "submissions.generatePaperCodes": "Generate Paper IDs",
   "submissions.deleteSelected": "Delete selected ({n})",
+  "submissions.selectAll": "Select all submissions",
   "submissions.bulkDeleteConfirm": "Delete {n} submission(s)?",
   "submissions.bulkDeleteDesc": "This will permanently delete the selected submissions and all associated reviews, files, and data. This action cannot be undone.",
   "submissions.bulkDeleteSuccess": "Deleted {n} submission(s) successfully",

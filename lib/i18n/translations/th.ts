@@ -879,6 +879,7 @@ const th = {
   "dashboard.reviewerOverdue": "เลยกำหนดแล้ว",
   "submissions.generatePaperCodes": "สร้างรหัสบทความ",
   "submissions.deleteSelected": "ลบที่เลือก ({n})",
+  "submissions.selectAll": "เลือกบทความทั้งหมด",
   "submissions.bulkDeleteConfirm": "ลบบทความ {n} รายการ?",
   "submissions.bulkDeleteDesc": "การดำเนินการนี้จะลบบทความที่เลือกและข้อมูลที่เกี่ยวข้องทั้งหมด (รีวิว, ไฟล์, ฯลฯ) อย่างถาวร ไม่สามารถย้อนกลับได้",
   "submissions.bulkDeleteSuccess": "ลบบทความ {n} รายการเรียบร้อยแล้ว",
