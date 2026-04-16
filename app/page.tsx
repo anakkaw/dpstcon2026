@@ -32,7 +32,7 @@ export default async function HomePage() {
       {/* ── Navigation Bar ── */}
       <nav className="relative z-10 flex items-center justify-between px-6 lg:px-12 py-5">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-brand-gradient flex items-center justify-center shadow-brand-glow">
+          <div className="h-10 w-10 rounded-xl bg-brand-gradient flex items-center justify-center shadow-elev-2">
             <span className="text-white font-bold text-lg">D</span>
           </div>
           <span className="font-heading font-bold text-lg text-white">

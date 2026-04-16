@@ -69,7 +69,7 @@ export function ActivateClient({
     <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-gradient-to-br from-slate-50 via-white to-orange-50">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex h-14 w-14 rounded-2xl bg-brand-gradient items-center justify-center shadow-brand-glow mb-4">
+          <div className="inline-flex h-14 w-14 rounded-2xl bg-brand-gradient items-center justify-center shadow-elev-2 mb-4">
             <span className="text-white font-bold text-2xl">D</span>
           </div>
           <h1 className="text-2xl font-bold text-ink">DPSTCon2026</h1>

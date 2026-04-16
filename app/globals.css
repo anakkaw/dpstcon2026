@@ -14,12 +14,14 @@
   /* Ink / Text */
   --color-ink: #0f172a;
   --color-ink-light: #475569;
-  --color-ink-muted: #64748b;
+  --color-ink-muted: #5b6576;
 
-  /* Surface */
+  /* Surface — warm stone neutrals for app chrome */
   --color-surface: #ffffff;
-  --color-surface-alt: #f8fafc;
-  --color-surface-hover: #f1f5f9;
+  --color-surface-1: #fafaf9;   /* app background */
+  --color-surface-2: #f5f5f4;   /* hover / subtle fill */
+  --color-surface-alt: #fafaf9;    /* alias of surface-1 (kept for back-compat) */
+  --color-surface-hover: #f5f5f4;  /* alias of surface-2 (kept for back-compat) */
   --color-border: #e2e8f0;
   --color-border-light: #f1f5f9;
 
@@ -42,27 +44,28 @@
   --font-heading: var(--font-dpst-body), "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-dpst-body), "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
 
-  /* Shadows */
+  /* Shadows — neutral elevation scale (elev-1 subtle / elev-2 card / elev-3 overlay) */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.06);
-  --shadow-card-hover: 0 8px 25px -5px rgb(0 0 0 / 0.1), 0 4px 10px -5px rgb(0 0 0 / 0.08);
-  --shadow-brand-glow: 0 8px 16px -4px rgba(249, 115, 22, 0.4);
-  --shadow-brand-active: 0 4px 12px -2px rgba(249, 115, 22, 0.45);
-  --shadow-blue-glow: 0 8px 16px -4px rgba(59, 130, 246, 0.35);
-  --shadow-emerald-glow: 0 8px 16px -4px rgba(16, 185, 129, 0.35);
-  --shadow-amber-glow: 0 8px 16px -4px rgba(245, 158, 11, 0.35);
-  --shadow-red-glow: 0 8px 16px -4px rgba(239, 68, 68, 0.35);
-  --shadow-violet-glow: 0 8px 16px -4px rgba(139, 92, 246, 0.35);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.08);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+  --shadow-elev-1: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-elev-2: 0 2px 6px -1px rgb(15 23 42 / 0.08), 0 1px 3px -1px rgb(15 23 42 / 0.05);
+  --shadow-elev-3: 0 10px 20px -6px rgb(15 23 42 / 0.12), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+  --shadow-card: var(--shadow-elev-2);
+  --shadow-card-hover: var(--shadow-elev-3);
+
+  /* Radius — unified scale */
+  --radius-chip: 8px;    /* badges, chips, small pills */
+  --radius-button: 10px; /* buttons, form fields */
+  --radius-card: 12px;   /* cards, surfaces */
 }
 
 body {
   font-family: var(--font-body);
   font-size: 16px;
-  line-height: 1.7;
+  line-height: 1.55;
   color: var(--color-ink);
   background: var(--color-surface);
   -webkit-font-smoothing: antialiased;

@@ -13,13 +13,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 /* Full static class strings */
 const variantStyles: Record<Variant, string> = {
   primary:
-    "bg-brand-gradient-btn text-white shadow-brand-glow hover:brightness-110 active:brightness-95",
+    "bg-brand-gradient-btn text-white shadow-elev-2 hover:brightness-110 active:brightness-95",
   secondary:
-    "bg-white text-ink border border-border shadow-sm hover:bg-surface-hover hover:border-gray-300 active:bg-gray-100",
+    "bg-white text-ink border border-border shadow-elev-1 hover:bg-surface-hover hover:border-gray-300 active:bg-gray-100",
   ghost:
     "text-ink-light hover:bg-gray-100 hover:text-ink active:bg-gray-200",
   danger:
-    "bg-danger-gradient-btn text-white shadow-red-glow hover:brightness-110 active:brightness-95",
+    "bg-danger-gradient-btn text-white shadow-elev-2 hover:brightness-110 active:brightness-95",
   outline:
     "border-2 border-brand-500 text-brand-600 bg-white hover:bg-brand-50 active:bg-brand-100",
 };
@@ -47,7 +47,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          "inline-flex items-center justify-center rounded-xl font-semibold",
+          "inline-flex items-center justify-center rounded-button font-semibold",
           "cursor-pointer transition-[background-color,border-color,color,box-shadow,filter,transform] duration-200",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2",
           "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:grayscale-[30%]",
