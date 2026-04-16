@@ -13,7 +13,6 @@ import { Divider } from "@/components/ui/divider";
 import { Collapsible } from "@/components/ui/collapsible";
 import { Alert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ModalShell } from "@/components/ui/modal-shell";
 import { Input } from "@/components/ui/input";
 import {
   SUBMISSION_STATUS_LABELS,
@@ -37,7 +36,7 @@ import { AssignReviewerCard } from "@/components/review/assign-reviewer-card";
 import {
   Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
-  Trash2, Pencil, Mail, ShieldCheck, UserCheck,
+  Trash2, Pencil, Mail, UserCheck, MessageSquare,
 } from "lucide-react";
 
 interface Props {
@@ -363,7 +362,7 @@ export function SubmissionDetail({
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="max-w-6xl">
       <ConfirmDialog
         open={confirmAction === "withdraw"}
         title={t("detail.confirmWithdraw")}
@@ -406,56 +405,6 @@ export function SubmissionDetail({
         }}
       />
 
-      {/* Edit Advisor Modal */}
-      {isAdmin && (
-        <ModalShell
-          open={showEditAdvisorModal}
-          onClose={() => setShowEditAdvisorModal(false)}
-          title={t("advisor.editAdvisorTitle")}
-        >
-          <div className="space-y-4 p-4">
-            <Field label={t("advisor.advisorName")} htmlFor="editAdvisorName" required>
-              <Input
-                id="editAdvisorName"
-                value={editAdvisorName}
-                onChange={(e) => setEditAdvisorName(e.target.value)}
-              />
-            </Field>
-            <Field label={t("advisor.advisorEmail")} htmlFor="editAdvisorEmail" required>
-              <Input
-                id="editAdvisorEmail"
-                type="email"
-                value={editAdvisorEmail}
-                onChange={(e) => setEditAdvisorEmail(e.target.value)}
-              />
-            </Field>
-            {editAdvisorEmail.trim() !== (submission.advisorEmail || "") && (
-              <label className="flex items-center gap-2 text-sm text-ink-light cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={sendAdvisorEmailOnChange}
-                  onChange={(e) => setSendAdvisorEmailOnChange(e.target.checked)}
-                  className="rounded border-border"
-                />
-                {t("advisor.sendEmailToNewAdvisor")}
-              </label>
-            )}
-          </div>
-          <div className="flex justify-end gap-2 p-4 border-t border-border">
-            <Button variant="secondary" onClick={() => setShowEditAdvisorModal(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              onClick={handleSaveAdvisor}
-              loading={savingAdvisor}
-              disabled={!editAdvisorName.trim() || !editAdvisorEmail.trim()}
-            >
-              {t("common.save")}
-            </Button>
-          </div>
-        </ModalShell>
-      )}
-
       {/* Override Advisor Status Confirm */}
       <ConfirmDialog
         open={showOverrideConfirm}
@@ -485,7 +434,9 @@ export function SubmissionDetail({
 
       {message && <Alert tone="info">{message}</Alert>}
 
-      {/* Header */}
+      <div className="mt-4 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-start">
+        <div className="space-y-6">
+          {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-ink tracking-tight">{submission.title}</h1>
@@ -598,7 +549,7 @@ export function SubmissionDetail({
 
       {/* Advisor Endorsement Card */}
       {(isAdmin || isOwner) && submission.advisorName && (
-        <Card>
+        <Card id="section-advisor">
           <CardHeader>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
@@ -623,102 +574,148 @@ export function SubmissionDetail({
               </Badge>
             </div>
           </CardHeader>
-          <CardBody className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs font-medium text-ink-muted mb-0.5">{t("advisor.advisorName")}</p>
-                <p className="text-sm text-ink">{submission.advisorName}</p>
+          {showEditAdvisorModal ? (
+            <CardBody className="space-y-4">
+              <Field label={t("advisor.advisorName")} htmlFor="editAdvisorName" required>
+                <Input
+                  id="editAdvisorName"
+                  value={editAdvisorName}
+                  onChange={(e) => setEditAdvisorName(e.target.value)}
+                />
+              </Field>
+              <Field label={t("advisor.advisorEmail")} htmlFor="editAdvisorEmail" required>
+                <Input
+                  id="editAdvisorEmail"
+                  type="email"
+                  value={editAdvisorEmail}
+                  onChange={(e) => setEditAdvisorEmail(e.target.value)}
+                />
+              </Field>
+              {editAdvisorEmail.trim() !== (submission.advisorEmail || "") && (
+                <label className="flex items-center gap-2 text-sm text-ink-light cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendAdvisorEmailOnChange}
+                    onChange={(e) => setSendAdvisorEmailOnChange(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  {t("advisor.sendEmailToNewAdvisor")}
+                </label>
+              )}
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <Button variant="secondary" size="sm" onClick={() => setShowEditAdvisorModal(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveAdvisor}
+                  loading={savingAdvisor}
+                  disabled={!editAdvisorName.trim() || !editAdvisorEmail.trim()}
+                >
+                  {t("common.save")}
+                </Button>
               </div>
-              <div>
-                <p className="text-xs font-medium text-ink-muted mb-0.5">{t("advisor.advisorEmail")}</p>
-                <p className="text-sm text-ink">{submission.advisorEmail || "—"}</p>
-              </div>
-            </div>
+            </CardBody>
+          ) : (
+            <>
+              <CardBody className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-ink-muted mb-0.5">{t("advisor.advisorName")}</p>
+                    <p className="text-sm text-ink">{submission.advisorName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-ink-muted mb-0.5">{t("advisor.advisorEmail")}</p>
+                    <p className="text-sm text-ink">{submission.advisorEmail || "—"}</p>
+                  </div>
+                </div>
 
-            {/* Link expiry info */}
-            {submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
-              const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-              const now = new Date();
-              const isExpired = now > expiresAt;
-              const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-              return (
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
-                  {isExpired ? (
-                    <Badge tone="danger">{t("advisor.linkExpiredBadge")}</Badge>
-                  ) : (
-                    <Badge tone={daysRemaining <= 3 ? "warning" : "info"}>
-                      {t("advisor.linkExpiresBadge", { n: daysRemaining, date: formatDate(expiresAt.toISOString()) })}
-                    </Badge>
+                {/* Link expiry info */}
+                {submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
+                  const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+                  const now = new Date();
+                  const isExpired = now > expiresAt;
+                  const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+                  return (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
+                      {isExpired ? (
+                        <Badge tone="danger">{t("advisor.linkExpiredBadge")}</Badge>
+                      ) : (
+                        <Badge tone={daysRemaining <= 3 ? "warning" : "info"}>
+                          {t("advisor.linkExpiresBadge", { n: daysRemaining, date: formatDate(expiresAt.toISOString()) })}
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })()}
+              </CardBody>
+              <CardFooter>
+                <div className="flex flex-wrap gap-2">
+                  {/* Resend email — visible to admin and author when pending */}
+                  {(isAdmin || canManageOwnSubmission) && submission.status === "ADVISOR_APPROVAL_PENDING" && submission.advisorApprovalStatus === "PENDING" && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      loading={resendingAdvisor}
+                      onClick={handleResendAdvisorApproval}
+                    >
+                      <Mail className="h-3.5 w-3.5" />
+                      {t("advisor.resendEmail")}
+                    </Button>
+                  )}
+
+                  {/* Admin-only actions */}
+                  {isAdmin && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setEditAdvisorName(submission.advisorName || "");
+                          setEditAdvisorEmail(submission.advisorEmail || "");
+                          setSendAdvisorEmailOnChange(true);
+                          setShowEditAdvisorModal(true);
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        {t("advisor.editAdvisor")}
+                      </Button>
+
+                      {/* Override status dropdown */}
+                      {submission.advisorApprovalStatus !== "NOT_REQUESTED" && (
+                        <div className="relative">
+                          <Select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                setOverrideTarget(e.target.value);
+                                setShowOverrideConfirm(true);
+                              }
+                            }}
+                            className="text-xs h-8"
+                          >
+                            <option value="">{t("advisor.overrideStatus")}</option>
+                            {submission.advisorApprovalStatus !== "APPROVED" && (
+                              <option value="APPROVED">{t("advisor.markApproved")}</option>
+                            )}
+                            {submission.advisorApprovalStatus !== "REJECTED" && (
+                              <option value="REJECTED">{t("advisor.markRejected")}</option>
+                            )}
+                            {submission.advisorApprovalStatus !== "PENDING" && (
+                              <option value="PENDING">{t("advisor.resetPending")}</option>
+                            )}
+                          </Select>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
-              );
-            })()}
-          </CardBody>
-          <CardFooter>
-            <div className="flex flex-wrap gap-2">
-              {/* Resend email — visible to admin and author when pending */}
-              {(isAdmin || canManageOwnSubmission) && submission.status === "ADVISOR_APPROVAL_PENDING" && submission.advisorApprovalStatus === "PENDING" && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  loading={resendingAdvisor}
-                  onClick={handleResendAdvisorApproval}
-                >
-                  <Mail className="h-3.5 w-3.5" />
-                  {t("advisor.resendEmail")}
-                </Button>
-              )}
-
-              {/* Admin-only actions */}
-              {isAdmin && (
-                <>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setEditAdvisorName(submission.advisorName || "");
-                      setEditAdvisorEmail(submission.advisorEmail || "");
-                      setSendAdvisorEmailOnChange(true);
-                      setShowEditAdvisorModal(true);
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    {t("advisor.editAdvisor")}
-                  </Button>
-
-                  {/* Override status dropdown */}
-                  {submission.advisorApprovalStatus !== "NOT_REQUESTED" && (
-                    <div className="relative">
-                      <Select
-                        value=""
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            setOverrideTarget(e.target.value);
-                            setShowOverrideConfirm(true);
-                          }
-                        }}
-                        className="text-xs h-8"
-                      >
-                        <option value="">{t("advisor.overrideStatus")}</option>
-                        {submission.advisorApprovalStatus !== "APPROVED" && (
-                          <option value="APPROVED">{t("advisor.markApproved")}</option>
-                        )}
-                        {submission.advisorApprovalStatus !== "REJECTED" && (
-                          <option value="REJECTED">{t("advisor.markRejected")}</option>
-                        )}
-                        {submission.advisorApprovalStatus !== "PENDING" && (
-                          <option value="PENDING">{t("advisor.resetPending")}</option>
-                        )}
-                      </Select>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </CardFooter>
+              </CardFooter>
+            </>
+          )}
         </Card>
       )}
 
@@ -792,6 +789,7 @@ export function SubmissionDetail({
       )}
 
       {/* Paper Info */}
+      <div id="section-paper-info">
       <Collapsible title={t("detail.paperInfo")} defaultOpen={submission.status === "DRAFT"}>
         <div className="space-y-4">
           <div>
@@ -841,9 +839,10 @@ export function SubmissionDetail({
           </div>
         </div>
       </Collapsible>
+      </div>
 
       {/* Files Section */}
-      <Card>
+      <Card id="section-files">
         <CardHeader>
           <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
             <Paperclip className="h-4 w-4" />
@@ -895,7 +894,7 @@ export function SubmissionDetail({
 
       {/* Review Progress + Reviews */}
       {(submission.reviews.length > 0 || (reviewCounts && reviewCounts.total > 0)) && (
-        <Card>
+        <Card id="section-reviews">
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
               <FileText className="h-4 w-4" />
@@ -1015,7 +1014,7 @@ export function SubmissionDetail({
 
       {/* Admin: Decision Panel */}
       {isAdmin && submission.status === "UNDER_REVIEW" && submission.reviews.some((r) => r.completedAt) && (
-        <Card accent="brand">
+        <Card id="section-decision" accent="brand">
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
               <Gavel className="h-4 w-4" />
@@ -1062,7 +1061,7 @@ export function SubmissionDetail({
 
       {/* Discussion */}
       {(isAdmin || isReviewer) && (
-        <Card>
+        <Card id="section-discussion">
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink">{t("detail.discussion")}</h3>
           </CardHeader>
@@ -1098,6 +1097,64 @@ export function SubmissionDetail({
           </CardBody>
         </Card>
       )}
+        </div>
+
+        {/* Sticky right rail */}
+        <aside className="sticky top-6 hidden lg:block space-y-4">
+          <nav className="rounded-2xl border border-border bg-white p-4 shadow-elev-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">{t("detail.onThisPage")}</p>
+            <div className="space-y-0.5 text-sm">
+              <a href="#section-paper-info" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
+                <FileText className="h-3.5 w-3.5 shrink-0" />{t("detail.paperInfo")}
+              </a>
+              <a href="#section-files" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
+                <Paperclip className="h-3.5 w-3.5 shrink-0" />{t("detail.files")}
+              </a>
+              {(isAdmin || isOwner) && submission.advisorName && (
+                <a href="#section-advisor" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
+                  <UserCheck className="h-3.5 w-3.5 shrink-0" />{t("advisor.sectionTitle")}
+                </a>
+              )}
+              {(submission.reviews.length > 0 || (reviewCounts && reviewCounts.total > 0)) && (
+                <a href="#section-reviews" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
+                  <FileText className="h-3.5 w-3.5 shrink-0" />{t("detail.reviewResults")}
+                </a>
+              )}
+              {isAdmin && submission.status === "UNDER_REVIEW" && submission.reviews.some((r) => r.completedAt) && (
+                <a href="#section-decision" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
+                  <Gavel className="h-3.5 w-3.5 shrink-0" />{t("detail.makeDecision")}
+                </a>
+              )}
+              {(isAdmin || isReviewer) && (
+                <a href="#section-discussion" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
+                  <MessageSquare className="h-3.5 w-3.5 shrink-0" />{t("detail.discussion")}
+                </a>
+              )}
+            </div>
+          </nav>
+
+          {(canSubmit || canWithdraw || canDeleteSubmission) && (
+            <div className="rounded-2xl border border-border bg-white p-4 shadow-elev-1 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-1">{t("detail.actions")}</p>
+              {canSubmit && (
+                <Button onClick={handleSubmit} loading={loading} size="sm" className="w-full justify-center">
+                  <Send className="h-3.5 w-3.5" />{t("detail.submitBtn")}
+                </Button>
+              )}
+              {canWithdraw && (
+                <Button onClick={() => setConfirmAction("withdraw")} variant="danger" loading={loading} size="sm" className="w-full justify-center">
+                  {t("detail.withdrawAction")}
+                </Button>
+              )}
+              {canDeleteSubmission && (
+                <Button onClick={() => setConfirmAction("delete")} variant="danger" loading={loading} size="sm" className="w-full justify-center">
+                  <Trash2 className="h-3.5 w-3.5" />{t("detail.deleteAction")}
+                </Button>
+              )}
+            </div>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

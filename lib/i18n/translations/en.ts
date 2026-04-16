@@ -282,6 +282,8 @@ const en: Record<TranslationKey, string> = {
   "detail.commentsToAuthorLabel": "Comments to Author:",
   "detail.commentsToChairLabel": "Comments to Chair (admin only):",
   "detail.sendBtn": "Send",
+  "detail.onThisPage": "On this page",
+  "detail.actions": "Actions",
 
   // ─── Reviews ──────────────────────────────────────────
   "reviews.myReviewTasks": "My Review Tasks",

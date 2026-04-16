@@ -284,6 +284,8 @@ const th = {
   "detail.commentsToAuthorLabel": "ความคิดเห็นถึง Author:",
   "detail.commentsToChairLabel": "ความคิดเห็นถึงประธาน (เฉพาะ admin):",
   "detail.sendBtn": "ส่ง",
+  "detail.onThisPage": "ในหน้านี้",
+  "detail.actions": "การดำเนินการ",
 
   // ─── Reviews ──────────────────────────────────────────
   "reviews.myReviewTasks": "งานรีวิวของฉัน",
