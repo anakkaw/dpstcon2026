@@ -134,6 +134,10 @@ const th = {
   // Committee
   "dashboard.noPendingEvaluations": "ไม่มีงานประเมินที่รอดำเนินการในขณะนี้",
   "dashboard.reviewerFocus": "คิวงานรีวิว",
+  "dashboard.remaining": "คงเหลือ",
+  "dashboard.reviewProgress": "ความคืบหน้า",
+  "dashboard.reviewProgressDesc": "อัตราการทำงานของคุณในทุกงานที่ได้รับมอบหมาย",
+  "dashboard.completionRate": "สำเร็จแล้ว",
   "dashboard.reviewerFocusDesc": "เปิดรายการที่ได้รับมอบหมายเพื่อตอบรับ ส่งรีวิว หรือปิดงานที่ค้างอยู่",
   "dashboard.committeeOverview": "พื้นที่ประเมินการนำเสนอ",
   "dashboard.committeeOverviewDesc": "เลือกเข้าสู่หน้าประเมินแบบบรรยายหรือโปสเตอร์เพื่อดำเนินงานต่อ",
