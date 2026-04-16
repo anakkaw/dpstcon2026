@@ -73,7 +73,6 @@ export function ReviewsPageClient({
   const { t, locale } = useI18n();
   const assignmentLabels = getAssignmentStatusLabels(t);
   const { roles, id: currentUserId } = useDashboardAuth();
-  const isAdmin = roles.includes("ADMIN");
   const canManageReviews = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
 
   const [assignments, setAssignments] = useState<AssignmentData[]>(initialAssignments);
@@ -267,6 +266,12 @@ export function ReviewsPageClient({
       });
   }, [assignments, trackFilter, statusFilter, searchQuery, sortKey, sortDir, isOverdue]);
 
+  const assignedReviewerIds = useMemo(() =>
+    assigningSubId
+      ? new Set(assignments.filter((assignment) => assignment.submission.id === assigningSubId).map((assignment) => assignment.reviewer?.id).filter(Boolean))
+      : new Set<string>(),
+    [assignments, assigningSubId]);
+
   if (!canManageReviews) {
     const myFiltered = assignments.filter((assignment) => !trackFilter || assignment.submission.track?.id === trackFilter);
     return (
@@ -327,12 +332,6 @@ export function ReviewsPageClient({
     { key: "OVERDUE", label: t("reviews.overdue"), count: statusCounts.OVERDUE || 0 },
     { key: "DECLINED", label: t("reviews.declined"), count: statusCounts.DECLINED || 0 },
   ].filter((tab) => tab.key === "ALL" || tab.count > 0);
-
-  const assignedReviewerIds = useMemo(() =>
-    assigningSubId
-      ? new Set(assignments.filter((assignment) => assignment.submission.id === assigningSubId).map((assignment) => assignment.reviewer?.id).filter(Boolean))
-      : new Set<string>(),
-    [assignments, assigningSubId]);
 
   return (
     <div className="space-y-6">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/auth-client";
@@ -75,12 +75,14 @@ export function AppShellClient({
   const pathname = usePathname();
   const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [prevPathname, setPrevPathname] = useState(pathname);
   const roleLabels = getRoleLabels(t);
 
-  // Auto-close sidebar on mobile when navigating
-  useEffect(() => {
+  // Auto-close sidebar on mobile when navigating (reset-on-prop-change pattern)
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setSidebarOpen(false);
-  }, [pathname]);
+  }
 
   const allItems = navGroups
     ? navGroups.flatMap((g) => g.items)

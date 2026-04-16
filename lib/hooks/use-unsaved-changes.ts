@@ -9,7 +9,9 @@ import { useEffect, useCallback, useRef } from "react";
  */
 export function useUnsavedChanges(isDirty: boolean, message?: string) {
   const isDirtyRef = useRef(isDirty);
-  isDirtyRef.current = isDirty;
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
 
   const handler = useCallback(
     (e: BeforeUnloadEvent) => {
