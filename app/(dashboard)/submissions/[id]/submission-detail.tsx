@@ -466,6 +466,27 @@ export function SubmissionDetail({
         </Card>
       )}
 
+      {/* Advisor Link Status (admin view) */}
+      {isAdmin && submission.advisorName && submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
+        const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+        const now = new Date();
+        const isExpired = now > expiresAt;
+        const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+        return (
+          <Alert tone={isExpired ? "danger" : daysRemaining <= 3 ? "warning" : "info"}>
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 shrink-0" />
+              <span>
+                ลิงก์รับรองอาจารย์ ({submission.advisorName}):{" "}
+                {isExpired
+                  ? "หมดอายุแล้ว — นักศึกษาต้องส่งลิงก์ใหม่"
+                  : `หมดอายุใน ${daysRemaining} วัน (${formatDate(expiresAt.toISOString())})`}
+              </span>
+            </div>
+          </Alert>
+        );
+      })()}
+
       {/* Paper Info */}
       <Collapsible title="ข้อมูลบทความ" defaultOpen={submission.status === "DRAFT"}>
         <div className="space-y-4">
