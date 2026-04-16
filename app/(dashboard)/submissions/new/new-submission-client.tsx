@@ -20,6 +20,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { useDashboardAuth } from "@/components/dashboard-auth-context";
 import { useUnsavedChanges } from "@/lib/hooks/use-unsaved-changes";
+import { CheckCircle2 } from "lucide-react";
 
 interface Track {
   id: string;
@@ -55,6 +56,16 @@ export function NewSubmissionClient() {
   const [formDirty, setFormDirty] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Inline field validation errors
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Abstract word counters
+  const [abstractWords, setAbstractWords] = useState(0);
+  const [abstractEnWords, setAbstractEnWords] = useState(0);
+
+  // Auto-save indicator
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
   // Warn user before leaving if form has unsaved data
   useUnsavedChanges(formDirty);
 
@@ -63,7 +74,7 @@ export function NewSubmissionClient() {
 
   const DRAFT_KEY = "dpstcon-submission-draft";
 
-  // Auto-save draft to localStorage every 30s
+  // Auto-save draft to localStorage every 10s
   const saveDraft = useCallback(() => {
     if (!formRef.current || submissionId) return;
     const fd = new FormData(formRef.current);
@@ -73,6 +84,7 @@ export function NewSubmissionClient() {
     }
     if (Object.keys(draft).length > 0) {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      setLastSavedAt(new Date());
     }
   }, [submissionId]);
 
@@ -94,10 +106,10 @@ export function NewSubmissionClient() {
     } catch { /* ignore corrupt data */ }
   }, []);
 
-  // Auto-save interval
+  // Auto-save interval — every 10 s
   useEffect(() => {
     if (submissionId) return;
-    const timer = setInterval(saveDraft, 30_000);
+    const timer = setInterval(saveDraft, 10_000);
     return () => clearInterval(timer);
   }, [saveDraft, submissionId]);
 
@@ -130,6 +142,28 @@ export function NewSubmissionClient() {
         {t("submissions.new.authorOnly")}
       </Alert>
     );
+  }
+
+  function countWords(text: string) {
+    return text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+  }
+
+  function validateField(name: string, value: string): string {
+    if (name === "title" && !value.trim()) return t("submissions.new.requiredTitle");
+    if (name === "titleEn" && !value.trim()) return t("submissions.new.requiredTitle");
+    if (name === "trackId" && !value) return t("submissions.new.requiredTrack");
+    if (name === "advisorName" && !value.trim()) return t("submissions.new.requiredAdvisor");
+    if (name === "advisorEmail") {
+      if (!value.trim()) return t("submissions.new.requiredAdvisor");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return t("submissions.new.invalidEmail");
+    }
+    return "";
+  }
+
+  function handleBlur(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
+    const { name, value } = e.target;
+    const err = validateField(name, value);
+    setFieldErrors((prev) => ({ ...prev, [name]: err }));
   }
 
   async function handleSubmit(formData: FormData) {
@@ -253,9 +287,10 @@ export function NewSubmissionClient() {
                 label={t("submissions.new.track")}
                 htmlFor="trackId"
                 required
-                hint={t("submissions.new.trackDesc")}
+                hint={!fieldErrors.trackId ? t("submissions.new.trackDesc") : undefined}
+                error={fieldErrors.trackId}
               >
-                <Select id="trackId" name="trackId" required>
+                <Select id="trackId" name="trackId" required onBlur={handleBlur}>
                   <option value="">{t("submissions.new.trackPlaceholder")}</option>
                   {tracks.map((track) => (
                     <option key={track.id} value={track.id}>
@@ -267,24 +302,27 @@ export function NewSubmissionClient() {
               </Field>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label={t("submissions.new.paperTitleTh")} htmlFor="title" required>
+                <Field label={t("submissions.new.paperTitleTh")} htmlFor="title" required error={fieldErrors.title}>
                   <Input
                     id="title"
                     name="title"
                     placeholder={t("submissions.new.paperTitleThPlaceholder")}
                     required
+                    onBlur={handleBlur}
                   />
                 </Field>
                 <Field
                   label={t("submissions.new.paperTitleEn")}
                   htmlFor="titleEn"
                   required
+                  error={fieldErrors.titleEn}
                 >
                   <Input
                     id="titleEn"
                     name="titleEn"
                     placeholder={t("submissions.new.paperTitleEnPlaceholder")}
                     required
+                    onBlur={handleBlur}
                   />
                 </Field>
               </div>
@@ -294,7 +332,8 @@ export function NewSubmissionClient() {
                   label={t("submissions.new.abstractTh")}
                   htmlFor="abstract"
                   required
-                  hint={t("submissions.new.abstractDesc")}
+                  hint={!fieldErrors.abstract ? t("submissions.new.abstractDesc") : undefined}
+                  error={fieldErrors.abstract}
                 >
                   <Textarea
                     id="abstract"
@@ -302,12 +341,16 @@ export function NewSubmissionClient() {
                     placeholder={t("submissions.new.abstractThPlaceholder")}
                     rows={6}
                     required
+                    onChange={(e) => setAbstractWords(countWords(e.target.value))}
+                    onBlur={handleBlur}
                   />
+                  <p className="text-xs text-ink-muted text-right -mt-1">{abstractWords} {t("submissions.new.words")}</p>
                 </Field>
                 <Field
                   label={t("submissions.new.abstractEn")}
                   htmlFor="abstractEn"
                   required
+                  error={fieldErrors.abstractEn}
                 >
                   <Textarea
                     id="abstractEn"
@@ -315,7 +358,10 @@ export function NewSubmissionClient() {
                     placeholder={t("submissions.new.abstractEnPlaceholder")}
                     rows={6}
                     required
+                    onChange={(e) => setAbstractEnWords(countWords(e.target.value))}
+                    onBlur={handleBlur}
                   />
+                  <p className="text-xs text-ink-muted text-right -mt-1">{abstractEnWords} {t("submissions.new.words")}</p>
                 </Field>
               </div>
 
@@ -356,19 +402,22 @@ export function NewSubmissionClient() {
                     label={t("submissions.new.advisorName")}
                     htmlFor="advisorName"
                     required
+                    error={fieldErrors.advisorName}
                   >
                     <Input
                       id="advisorName"
                       name="advisorName"
                       placeholder={t("submissions.new.advisorNamePlaceholder")}
                       required
+                      onBlur={handleBlur}
                     />
                   </Field>
                   <Field
                     label={t("submissions.new.advisorEmail")}
                     htmlFor="advisorEmail"
                     required
-                    hint={t("submissions.new.advisorEmailDesc")}
+                    hint={!fieldErrors.advisorEmail ? t("submissions.new.advisorEmailDesc") : undefined}
+                    error={fieldErrors.advisorEmail}
                   >
                     <Input
                       id="advisorEmail"
@@ -376,11 +425,18 @@ export function NewSubmissionClient() {
                       type="email"
                       placeholder={t("submissions.new.advisorEmailPlaceholder")}
                       required
+                      onBlur={handleBlur}
                     />
                   </Field>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 border-t border-border-light bg-surface-alt/40 px-5 py-4">
+              <div className="relative flex items-center justify-end gap-3 border-t border-border-light bg-surface-alt/40 px-5 py-4">
+                {lastSavedAt && (
+                  <span className="absolute left-5 flex items-center gap-1 text-xs text-ink-muted">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" aria-hidden="true" />
+                    {t("autosave.savedAt").replace("{time}", lastSavedAt.toLocaleTimeString())}
+                  </span>
+                )}
                 <Button
                   type="button"
                   variant="secondary"

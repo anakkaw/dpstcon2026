@@ -185,7 +185,7 @@ const en: Record<TranslationKey, string> = {
   "submissions.new.advisorEmail": "Advisor Email",
   "submissions.new.advisorEmailDesc": "Used to send endorsement email",
   "submissions.new.advisorEmailPlaceholder": "advisor@university.ac.th",
-  "submissions.new.saveDraft": "Save as Draft",
+  "submissions.new.saveDraft": "Save & submit for review",
   "submissions.new.requiredTitle": "Please enter a paper title",
   "submissions.new.requiredTrack": "Please select a track",
   "submissions.new.requiredAdvisor": "Please provide advisor name and email",
@@ -740,6 +740,9 @@ const en: Record<TranslationKey, string> = {
   "autosave.restored": "Draft restored from previous session",
   "autosave.dismiss": "Dismiss",
   "autosave.discard": "Discard draft",
+  "autosave.savedAt": "Saved · {time}",
+  "submissions.new.words": "words",
+  "submissions.new.invalidEmail": "Please enter a valid email address",
 
   // ─── Track Filter ─────────────────────────────────────
   "trackFilter.label": "Track",

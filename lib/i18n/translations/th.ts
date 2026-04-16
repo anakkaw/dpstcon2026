@@ -187,7 +187,7 @@ const th = {
   "submissions.new.advisorEmail": "อีเมลอาจารย์ที่ปรึกษา",
   "submissions.new.advisorEmailDesc": "ใช้สำหรับส่งอีเมลขอรับรอง",
   "submissions.new.advisorEmailPlaceholder": "advisor@university.ac.th",
-  "submissions.new.saveDraft": "บันทึกแบบร่าง",
+  "submissions.new.saveDraft": "บันทึกและส่งเพื่อรับการตรวจสอบ",
   "submissions.new.requiredTitle": "กรุณากรอกชื่อบทความ",
   "submissions.new.requiredTrack": "กรุณาเลือกสาขาวิชา",
   "submissions.new.requiredAdvisor": "กรุณาระบุชื่อและอีเมลอาจารย์ที่ปรึกษา",
@@ -742,6 +742,9 @@ const th = {
   "autosave.restored": "กู้คืนแบบร่างจากเซสชันก่อนหน้า",
   "autosave.dismiss": "ปิด",
   "autosave.discard": "ลบแบบร่าง",
+  "autosave.savedAt": "บันทึกแล้ว · {time}",
+  "submissions.new.words": "คำ",
+  "submissions.new.invalidEmail": "กรุณากรอกอีเมลที่ถูกต้อง",
 
   // ─── Track Filter ─────────────────────────────────────
   "trackFilter.label": "สาขา",
