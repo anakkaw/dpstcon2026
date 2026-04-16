@@ -35,6 +35,7 @@ const iconComponents: Record<Tone, typeof Info> = {
 
 export function Alert({ tone = "info", title, children, className, onDismiss }: AlertProps) {
   const Icon = iconComponents[tone];
+  const isUrgent = tone === "danger";
 
   return (
     <div
@@ -43,8 +44,9 @@ export function Alert({ tone = "info", title, children, className, onDismiss }: 
         toneStyles[tone],
         className
       )}
-      role="alert"
-      aria-live="polite"
+      role={isUrgent ? "alert" : "status"}
+      aria-live={isUrgent ? "assertive" : "polite"}
+      aria-atomic="true"
     >
       <div className="shrink-0 mt-0.5">
         <Icon className={cn("h-5 w-5", iconStyles[tone])} aria-hidden="true" />

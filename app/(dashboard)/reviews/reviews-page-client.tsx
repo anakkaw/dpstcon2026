@@ -835,13 +835,18 @@ const SortTh = memo(function SortTh({ label, sortKey_, currentKey, dir, onSort, 
   const active = currentKey === sortKey_;
   return (
     <th
-      className={`${align === "center" ? "text-center" : "text-left"} px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider cursor-pointer select-none hover:text-ink transition-colors ${className || ""}`}
-      onClick={() => onSort(sortKey_ as never)}
+      className={`${align === "center" ? "text-center" : "text-left"} px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider ${className || ""}`}
+      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
     >
-      <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onSort(sortKey_ as never)}
+        className="inline-flex items-center gap-1 cursor-pointer select-none hover:text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded"
+        aria-label={`${label}${active ? (dir === "asc" ? ", sorted ascending" : ", sorted descending") : ""}`}
+      >
         {label}
-        {active ? (dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-      </span>
+        {active ? (dir === "asc" ? <ChevronUp className="h-3 w-3" aria-hidden="true" /> : <ChevronDown className="h-3 w-3" aria-hidden="true" />) : <ArrowUpDown className="h-3 w-3 opacity-30" aria-hidden="true" />}
+      </button>
     </th>
   );
 });

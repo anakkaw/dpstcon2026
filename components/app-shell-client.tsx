@@ -105,6 +105,7 @@ export function AppShellClient({
         key={item.href}
         href={item.href}
         onClick={() => setSidebarOpen(false)}
+        aria-current={isActive ? "page" : undefined}
         className={cn(
           "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200",
           isActive
@@ -136,6 +137,8 @@ export function AppShellClient({
       )}
 
       <aside
+        id="app-sidebar"
+        aria-label={t("common.primaryNavigation")}
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/10 bg-slate-950",
           "transition-transform duration-300 ease-out",
@@ -152,10 +155,12 @@ export function AppShellClient({
             <p className="text-[11px] text-slate-400">{t("app.shellSubtitle")}</p>
           </div>
           <button
-            className="ml-auto text-slate-400 transition-colors hover:text-white lg:hidden"
+            type="button"
+            aria-label={t("common.closeNavigation")}
+            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -183,10 +188,14 @@ export function AppShellClient({
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-border bg-white/90 px-4 backdrop-blur lg:px-8">
           <button
-            className="rounded-xl p-2 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink lg:hidden"
+            type="button"
+            aria-label={t("common.openNavigation")}
+            aria-expanded={sidebarOpen}
+            aria-controls="app-sidebar"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 lg:hidden"
             onClick={() => setSidebarOpen(true)}
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
 
           <div className="min-w-0 flex-1">
@@ -214,6 +223,7 @@ export function AppShellClient({
               </p>
             </div>
             <button
+              type="button"
               onClick={async () => {
                 try {
                   await signOut();
@@ -222,10 +232,11 @@ export function AppShellClient({
                   window.location.href = "/login";
                 }
               }}
-              className="cursor-pointer rounded-lg p-1.5 text-ink-muted transition-all hover:bg-red-50 hover:text-red-500"
+              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-ink-muted transition-all hover:bg-red-50 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
               title={t("common.signOut")}
+              aria-label={t("common.signOut")}
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         </header>

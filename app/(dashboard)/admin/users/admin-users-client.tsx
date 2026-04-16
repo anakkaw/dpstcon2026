@@ -638,17 +638,17 @@ export function AdminUsersClient({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/60 bg-surface-alt/80">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
-                    <button onClick={() => toggleSort("name")} className="flex items-center gap-1 hover:text-ink transition-colors">{t("users.name")} {renderSortIcon("name", sortBy, sortDir)}</button>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider" aria-sort={sortBy === "name" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" onClick={() => toggleSort("name")} className="flex items-center gap-1 hover:text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded" aria-label={`${t("users.name")}${sortBy === "name" ? (sortDir === "asc" ? ", sorted ascending" : ", sorted descending") : ""}`}>{t("users.name")} {renderSortIcon("name", sortBy, sortDir)}</button>
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
-                    <button onClick={() => toggleSort("email")} className="flex items-center gap-1 hover:text-ink transition-colors">{t("users.email")} {renderSortIcon("email", sortBy, sortDir)}</button>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider" aria-sort={sortBy === "email" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" onClick={() => toggleSort("email")} className="flex items-center gap-1 hover:text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded" aria-label={`${t("users.email")}${sortBy === "email" ? (sortDir === "asc" ? ", sorted ascending" : ", sorted descending") : ""}`}>{t("users.email")} {renderSortIcon("email", sortBy, sortDir)}</button>
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
-                    <button onClick={() => toggleSort("affiliation")} className="flex items-center gap-1 hover:text-ink transition-colors">{t("users.affiliation")} {renderSortIcon("affiliation", sortBy, sortDir)}</button>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider" aria-sort={sortBy === "affiliation" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" onClick={() => toggleSort("affiliation")} className="flex items-center gap-1 hover:text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded" aria-label={`${t("users.affiliation")}${sortBy === "affiliation" ? (sortDir === "asc" ? ", sorted ascending" : ", sorted descending") : ""}`}>{t("users.affiliation")} {renderSortIcon("affiliation", sortBy, sortDir)}</button>
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">
-                    <button onClick={() => toggleSort("status")} className="flex items-center gap-1 hover:text-ink transition-colors">{t("users.status")} {renderSortIcon("status", sortBy, sortDir)}</button>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider" aria-sort={sortBy === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" onClick={() => toggleSort("status")} className="flex items-center gap-1 hover:text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded" aria-label={`${t("users.status")}${sortBy === "status" ? (sortDir === "asc" ? ", sorted ascending" : ", sorted descending") : ""}`}>{t("users.status")} {renderSortIcon("status", sortBy, sortDir)}</button>
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("users.roles")}</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider w-32">{t("users.actionsCol")}</th>
