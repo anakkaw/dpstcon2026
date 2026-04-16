@@ -24,10 +24,10 @@ interface FileListProps {
   onDeleteComplete?: (fileId: string) => void;
 }
 
-const KIND_LABELS: Record<string, string> = {
-  MANUSCRIPT: "ต้นฉบับ",
-  SUPPLEMENTARY: "เอกสารเสริม",
-  CAMERA_READY: "Camera-Ready",
+const KIND_KEYS: Record<string, string> = {
+  MANUSCRIPT: "fileUpload.kindManuscript",
+  SUPPLEMENTARY: "fileUpload.kindSupplementary",
+  CAMERA_READY: "fileUpload.kindCameraReady",
 };
 
 function formatFileSize(bytes: number) {
@@ -88,7 +88,7 @@ export function FileList({
 
   if (files.length === 0) {
     return (
-      <p className="text-sm text-ink-muted">ยังไม่มีไฟล์แนบ</p>
+      <p className="text-sm text-ink-muted">{t("fileUpload.noFiles")}</p>
     );
   }
 
@@ -118,7 +118,7 @@ export function FileList({
             <div className="min-w-0">
               <p className="text-sm text-ink font-medium truncate">{file.originalName}</p>
               <p className="text-xs text-ink-muted">
-                {KIND_LABELS[file.kind] || file.kind} · {formatFileSize(file.size)}
+                {KIND_KEYS[file.kind] ? t(KIND_KEYS[file.kind] as Parameters<typeof t>[0]) : file.kind} · {formatFileSize(file.size)}
               </p>
             </div>
           </div>

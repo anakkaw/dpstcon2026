@@ -14,6 +14,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { useI18n } from "@/lib/i18n";
 import { displayNameTh, displayNameEn } from "@/lib/display-name";
 import type { AdminTrackData, AdminTrackUser } from "@/server/admin-tracks-data";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Plus, Search, Pencil, Trash2, Layers } from "lucide-react";
 
 type ModalMode = null | "create" | "edit" | "delete";
@@ -162,6 +163,7 @@ export function AdminTracksClient({
 
   return (
     <div className="space-y-6">
+      <Breadcrumb items={[{ label: t("nav.dashboard"), href: "/dashboard" }, { label: t("nav.trackManagement") }]} />
       <div className="flex items-center justify-between gap-4">
         <SectionTitle
           title={t("trackAdmin.title")}

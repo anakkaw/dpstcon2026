@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createSubmission } from "@/server/actions/submission";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,52 @@ export function NewSubmissionClient() {
   useUnsavedChanges(formDirty);
 
   const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  const DRAFT_KEY = "dpstcon-submission-draft";
+
+  // Auto-save draft to localStorage every 30s
+  const saveDraft = useCallback(() => {
+    if (!formRef.current || submissionId) return;
+    const fd = new FormData(formRef.current);
+    const draft: Record<string, string> = {};
+    for (const [k, v] of fd.entries()) {
+      if (typeof v === "string" && v.trim()) draft[k] = v;
+    }
+    if (Object.keys(draft).length > 0) {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    }
+  }, [submissionId]);
+
+  // Restore draft on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(DRAFT_KEY);
+    if (!saved || !formRef.current) return;
+    try {
+      const draft = JSON.parse(saved) as Record<string, string>;
+      const form = formRef.current;
+      for (const [key, value] of Object.entries(draft)) {
+        const el = form.elements.namedItem(key);
+        if (el && el instanceof HTMLElement && "value" in el) {
+          (el as unknown as { value: string }).value = value;
+        }
+      }
+      setDraftRestored(true);
+      setFormDirty(true);
+    } catch { /* ignore corrupt data */ }
+  }, []);
+
+  // Auto-save interval
+  useEffect(() => {
+    if (submissionId) return;
+    const timer = setInterval(saveDraft, 30_000);
+    return () => clearInterval(timer);
+  }, [saveDraft, submissionId]);
+
+  function clearDraft() {
+    localStorage.removeItem(DRAFT_KEY);
+    setDraftRestored(false);
+  }
   const [draftFiles, setDraftFiles] = useState<DraftFile[]>([]);
   const [draftSummary, setDraftSummary] = useState<DraftSummary | null>(null);
 
@@ -115,6 +161,7 @@ export function NewSubmissionClient() {
     try {
       const result = await createSubmission(formData);
       if (result?.id) {
+        clearDraft();
         setFormDirty(false);
         setSubmissionId(result.id);
         setDraftFiles([]);
@@ -183,6 +230,14 @@ export function NewSubmissionClient() {
           }
         />
       </div>
+
+      {draftRestored && (
+        <Alert tone="info">
+          {t("autosave.restored")}
+          <button type="button" className="ml-3 text-xs font-medium underline" onClick={() => { clearDraft(); window.location.reload(); }}>{t("autosave.discard")}</button>
+          <button type="button" className="ml-2 text-xs font-medium underline" onClick={() => setDraftRestored(false)}>{t("autosave.dismiss")}</button>
+        </Alert>
+      )}
 
       {error && <Alert tone="danger">{error}</Alert>}
 

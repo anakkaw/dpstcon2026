@@ -12,7 +12,7 @@ export const PIPELINE_STEPS = [
   { key: "draft", labelKey: "pipeline.draft" as TranslationKey, statuses: ["DRAFT"] },
   { key: "advisor", labelKey: "pipeline.advisor" as TranslationKey, statuses: ["ADVISOR_APPROVAL_PENDING"] },
   { key: "submitted", labelKey: "pipeline.submitted" as TranslationKey, statuses: ["SUBMITTED"] },
-  { key: "review", labelKey: "pipeline.review" as TranslationKey, statuses: ["UNDER_REVIEW", "REBUTTAL"] },
+  { key: "review", labelKey: "pipeline.review" as TranslationKey, statuses: ["UNDER_REVIEW"] },
   { key: "decision", labelKey: "pipeline.decision" as TranslationKey, statuses: ["ACCEPTED", "REJECTED", "DESK_REJECTED", "REVISION_REQUIRED"] },
   { key: "final", labelKey: "pipeline.final" as TranslationKey, statuses: ["CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"] },
 ] as const;
@@ -53,8 +53,6 @@ export function getNextAction(status: string, hasFile: boolean, t: TFn = _defaul
         : { label: t("action.uploadAndSubmit"), description: t("action.uploadAndSubmitDesc"), urgency: "normal" };
     case "REVISION_REQUIRED":
       return { label: t("action.reviseAndResubmit"), description: t("action.reviseAndResubmitDesc"), urgency: "warning" };
-    case "REBUTTAL":
-      return { label: t("action.writeRebuttal"), description: t("action.writeRebuttalDesc"), urgency: "warning" };
     case "CAMERA_READY_PENDING":
       return { label: t("action.uploadCameraReady"), description: t("action.uploadCameraReadyDesc"), urgency: "urgent" };
     default:

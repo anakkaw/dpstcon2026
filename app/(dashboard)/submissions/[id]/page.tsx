@@ -108,8 +108,8 @@ export default async function SubmissionDetailPage({
 
   // Fetch all supplementary data in parallel (was 7 sequential queries)
   const [reviewers, files, assignmentRows, decision, presRows, deadlineRows] = await Promise.all([
-    // Reviewers list (admin only)
-    canManageSubmission
+    // Reviewers list (only needed for admin on SUBMITTED/UNDER_REVIEW status)
+    canManageSubmission && ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status)
       ? (async () => {
           if (hasRole(currentUser, "ADMIN")) {
             const reviewerRoleRows = await db

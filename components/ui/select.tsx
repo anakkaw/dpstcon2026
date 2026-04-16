@@ -17,7 +17,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           "hover:border-gray-300",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 focus-visible:border-brand-500",
           "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50",
-          error
+          error || props["aria-invalid"]
             ? "border-red-300 focus-visible:ring-red-500/30 focus-visible:border-red-500"
             : "border-gray-200",
           className

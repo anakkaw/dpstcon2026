@@ -29,9 +29,11 @@ import { ReviewProgress } from "@/components/author/review-progress";
 import { PresentationCard } from "@/components/author/presentation-card";
 import { getNextAction, getRelevantDeadlineKey, getDaysUntil } from "@/lib/author-utils";
 import { displayNameTh } from "@/lib/display-name";
+import { useI18n } from "@/lib/i18n";
 import type { PresentationRubricCriterion } from "@/server/presentation-rubrics";
+import { AssignReviewerCard } from "@/components/review/assign-reviewer-card";
 import {
-  UserPlus, Gavel, Send, RotateCcw, Paperclip,
+  Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
   Trash2,
 } from "lucide-react";
@@ -107,6 +109,7 @@ export function SubmissionDetail({
   isAssignedReviewer, reviewerAssignmentId,
 }: Props) {
   const router = useRouter();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmAction, setConfirmAction] = useState<null | "withdraw" | "resubmit" | "delete">(
@@ -125,8 +128,6 @@ export function SubmissionDetail({
   const canWithdraw = canManageOwnSubmission && !["WITHDRAWN", "DRAFT"].includes(submission.status);
   const canResubmit = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
 
-  const [selectedReviewer, setSelectedReviewer] = useState("");
-  const [assigning, setAssigning] = useState(false);
   const [decisionOutcome, setDecisionOutcome] = useState("");
   const [decisionComments, setDecisionComments] = useState("");
   const [decisionConditions, setDecisionConditions] = useState("");
@@ -150,7 +151,7 @@ export function SubmissionDetail({
   async function handleSubmit() {
     const hasManuscript = files.some((f) => f.kind === "MANUSCRIPT");
     if (!hasManuscript) {
-      setMessage("กรุณาอัปโหลดไฟล์ต้นฉบับบทความก่อนส่ง");
+      setMessage(t("detail.uploadBeforeSubmit"));
       return;
     }
     setLoading(true);
@@ -158,7 +159,7 @@ export function SubmissionDetail({
       await submitPaper(submission.id);
       router.refresh();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      setMessage(err instanceof Error ? err.message : t("detail.genericError"));
       router.refresh();
     }
     setLoading(false);
@@ -187,39 +188,19 @@ export function SubmissionDetail({
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setMessage(data?.error || "ไม่สามารถลบบทความได้");
+        setMessage(data?.error || t("detail.deleteError"));
         return;
       }
 
       router.push("/submissions");
       router.refresh();
     } catch {
-      setMessage("ไม่สามารถลบบทความได้");
+      setMessage(t("detail.deleteError"));
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleAssignReviewer() {
-    if (!selectedReviewer) return;
-    setAssigning(true);
-    try {
-      const res = await fetch("/api/reviews/assignments/manual", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId: submission.id, reviewerId: selectedReviewer }),
-      });
-      if (res.ok) {
-        setMessage("มอบหมาย reviewer สำเร็จ");
-        setSelectedReviewer("");
-        router.refresh();
-      } else {
-        const data = await res.json();
-        setMessage(data.error || "เกิดข้อผิดพลาด");
-      }
-    } catch { setMessage("เกิดข้อผิดพลาด"); }
-    setAssigning(false);
-  }
 
   async function handleDecision() {
     if (!decisionOutcome) return;
@@ -231,13 +212,13 @@ export function SubmissionDetail({
         body: JSON.stringify({ submissionId: submission.id, outcome: decisionOutcome, comments: decisionComments, conditions: decisionOutcome === "CONDITIONAL_ACCEPT" ? decisionConditions : undefined }),
       });
       if (res.ok) {
-        setMessage("ตัดสินบทความสำเร็จ");
+        setMessage(t("detail.decisionSuccess"));
         router.refresh();
       } else {
         const data = await res.json();
-        setMessage(data.error || "เกิดข้อผิดพลาด");
+        setMessage(data.error || t("detail.genericError"));
       }
-    } catch { setMessage("เกิดข้อผิดพลาด"); }
+    } catch { setMessage(t("detail.genericError")); }
     setDeciding(false);
   }
 
@@ -272,17 +253,17 @@ export function SubmissionDetail({
         }),
       });
       if (res.ok) {
-        setMessage("ส่งผลรีวิวเรียบร้อยแล้ว");
+        setMessage(t("reviewForm.submitted"));
         setReviewRecommendation("");
         setReviewCommentsToAuthor("");
         setReviewCommentsToChair("");
         router.refresh();
       } else {
         const data = await res.json();
-        setMessage(data.error || "เกิดข้อผิดพลาดในการส่งรีวิว");
+        setMessage(data.error || t("reviewForm.error"));
       }
     } catch {
-      setMessage("เกิดข้อผิดพลาดในการส่งรีวิว");
+      setMessage(t("reviewForm.error"));
     }
     setSubmittingReview(false);
   }
@@ -295,13 +276,13 @@ export function SubmissionDetail({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setMessage(data?.error || "ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้");
+        setMessage(data?.error || t("detail.advisorResendError"));
         return;
       }
-      setMessage("ส่งอีเมลขอรับรองถึงอาจารย์ที่ปรึกษาอีกครั้งเรียบร้อยแล้ว");
+      setMessage(t("detail.advisorResendSuccess"));
       router.refresh();
     } catch {
-      setMessage("ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้");
+      setMessage(t("detail.advisorResendError"));
     } finally {
       setResendingAdvisor(false);
     }
@@ -311,10 +292,10 @@ export function SubmissionDetail({
     <div className="space-y-6 max-w-4xl">
       <ConfirmDialog
         open={confirmAction === "withdraw"}
-        title="ยืนยันการถอนบทความ"
-        description="การถอนบทความจะยกเลิกกระบวนการพิจารณาปัจจุบันทันที คุณยังสามารถกลับมาส่งใหม่ได้เฉพาะเมื่อระบบรองรับ"
-        confirmLabel="ถอนบทความ"
-        cancelLabel="ยกเลิก"
+        title={t("detail.confirmWithdraw")}
+        description={t("detail.confirmWithdrawDesc")}
+        confirmLabel={t("detail.withdrawBtn")}
+        cancelLabel={t("common.cancel")}
         tone="danger"
         loading={loading}
         onCancel={() => setConfirmAction(null)}
@@ -325,10 +306,10 @@ export function SubmissionDetail({
       />
       <ConfirmDialog
         open={confirmAction === "resubmit"}
-        title="ยืนยันการส่งฉบับแก้ไข"
-        description="ระบบจะส่งบทความฉบับแก้ไขเข้าสู่ขั้นตอนถัดไปทันที กรุณาตรวจสอบว่าได้อัปโหลดไฟล์ฉบับล่าสุดแล้ว"
-        confirmLabel="ส่งฉบับแก้ไข"
-        cancelLabel="ยกเลิก"
+        title={t("detail.confirmResubmit")}
+        description={t("detail.confirmResubmitDesc")}
+        confirmLabel={t("detail.resubmitBtn")}
+        cancelLabel={t("common.cancel")}
         loading={loading}
         onCancel={() => setConfirmAction(null)}
         onConfirm={async () => {
@@ -338,10 +319,10 @@ export function SubmissionDetail({
       />
       <ConfirmDialog
         open={confirmAction === "delete"}
-        title="ยืนยันการลบบทความ"
-        description="การลบบทความจะลบข้อมูลรีวิว การนำเสนอ และไฟล์แนบที่เกี่ยวข้องทั้งหมดออกจากระบบทันที"
-        confirmLabel="ลบบทความ"
-        cancelLabel="ยกเลิก"
+        title={t("detail.confirmDelete")}
+        description={t("detail.confirmDeleteDesc")}
+        confirmLabel={t("detail.deleteBtn")}
+        cancelLabel={t("common.cancel")}
         tone="danger"
         loading={loading}
         onCancel={() => setConfirmAction(null)}
@@ -351,7 +332,7 @@ export function SubmissionDetail({
         }}
       />
 
-      <Breadcrumb items={[{ label: "บทความ", href: "/submissions" }, { label: submission.title }]} />
+      <Breadcrumb items={[{ label: t("detail.papers"), href: "/submissions" }, { label: submission.title }]} />
 
       {message && <Alert tone="info">{message}</Alert>}
 
@@ -370,7 +351,7 @@ export function SubmissionDetail({
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:shrink-0 sm:flex-row">
-          {canSubmit && <Button onClick={handleSubmit} loading={loading} size="sm"><Send className="h-3.5 w-3.5" />ส่งบทความ</Button>}
+          {canSubmit && <Button onClick={handleSubmit} loading={loading} size="sm"><Send className="h-3.5 w-3.5" />{t("detail.submitBtn")}</Button>}
           {canWithdraw && (
             <Button
               onClick={() => setConfirmAction("withdraw")}
@@ -378,7 +359,7 @@ export function SubmissionDetail({
               loading={loading}
               size="sm"
             >
-              ถอนบทความ
+              {t("detail.withdrawAction")}
             </Button>
           )}
           {canDeleteSubmission && (
@@ -389,7 +370,7 @@ export function SubmissionDetail({
               size="sm"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              ลบบทความ
+              {t("detail.deleteAction")}
             </Button>
           )}
         </div>
@@ -410,9 +391,9 @@ export function SubmissionDetail({
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 shrink-0" />
             <span>
-              {deadlineKey === "submissionDeadline" ? "กำหนดส่งบทความ" : "กำหนดส่งฉบับสมบูรณ์"}
+              {deadlineKey === "submissionDeadline" ? t("detail.submissionDeadline") : t("detail.cameraReadyDeadline")}
               : {formatDate(relevantDeadline)}
-              {daysLeft > 0 ? ` (เหลือ ${daysLeft} วัน)` : daysLeft === 0 ? " (วันนี้!)" : ` (เลยกำหนด ${Math.abs(daysLeft)} วัน)`}
+              {daysLeft !== null && (daysLeft > 0 ? t("detail.daysLeft", { n: daysLeft }) : daysLeft === 0 ? t("detail.dueToday") : t("detail.overdue", { n: Math.abs(daysLeft) }))}
             </span>
           </div>
         </Alert>
@@ -440,7 +421,7 @@ export function SubmissionDetail({
                 ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                 : <XCircle className="h-4 w-4 text-red-500" />
               }
-              ผลการตัดสิน
+              {t("detail.decisionLabel")}
             </h3>
           </CardHeader>
           <CardBody className="space-y-2">
@@ -451,23 +432,23 @@ export function SubmissionDetail({
             </Badge>
             {decision.conditions && (
               <div>
-                <p className="text-xs font-medium text-ink-muted mb-1">เงื่อนไข:</p>
+                <p className="text-xs font-medium text-ink-muted mb-1">{t("detail.conditions")}</p>
                 <p className="text-sm text-ink whitespace-pre-wrap bg-surface-alt rounded-lg p-3">{decision.conditions}</p>
               </div>
             )}
             {decision.comments && (
               <div>
-                <p className="text-xs font-medium text-ink-muted mb-1">ความคิดเห็น:</p>
+                <p className="text-xs font-medium text-ink-muted mb-1">{t("detail.commentsLabel")}</p>
                 <p className="text-sm text-ink whitespace-pre-wrap bg-surface-alt rounded-lg p-3">{decision.comments}</p>
               </div>
             )}
-            <p className="text-[11px] text-ink-muted">ตัดสินเมื่อ {formatDateTime(decision.decidedAt)}</p>
+            <p className="text-[11px] text-ink-muted">{t("detail.decidedAt", { date: formatDateTime(decision.decidedAt) })}</p>
           </CardBody>
         </Card>
       )}
 
-      {/* Advisor Link Status (admin view) */}
-      {isAdmin && submission.advisorName && submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
+      {/* Advisor Link Status (visible to admin + author) */}
+      {(isAdmin || isOwner) && submission.advisorName && submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
         const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
         const now = new Date();
         const isExpired = now > expiresAt;
@@ -477,18 +458,87 @@ export function SubmissionDetail({
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 shrink-0" />
               <span>
-                ลิงก์รับรองอาจารย์ ({submission.advisorName}):{" "}
+                {t("advisor.linkStatus", { name: submission.advisorName })}{" "}
                 {isExpired
-                  ? "หมดอายุแล้ว — นักศึกษาต้องส่งลิงก์ใหม่"
-                  : `หมดอายุใน ${daysRemaining} วัน (${formatDate(expiresAt.toISOString())})`}
+                  ? t("advisor.linkExpired")
+                  : t("advisor.linkExpiresIn", { n: daysRemaining, date: formatDate(expiresAt.toISOString()) })}
               </span>
             </div>
           </Alert>
         );
       })()}
 
+      {/* Review confirmation — shown after reviewer already submitted */}
+      {isAssignedReviewer && submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (() => {
+        const myReview = submission.reviews.find((r) => r.reviewer.id === currentUserId && r.completedAt);
+        return (
+          <Alert tone="success">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-medium">{t("reviewForm.alreadySubmitted")}</p>
+                <p className="text-sm mt-0.5">{t("reviewForm.alreadySubmittedDesc")}</p>
+                {myReview?.recommendation && (
+                  <p className="text-sm mt-1">{t("reviewForm.yourRecommendation")} <Badge tone={myReview.recommendation === "ACCEPT" ? "success" : myReview.recommendation === "REJECT" ? "danger" : "warning"}>{RECOMMENDATION_LABELS[myReview.recommendation] || myReview.recommendation}</Badge></p>
+                )}
+              </div>
+            </div>
+          </Alert>
+        );
+      })()}
+
+      {/* Review Submission Form — for assigned reviewers (shown prominently before paper info) */}
+      {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (
+        <Card accent="brand">
+          <CardHeader>
+            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+              <Send className="h-4 w-4" />
+              {t("reviewForm.title")}
+            </h3>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Field label={t("reviewForm.recommendation")} htmlFor="reviewRecommendation" required>
+              <Select id="reviewRecommendation" value={reviewRecommendation} onChange={(e) => setReviewRecommendation(e.target.value)}>
+                <option value="">{t("reviewForm.recommendationPlaceholder")}</option>
+                {Object.entries(RECOMMENDATION_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t("reviewForm.commentsToAuthor")} htmlFor="reviewCommentsToAuthor" required hint={t("reviewForm.commentsToAuthorHint")}>
+              <Textarea
+                id="reviewCommentsToAuthor"
+                value={reviewCommentsToAuthor}
+                onChange={(e) => setReviewCommentsToAuthor(e.target.value)}
+                placeholder={t("reviewForm.commentsToAuthorPlaceholder")}
+                rows={5}
+              />
+            </Field>
+            <Field label={t("reviewForm.commentsToChair")} htmlFor="reviewCommentsToChair">
+              <Textarea
+                id="reviewCommentsToChair"
+                value={reviewCommentsToChair}
+                onChange={(e) => setReviewCommentsToChair(e.target.value)}
+                placeholder={t("reviewForm.commentsToChairPlaceholder")}
+                rows={3}
+              />
+            </Field>
+          </CardBody>
+          <CardFooter className="flex justify-end">
+            <Button
+              onClick={handleSubmitReview}
+              loading={submittingReview}
+              disabled={!reviewRecommendation || !reviewCommentsToAuthor.trim()}
+            >
+              <Send className="h-3.5 w-3.5" />
+              {t("reviewForm.submit")}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+
       {/* Paper Info */}
-      <Collapsible title="ข้อมูลบทความ" defaultOpen={submission.status === "DRAFT"}>
+      <Collapsible title={t("detail.paperInfo")} defaultOpen={submission.status === "DRAFT"}>
         <div className="space-y-4">
           <div>
             <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">Author</h3>
@@ -514,7 +564,7 @@ export function SubmissionDetail({
             <>
               <Divider />
               <div>
-                <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">บทคัดย่อ</h3>
+                <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">{t("detail.abstract")}</h3>
                 <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed">{submission.abstract}</p>
               </div>
             </>
@@ -522,7 +572,7 @@ export function SubmissionDetail({
 
           {submission.keywords && (
             <div>
-              <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1.5">คำสำคัญ</h3>
+              <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1.5">{t("detail.keywords")}</h3>
               <div className="flex flex-wrap gap-1.5">
                 {submission.keywords.split(",").map((kw, i) => (
                   <span key={i} className="text-xs bg-surface-alt text-ink-light px-2.5 py-1 rounded-md">{kw.trim()}</span>
@@ -539,9 +589,9 @@ export function SubmissionDetail({
                 tone={submission.advisorApprovalStatus === "APPROVED" ? "success" : submission.advisorApprovalStatus === "PENDING" ? "warning" : "neutral"}
                 className="mt-1.5"
               >
-                {submission.advisorApprovalStatus === "APPROVED" ? "รับรองแล้ว" : submission.advisorApprovalStatus === "PENDING" ? "รออนุมัติ" : submission.advisorApprovalStatus || "—"}
+                {submission.advisorApprovalStatus === "APPROVED" ? t("advisor.statusApproved") : submission.advisorApprovalStatus === "PENDING" ? t("advisor.statusPending") : submission.advisorApprovalStatus || "—"}
               </Badge>
-              {isAdmin && submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
+              {(isAdmin || isOwner) && submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
                 const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
                 const now = new Date();
                 const isExpired = now > expiresAt;
@@ -549,10 +599,10 @@ export function SubmissionDetail({
                 return (
                   <div className="mt-1.5">
                     {isExpired ? (
-                      <Badge tone="danger">ลิงก์หมดอายุแล้ว</Badge>
+                      <Badge tone="danger">{t("advisor.linkExpiredBadge")}</Badge>
                     ) : (
                       <Badge tone={daysRemaining <= 3 ? "warning" : "info"}>
-                        ลิงก์หมดอายุใน {daysRemaining} วัน ({formatDate(expiresAt.toISOString())})
+                        {t("advisor.linkExpiresBadge", { n: daysRemaining, date: formatDate(expiresAt.toISOString()) })}
                       </Badge>
                     )}
                   </div>
@@ -567,7 +617,7 @@ export function SubmissionDetail({
                     loading={resendingAdvisor}
                     onClick={handleResendAdvisorApproval}
                   >
-                    ส่งอีเมลขอรับรองอีกครั้ง
+                    {t("advisor.resendEmail")}
                   </Button>
                 </div>
               )}
@@ -575,8 +625,8 @@ export function SubmissionDetail({
           )}
 
           <div className="text-xs text-ink-muted pt-1">
-            สร้างเมื่อ {formatDateTime(submission.createdAt)}
-            {submission.submittedAt && ` — ส่งเมื่อ ${formatDateTime(submission.submittedAt)}`}
+            {t("detail.createdAt")} {formatDateTime(submission.createdAt)}
+            {submission.submittedAt && ` — ${t("detail.submittedAt")} ${formatDateTime(submission.submittedAt)}`}
           </div>
         </div>
       </Collapsible>
@@ -586,7 +636,7 @@ export function SubmissionDetail({
         <CardHeader>
           <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
             <Paperclip className="h-4 w-4" />
-            ไฟล์แนบ
+            {t("detail.files")}
           </h3>
         </CardHeader>
         <CardBody className="space-y-4">
@@ -601,8 +651,8 @@ export function SubmissionDetail({
             <FileUpload
               submissionId={submission.id}
               kind="MANUSCRIPT"
-              label="แนบบทคัดย่อ ตาม template"
-              hint="อัปโหลดไฟล์บทความที่ต้องการส่ง"
+              label={t("detail.uploadManuscript")}
+              hint={t("detail.uploadManuscriptHint")}
               accept=".pdf,.doc,.docx"
               onUploadComplete={() => router.refresh()}
             />
@@ -612,8 +662,8 @@ export function SubmissionDetail({
             <FileUpload
               submissionId={submission.id}
               kind="CAMERA_READY"
-              label="อัปโหลด Camera-Ready"
-              hint="อัปโหลดฉบับสมบูรณ์พร้อมตีพิมพ์"
+              label={t("detail.uploadCameraReady")}
+              hint={t("detail.uploadCameraReadyHint")}
               accept=".pdf"
               onUploadComplete={() => router.refresh()}
             />
@@ -623,8 +673,8 @@ export function SubmissionDetail({
             <FileUpload
               submissionId={submission.id}
               kind="SUPPLEMENTARY"
-              label="อัปโหลดเอกสารเสริม (ไม่บังคับ)"
-              hint="เช่น ข้อมูลเพิ่มเติม ซอร์สโค้ด ฯลฯ"
+              label={t("detail.uploadSupplementary")}
+              hint={t("detail.uploadSupplementaryHint")}
               accept=".pdf,.zip,.doc,.docx"
               onUploadComplete={() => router.refresh()}
             />
@@ -638,7 +688,7 @@ export function SubmissionDetail({
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
               <FileText className="h-4 w-4" />
-              ผลรีวิว
+              {t("detail.reviewResults")}
             </h3>
           </CardHeader>
           <CardBody className="space-y-4">
@@ -651,14 +701,14 @@ export function SubmissionDetail({
                 {submission.reviews.map((review, i) => (
                   <Collapsible
                     key={review.id}
-                    title={`Reviewer ${i + 1}${isAdmin ? ` (${displayNameTh(review.reviewer)})` : ""} ${review.completedAt ? `— ${RECOMMENDATION_LABELS[review.recommendation ?? ""] || "รีวิวแล้ว"}` : "— ยังไม่รีวิว"}`}
+                    title={`Reviewer ${i + 1}${isAdmin ? ` (${displayNameTh(review.reviewer)})` : ""} ${review.completedAt ? `— ${RECOMMENDATION_LABELS[review.recommendation ?? ""] || t("detail.reviewed")}` : `— ${t("detail.notReviewed")}`}`}
                     defaultOpen={i === 0}
                   >
                     {review.completedAt ? (
                       <div className="space-y-3">
                         {review.recommendation && (
                           <div className="text-sm">
-                            <span className="text-ink-muted">คำแนะนำ: </span>
+                            <span className="text-ink-muted">{t("detail.recommendation")}</span>
                             <Badge tone={review.recommendation === "ACCEPT" ? "success" : review.recommendation === "REJECT" ? "danger" : "warning"}>
                               {RECOMMENDATION_LABELS[review.recommendation] || review.recommendation}
                             </Badge>
@@ -666,20 +716,20 @@ export function SubmissionDetail({
                         )}
                         {review.commentsToAuthor && (
                           <div>
-                            <p className="text-xs text-ink-muted mb-1">ความคิดเห็นถึง Author:</p>
+                            <p className="text-xs text-ink-muted mb-1">{t("detail.commentsToAuthorLabel")}</p>
                             <p className="text-sm text-ink whitespace-pre-wrap bg-surface-alt rounded-lg p-3 leading-relaxed">{review.commentsToAuthor}</p>
                           </div>
                         )}
                         {isAdmin && review.commentsToChair && (
                           <div>
-                            <p className="text-xs text-ink-muted mb-1">ความคิดเห็นถึงประธาน (เฉพาะ admin):</p>
+                            <p className="text-xs text-ink-muted mb-1">{t("detail.commentsToChairLabel")}</p>
                             <p className="text-sm text-ink whitespace-pre-wrap bg-amber-50/60 border border-amber-200/40 rounded-lg p-3 leading-relaxed">{review.commentsToChair}</p>
                           </div>
                         )}
                       </div>
                     ) : (
                       <p className="text-sm text-ink-muted flex items-center gap-2">
-                        <Clock className="h-3.5 w-3.5" />ยังไม่ส่งผลรีวิว
+                        <Clock className="h-3.5 w-3.5" />{t("detail.notReviewed")}
                       </p>
                     )}
                   </Collapsible>
@@ -690,82 +740,32 @@ export function SubmissionDetail({
         </Card>
       )}
 
-      {/* Review Submission Form — for assigned reviewers */}
-      {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (
-        <Card accent="brand">
-          <CardHeader>
-            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <Send className="h-4 w-4" />
-              ส่งผลรีวิว
-            </h3>
-          </CardHeader>
-          <CardBody className="space-y-3">
-            <Field label="คำแนะนำ" htmlFor="reviewRecommendation" required>
-              <Select id="reviewRecommendation" value={reviewRecommendation} onChange={(e) => setReviewRecommendation(e.target.value)}>
-                <option value="">— เลือกคำแนะนำ —</option>
-                {Object.entries(RECOMMENDATION_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="ความคิดเห็นถึง Author" htmlFor="reviewCommentsToAuthor" required>
-              <Textarea
-                id="reviewCommentsToAuthor"
-                value={reviewCommentsToAuthor}
-                onChange={(e) => setReviewCommentsToAuthor(e.target.value)}
-                placeholder="ระบุความคิดเห็นและข้อเสนอแนะถึงผู้เขียน..."
-                rows={5}
-              />
-            </Field>
-            <Field label="ความคิดเห็นถึงประธานสาขา (ไม่บังคับ)" htmlFor="reviewCommentsToChair">
-              <Textarea
-                id="reviewCommentsToChair"
-                value={reviewCommentsToChair}
-                onChange={(e) => setReviewCommentsToChair(e.target.value)}
-                placeholder="ข้อความลับเฉพาะประธานสาขา (author จะไม่เห็น)..."
-                rows={3}
-              />
-            </Field>
-          </CardBody>
-          <CardFooter className="flex justify-end">
-            <Button
-              onClick={handleSubmitReview}
-              loading={submittingReview}
-              disabled={!reviewRecommendation || !reviewCommentsToAuthor.trim()}
-            >
-              <Send className="h-3.5 w-3.5" />
-              ส่งผลรีวิว
-            </Button>
-          </CardFooter>
-        </Card>
-      )}
-
       {/* Resubmit Section — shown when revision required */}
       {canResubmit && (
         <Card accent="warning">
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
               <RotateCcw className="h-4 w-4" />
-              ส่งบทความแก้ไข
+              {t("detail.submitRevision")}
             </h3>
           </CardHeader>
           <CardBody className="space-y-4">
             <Alert tone="warning">
-              กรุณาแนบไฟล์ต้นฉบับบทความที่แก้ไขแล้วก่อนกดส่ง
+              {t("detail.revisionAlert")}
             </Alert>
             <FileUpload
               submissionId={submission.id}
               kind="MANUSCRIPT"
-              label="อัปโหลดต้นฉบับบทความฉบับแก้ไข *"
-              hint="ไฟล์บทความที่แก้ไขตามเงื่อนไขแล้ว"
+              label={t("detail.uploadRevised")}
+              hint={t("detail.uploadRevisedHint")}
               accept=".pdf,.doc,.docx"
               onUploadComplete={() => router.refresh()}
             />
             <FileUpload
               submissionId={submission.id}
               kind="SUPPLEMENTARY"
-              label="อัปโหลดเอกสารเสริม (ไม่บังคับ)"
-              hint="เช่น ข้อมูลเพิ่มเติม ซอร์สโค้ด ฯลฯ"
+              label={t("detail.uploadSupplementary")}
+              hint={t("detail.uploadSupplementaryHint")}
               accept=".pdf,.zip,.doc,.docx"
               onUploadComplete={() => router.refresh()}
             />
@@ -777,7 +777,7 @@ export function SubmissionDetail({
               disabled={!files.some((f) => f.kind === "MANUSCRIPT")}
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              ส่งฉบับแก้ไข
+              {t("detail.resubmitBtn")}
             </Button>
           </CardFooter>
         </Card>
@@ -793,67 +793,49 @@ export function SubmissionDetail({
 
       {/* Admin: Assign Reviewer */}
       {isAdmin && ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status) && (
-        <Card accent="info">
-          <CardHeader>
-            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <UserPlus className="h-4 w-4" />
-              มอบหมาย Reviewer
-            </h3>
-          </CardHeader>
-          <CardBody>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <Select value={selectedReviewer} onChange={(e) => setSelectedReviewer(e.target.value)}>
-                  <option value="">— เลือก Reviewer —</option>
-                  {reviewers
-                    .filter((r) => !submission.reviews.some((rev) => rev.reviewer.id === r.id))
-                    .map((r) => (
-                      <option key={r.id} value={r.id}>{displayNameTh(r)} ({r.email})</option>
-                    ))}
-                </Select>
-              </div>
-              <Button onClick={handleAssignReviewer} loading={assigning} disabled={!selectedReviewer} size="sm">
-                มอบหมาย
-              </Button>
-            </div>
-          </CardBody>
-        </Card>
+        <AssignReviewerCard
+          submissionId={submission.id}
+          reviewers={reviewers}
+          excludeReviewerIds={submission.reviews.map((r) => r.reviewer.id)}
+          onMessage={setMessage}
+          showDueDate
+        />
       )}
 
       {/* Admin: Decision Panel */}
-      {isAdmin && ["UNDER_REVIEW", "REBUTTAL"].includes(submission.status) && submission.reviews.some((r) => r.completedAt) && (
+      {isAdmin && submission.status === "UNDER_REVIEW" && submission.reviews.some((r) => r.completedAt) && (
         <Card accent="brand">
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
               <Gavel className="h-4 w-4" />
-              ตัดสินบทความ
+              {t("detail.makeDecision")}
             </h3>
           </CardHeader>
           <CardBody className="space-y-3">
-            <Field label="ผลการตัดสิน" htmlFor="decision" required>
+            <Field label={t("detail.decisionOutcome")} htmlFor="decision" required>
               <Select id="decision" value={decisionOutcome} onChange={(e) => setDecisionOutcome(e.target.value)}>
-                <option value="">— เลือกผลการตัดสิน —</option>
+                <option value="">{t("detail.selectOutcome")}</option>
                 {Object.entries(DECISION_LABELS).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="ความคิดเห็น" htmlFor="decisionComments">
+            <Field label={t("detail.decisionComments")} htmlFor="decisionComments">
               <Textarea
                 id="decisionComments"
                 value={decisionComments}
                 onChange={(e) => setDecisionComments(e.target.value)}
-                placeholder="เหตุผลประกอบการตัดสิน..."
+                placeholder={t("detail.decisionCommentsPlaceholder")}
                 rows={3}
               />
             </Field>
             {decisionOutcome === "CONDITIONAL_ACCEPT" && (
-              <Field label="เงื่อนไขการแก้ไข" htmlFor="decisionConditions" required>
+              <Field label={t("detail.decisionConditions")} htmlFor="decisionConditions" required>
                 <Textarea
                   id="decisionConditions"
                   value={decisionConditions}
                   onChange={(e) => setDecisionConditions(e.target.value)}
-                  placeholder="ระบุเงื่อนไขที่ author ต้องแก้ไขก่อนตอบรับ..."
+                  placeholder={t("detail.decisionConditionsPlaceholder")}
                   rows={4}
                 />
               </Field>
@@ -861,7 +843,7 @@ export function SubmissionDetail({
           </CardBody>
           <CardFooter className="flex justify-end">
             <Button onClick={handleDecision} loading={deciding} disabled={!decisionOutcome || (decisionOutcome === "CONDITIONAL_ACCEPT" && !decisionConditions.trim())}>
-              ยืนยันการตัดสิน
+              {t("detail.confirmDecision")}
             </Button>
           </CardFooter>
         </Card>
@@ -871,7 +853,7 @@ export function SubmissionDetail({
       {(isAdmin || isReviewer) && (
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-semibold text-ink">การสนทนา (เฉพาะ Reviewer และ Program Chair)</h3>
+            <h3 className="text-sm font-semibold text-ink">{t("detail.discussion")}</h3>
           </CardHeader>
           <CardBody className="space-y-3">
             {submission.discussions.length > 0 ? (
@@ -885,7 +867,7 @@ export function SubmissionDetail({
                 </div>
               ))
             ) : (
-              <p className="text-sm text-ink-muted">ยังไม่มีข้อความ</p>
+              <p className="text-sm text-ink-muted">{t("detail.noMessages")}</p>
             )}
 
             <Divider />
@@ -894,12 +876,12 @@ export function SubmissionDetail({
                 <Textarea
                   value={discussionMsg}
                   onChange={(e) => setDiscussionMsg(e.target.value)}
-                  placeholder="พิมพ์ข้อความ..."
+                  placeholder={t("detail.typePlaceholder")}
                   rows={2}
                 />
               </div>
               <Button onClick={handlePostDiscussion} loading={posting} disabled={!discussionMsg.trim()} size="sm" className="self-end">
-                ส่ง
+                {t("detail.sendBtn")}
               </Button>
             </div>
           </CardBody>

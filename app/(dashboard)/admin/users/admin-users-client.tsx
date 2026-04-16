@@ -17,6 +17,7 @@ import { getRoleLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { displayNameTh, displayNameEn } from "@/lib/display-name";
 import type { AdminUserData, RegistrationStats } from "@/server/admin-users-data";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 import {
   UserPlus, Upload, Search, Pencil, KeyRound, Trash2, X, Send, RefreshCw,
   Users, ShieldCheck, UserCheck, ChevronDown, ChevronUp,
@@ -402,6 +403,7 @@ export function AdminUsersClient({
 
   return (
     <div className="space-y-6">
+      <Breadcrumb items={[{ label: t("nav.dashboard"), href: "/dashboard" }, { label: t("nav.userManagement") }]} />
       <SectionTitle title={t("users.title")} subtitle={t("users.usersInSystem", { n: users.length })}
         action={<div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={() => setBulkRemindOpen(true)} loading={reminding}><Bell className="h-4 w-4" />{t("users.bulkRemind")}</Button>

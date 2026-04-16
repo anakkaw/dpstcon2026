@@ -1,3 +1,4 @@
+import { cloneElement, isValidElement, useId } from "react";
 import { cn } from "@/lib/utils";
 
 interface FieldProps {
@@ -19,6 +20,26 @@ export function Field({
   children,
   className,
 }: FieldProps) {
+  const autoId = useId();
+  const hintId = `${autoId}-hint`;
+  const errorId = `${autoId}-error`;
+
+  const describedBy = [
+    hint && !error ? hintId : null,
+    error ? errorId : null,
+  ]
+    .filter(Boolean)
+    .join(" ") || undefined;
+
+  // Inject aria attributes into the first child element
+  const enhancedChildren =
+    isValidElement<Record<string, unknown>>(children)
+      ? cloneElement(children, {
+          "aria-invalid": error ? true : undefined,
+          "aria-describedby": describedBy,
+        })
+      : children;
+
   return (
     <div className={cn("space-y-1.5", className)}>
       <label
@@ -28,12 +49,12 @@ export function Field({
         {label}
         {required && <span className="text-danger ml-0.5">*</span>}
       </label>
-      {children}
+      {enhancedChildren}
       {hint && !error && (
-        <p className="text-xs text-ink-muted leading-relaxed">{hint}</p>
+        <p id={hintId} className="text-xs text-ink-muted leading-relaxed">{hint}</p>
       )}
       {error && (
-        <p className="text-xs text-danger font-medium">{error}</p>
+        <p id={errorId} className="text-xs text-danger font-medium" role="alert">{error}</p>
       )}
     </div>
   );

@@ -22,7 +22,7 @@ import { useDashboardAuth } from "@/components/dashboard-auth-context";
 import {
   ClipboardCheck, ChevronUp, ChevronDown, ChevronRight,
   ArrowUpDown, ExternalLink, Clock, AlertTriangle, Users,
-  UserPlus, Trash2, Search, X, CheckCircle2, CircleDot,
+  UserPlus, Trash2, Search, X, CheckCircle, CheckCircle2, XCircle, CircleDot,
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -173,6 +173,28 @@ export function ReviewsPageClient({
     setAssignmentToRemove(null);
   }
 
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+
+  async function handleRespond(assignmentId: string, response: "ACCEPTED" | "DECLINED") {
+    setRespondingId(assignmentId);
+    try {
+      const res = await fetch(`/api/reviews/assignments/${assignmentId}/respond`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response }),
+      });
+      if (res.ok) {
+        setMessage(response === "ACCEPTED" ? t("reviews.accepted") : t("reviews.declinedMsg"));
+        await reloadAssignments();
+      } else {
+        setMessage(t("reviews.respondFailed"));
+      }
+    } catch {
+      setMessage(t("reviews.respondFailed"));
+    }
+    setRespondingId(null);
+  }
+
   const { statusCounts, totalAssignments } = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const assignment of assignments) {
@@ -259,9 +281,9 @@ export function ReviewsPageClient({
         ) : (
           <div className="space-y-3">
             {myFiltered.map((assignment) => (
-              <Link key={assignment.id} href={`/submissions/${assignment.submission.id}`}>
-                <Card hover className="mb-0">
-                  <CardBody className="py-4">
+              <Card key={assignment.id} hover className="mb-0">
+                <CardBody className="py-4">
+                  <Link href={`/submissions/${assignment.submission.id}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-semibold text-ink truncate">{assignment.submission.title}</h3>
@@ -277,9 +299,19 @@ export function ReviewsPageClient({
                       </div>
                       <Badge tone={STATUS_COLORS[assignment.status] || "neutral"}>{assignmentLabels[assignment.status] || assignment.status}</Badge>
                     </div>
-                  </CardBody>
-                </Card>
-              </Link>
+                  </Link>
+                  {assignment.status === "PENDING" && (
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border-light">
+                      <Button size="sm" onClick={() => handleRespond(assignment.id, "ACCEPTED")} loading={respondingId === assignment.id}>
+                        <CheckCircle className="h-3.5 w-3.5" />{t("reviews.accept")}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => handleRespond(assignment.id, "DECLINED")} loading={respondingId === assignment.id}>
+                        <XCircle className="h-3.5 w-3.5" />{t("reviews.decline")}
+                      </Button>
+                    </div>
+                  )}
+                </CardBody>
+              </Card>
             ))}
           </div>
         )}

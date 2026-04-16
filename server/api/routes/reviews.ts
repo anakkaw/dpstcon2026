@@ -124,6 +124,23 @@ app.post("/assignments/manual", async (c) => {
     return c.json({ error: "Reviewer already assigned to this submission" }, 409);
   }
 
+  // Check conflict of interest
+  const { conflicts } = await import("@/server/db/schema");
+  const conflict = await db.query.conflicts.findFirst({
+    where: and(
+      eq(conflicts.submissionId, submissionId),
+      eq(conflicts.userId, reviewerId)
+    ),
+    columns: { id: true, reason: true },
+  });
+
+  if (conflict) {
+    return c.json({
+      error: "Conflict of interest declared",
+      conflictReason: conflict.reason,
+    }, 409);
+  }
+
   const [assignment] = await db
     .insert(reviewAssignments)
     .values({
@@ -195,6 +212,42 @@ app.delete("/assignments/:id", async (c) => {
     .returning();
   if (deleted.length === 0) return c.json({ error: "Assignment not found" }, 404);
   return c.json({ ok: true });
+});
+
+// PATCH /api/reviews/assignments/:id/respond — reviewer accepts or declines
+app.patch("/assignments/:id/respond", async (c) => {
+  const currentUser = c.get("user");
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const schema = z.object({
+    response: z.enum(["ACCEPTED", "DECLINED"]),
+  });
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Invalid response" }, 400);
+
+  const assignment = await db.query.reviewAssignments.findFirst({
+    where: eq(reviewAssignments.id, id),
+    columns: { id: true, reviewerId: true, status: true },
+  });
+
+  if (!assignment) return c.json({ error: "Assignment not found" }, 404);
+  if (assignment.reviewerId !== currentUser.id && !hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+  if (assignment.status !== "PENDING") {
+    return c.json({ error: "Assignment already responded" }, 409);
+  }
+
+  const [updated] = await db
+    .update(reviewAssignments)
+    .set({
+      status: parsed.data.response,
+      respondedAt: new Date(),
+    })
+    .where(eq(reviewAssignments.id, id))
+    .returning();
+
+  return c.json({ assignment: updated });
 });
 
 // POST /api/reviews/reviews — submit review (must have assignment)
@@ -341,14 +394,31 @@ app.post("/decisions", async (c) => {
     DESK_REJECT: "DESK_REJECTED",
   };
 
-  const newStatus = statusMap[data.outcome];
+  let newStatus = statusMap[data.outcome];
+
+  // Auto-promote to CAMERA_READY_SUBMITTED if a manuscript file already exists
+  // (this conference is abstract-based — any uploaded PDF counts as the final version)
+  if (newStatus === "CAMERA_READY_PENDING") {
+    const { storedFiles } = await import("@/server/db/schema");
+    const existingManuscript = await db.query.storedFiles.findFirst({
+      where: and(
+        eq(storedFiles.submissionId, data.submissionId),
+        eq(storedFiles.kind, "MANUSCRIPT")
+      ),
+      columns: { id: true },
+    });
+
+    if (existingManuscript) {
+      newStatus = "CAMERA_READY_SUBMITTED";
+    }
+  }
 
   await db
     .update(submissions)
     .set({ status: newStatus as typeof submissions.$inferInsert.status, updatedAt: new Date() })
     .where(eq(submissions.id, data.submissionId));
 
-  if (newStatus === "CAMERA_READY_PENDING") {
+  if (newStatus === "CAMERA_READY_PENDING" || newStatus === "CAMERA_READY_SUBMITTED") {
     await ensureSubmissionPaperCode(data.submissionId);
   }
 

@@ -1,7 +1,9 @@
 "use client";
 
 import { StatCard } from "@/components/ui/stat-card";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   getSubmissionStatusLabels,
   SUBMISSION_STATUS_COLORS,
@@ -39,8 +41,18 @@ export default function AdminDashboard({ stats }: { stats: Record<string, unknow
   const totalSubs = (stats.totalSubmissions as number) || 0;
   const orderedStatusRows = Object.entries(byStatus).sort((a, b) => b[1] - a[1]);
 
+  const submittedCount = (byStatus.SUBMITTED || 0);
+
   return (
     <>
+      {submittedCount > 0 && (
+        <Alert tone="warning">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-medium">{t("dashboard.adminPendingAssign", { n: submittedCount })}</span>
+            <Link href="/submissions"><Button size="sm"><ArrowRight className="h-3.5 w-3.5" />{t("dashboard.managePapers")}</Button></Link>
+          </div>
+        </Alert>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard label={t("dashboard.totalPapers")} value={(stats.totalSubmissions as number) || 0} icon={<FileText className="h-5 w-5" />} accent="brand" />
         <StatCard label={t("dashboard.reviewers")} value={(stats.totalReviewers as number) || 0} icon={<Users className="h-5 w-5" />} accent="info" />

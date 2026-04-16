@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useMemo, useCallback, memo } from "react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Image as ImageIcon, Calendar, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download, Mic } from "lucide-react";
 import { TrackFilter } from "@/components/track-filter";
 import { Alert } from "@/components/ui/alert";
@@ -291,6 +292,7 @@ export function PresentationsClient({
 
   return (
     <div className="space-y-6">
+      <Breadcrumb items={[{ label: t("nav.dashboard"), href: "/dashboard" }, { label: title }]} />
       <SectionTitle
         title={title}
         subtitle={canManage ? t("presentations.managementSubtitle", { n: filteredPresentations.length }) : t("presentations.itemsCount", { n: filteredPresentations.length })}

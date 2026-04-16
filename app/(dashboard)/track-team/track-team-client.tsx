@@ -15,6 +15,7 @@ import { WorkspaceSection, WorkspaceSurface } from "@/components/ui/workspace-se
 import { useI18n } from "@/lib/i18n";
 import { displayNameTh } from "@/lib/display-name";
 import type { AvailableUser, MemberData, TrackData } from "@/server/track-team-data";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { ClipboardCheck, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 
 export function TrackTeamClient({
@@ -135,6 +136,7 @@ export function TrackTeamClient({
         }}
       />
 
+      <Breadcrumb items={[{ label: t("nav.dashboard"), href: "/dashboard" }, { label: t("nav.trackTeam") }]} />
       <SectionTitle
         title={t("trackTeam.title")}
         subtitle={currentTrack ? t("trackTeam.trackSummary", { track: currentTrack.name, members: members.length }) : t("trackTeam.subtitle")}

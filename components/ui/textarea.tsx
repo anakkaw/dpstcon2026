@@ -17,7 +17,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           "hover:border-gray-300",
           "focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500",
           "disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50",
-          error ? "border-red-300 focus:ring-red-500/30 focus:border-red-500" : "border-gray-200",
+          error || props["aria-invalid"] ? "border-red-300 focus:ring-red-500/30 focus:border-red-500" : "border-gray-200",
           className
         )}
         {...props}
