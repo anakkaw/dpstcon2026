@@ -5,18 +5,15 @@ import { eq, and, gt } from "drizzle-orm";
 import { z } from "zod";
 import { getDownloadUrl } from "@/server/r2";
 import { rateLimit } from "../middleware/rate-limit";
+import { ADVISOR_TOKEN_EXPIRY_DAYS } from "@/lib/constants";
 
 const app = new OpenAPIHono();
 
 // Rate limit: 15 requests per 15 minutes per IP
 app.use("/*", rateLimit(15, 15 * 60 * 1000));
 
-// No auth required — public token-based access
-// M3: Advisor tokens expire after 7 days from submission
-const ADVISOR_TOKEN_EXPIRY_DAYS = 7;
-
 function isTokenExpired(submittedAt: Date | null): boolean {
-  if (!submittedAt) return false;
+  if (!submittedAt) return true; // No submission date means token is invalid
   const expiresAt = new Date(submittedAt.getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
   return new Date() > expiresAt;
 }

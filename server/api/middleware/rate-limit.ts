@@ -6,15 +6,23 @@ interface RateLimitEntry {
   resetAt: number;
 }
 
+const MAX_STORE_SIZE = 10_000;
 const store = new Map<string, RateLimitEntry>();
 
-// Cleanup stale entries every 5 minutes
+// Cleanup stale entries every minute (was 5 min — tighter to bound memory)
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of store) {
     if (entry.resetAt < now) store.delete(key);
   }
-}, 5 * 60 * 1000);
+  // Hard cap: evict oldest entries if store still too large
+  if (store.size > MAX_STORE_SIZE) {
+    const entries = Array.from(store.entries())
+      .sort((a, b) => a[1].resetAt - b[1].resetAt);
+    const toEvict = entries.slice(0, store.size - MAX_STORE_SIZE);
+    for (const [key] of toEvict) store.delete(key);
+  }
+}, 60 * 1000);
 
 /**
  * Simple in-memory rate limiter.

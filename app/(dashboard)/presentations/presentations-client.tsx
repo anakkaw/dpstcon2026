@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, useMemo, useCallback, memo } from "react";
 import { Image as ImageIcon, Calendar, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download, Mic } from "lucide-react";
 import { TrackFilter } from "@/components/track-filter";
 import { Alert } from "@/components/ui/alert";
@@ -90,61 +90,70 @@ export function PresentationsClient({
   const presentationLabel = (presentation: PresentationData | ScoringPresentation) =>
     `${presentation.submission.paperCode || "NO-CODE"} · ${presentation.submission.title}`;
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-      return;
-    }
-
-    setSortKey(key);
-    setSortDir("asc");
-  }
+  const toggleSort = useCallback((key: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDir("asc");
+      return key;
+    });
+  }, []);
 
   async function reload() {
     const data = await fetch(`/api/presentations?type=${type}`).then((r) => r.json());
     setPresentations(data.presentations || []);
   }
 
-  const filteredPresentations = presentations.filter((presentation) => {
-    if (trackFilter && presentation.submission.track?.id !== trackFilter) {
-      return false;
+  const filteredPresentations = useMemo(() =>
+    presentations.filter((presentation) => !trackFilter || presentation.submission.track?.id === trackFilter),
+    [presentations, trackFilter]);
+
+  const trackCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const presentation of presentations) {
+      if (presentation.submission.track?.id) {
+        counts[presentation.submission.track.id] = (counts[presentation.submission.track.id] || 0) + 1;
+      }
     }
+    return counts;
+  }, [presentations]);
 
-    return true;
-  });
+  const sortedPresentations = useMemo(() =>
+    [...filteredPresentations].sort((a, b) => {
+      const direction = sortDir === "asc" ? 1 : -1;
 
-  const trackCounts: Record<string, number> = {};
-  for (const presentation of presentations) {
-    if (presentation.submission.track?.id) {
-      trackCounts[presentation.submission.track.id] = (trackCounts[presentation.submission.track.id] || 0) + 1;
+      switch (sortKey) {
+        case "title":
+          return direction * a.submission.title.localeCompare(b.submission.title);
+        case "author":
+          return direction * displayNameTh(a.submission.author).localeCompare(displayNameTh(b.submission.author));
+        case "track":
+          return direction * (a.submission.track?.name || "").localeCompare(b.submission.track?.name || "");
+        case "scheduledAt":
+          return direction * (a.scheduledAt || "").localeCompare(b.scheduledAt || "");
+        case "room":
+          return direction * (a.room || "").localeCompare(b.room || "");
+        case "duration":
+          return direction * ((a.duration || 0) - (b.duration || 0));
+        case "status":
+          return direction * a.status.localeCompare(b.status);
+        default:
+          return 0;
+      }
+    }),
+    [filteredPresentations, sortKey, sortDir]);
+
+  const { scheduledCount, pendingCount } = useMemo(() => {
+    let scheduled = 0;
+    let pending = 0;
+    for (const p of filteredPresentations) {
+      if (p.status === "SCHEDULED") scheduled++;
+      else pending++;
     }
-  }
-
-  const sortedPresentations = [...filteredPresentations].sort((a, b) => {
-    const direction = sortDir === "asc" ? 1 : -1;
-
-    switch (sortKey) {
-      case "title":
-        return direction * a.submission.title.localeCompare(b.submission.title);
-      case "author":
-        return direction * displayNameTh(a.submission.author).localeCompare(displayNameTh(b.submission.author));
-      case "track":
-        return direction * (a.submission.track?.name || "").localeCompare(b.submission.track?.name || "");
-      case "scheduledAt":
-        return direction * (a.scheduledAt || "").localeCompare(b.scheduledAt || "");
-      case "room":
-        return direction * (a.room || "").localeCompare(b.room || "");
-      case "duration":
-        return direction * ((a.duration || 0) - (b.duration || 0));
-      case "status":
-        return direction * a.status.localeCompare(b.status);
-      default:
-        return 0;
-    }
-  });
-
-  const scheduledCount = filteredPresentations.filter((presentation) => presentation.status === "SCHEDULED").length;
-  const pendingCount = filteredPresentations.filter((presentation) => presentation.status !== "SCHEDULED").length;
+    return { scheduledCount: scheduled, pendingCount: pending };
+  }, [filteredPresentations]);
 
   async function handleSchedule(presentationId: string) {
     setSaving(true);
@@ -263,7 +272,9 @@ export function PresentationsClient({
         { key: "schedule" as const, label: t("presentations.schedule"), icon: <Calendar className="h-3.5 w-3.5" /> },
       ];
 
-  const filteredScoring = scoringData.filter((presentation) => !trackFilter || presentation.submission.track?.id === trackFilter);
+  const filteredScoring = useMemo(() =>
+    scoringData.filter((presentation) => !trackFilter || presentation.submission.track?.id === trackFilter),
+    [scoringData, trackFilter]);
 
   function avgScore(evaluations: ScoringPresentation["evaluations"]) {
     if (evaluations.length === 0) return null;
@@ -775,7 +786,7 @@ export function PresentationsClient({
   );
 }
 
-function SortTh({
+const SortTh = memo(function SortTh({
   label,
   sortKey_,
   currentKey,
@@ -809,4 +820,4 @@ function SortTh({
       </span>
     </th>
   );
-}
+});

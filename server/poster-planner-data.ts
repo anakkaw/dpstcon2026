@@ -108,10 +108,15 @@ async function getScopedTrackIds(currentUser: ServerAuthUser) {
 }
 
 export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
-  const scopedTrackIds = await getScopedTrackIds(currentUser);
-  const sessionSettings = await getPosterSessionSettings();
+  // Run independent queries in parallel
+  const [scopedTrackIds, sessionSettings] = await Promise.all([
+    getScopedTrackIds(currentUser),
+    getPosterSessionSettings(),
+  ]);
 
-  // Get all poster-type presentations
+  // Build WHERE conditions to push filters into the DB query
+  const acceptedStatuses = ["ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"] as const;
+
   const posterRows = await db.query.presentationAssignments.findMany({
     where: eq(presentationAssignments.type, "POSTER"),
     with: {
@@ -126,27 +131,48 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
     orderBy: (table, { asc }) => [asc(table.submissionId)],
   });
 
-  const acceptedStatuses = new Set(["ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"]);
+  // Filter in-memory (Drizzle relational queries don't support nested WHERE on related table)
+  const filteredPosters = posterRows.filter((row) => {
+    if (!(acceptedStatuses as readonly string[]).includes(row.submission.status)) return false;
+    if (scopedTrackIds === null) return true;
+    if (!row.submission.track?.id) return false;
+    return scopedTrackIds.includes(row.submission.track.id);
+  });
 
-  const filteredPosters = posterRows
-    .filter((row) => acceptedStatuses.has(row.submission.status))
-    .filter((row) => {
-      if (scopedTrackIds === null) return true;
-      if (!row.submission.track?.id) return false;
-      return scopedTrackIds.includes(row.submission.track.id);
-    });
-
-  // Get all slot-judge assignments for these submissions
+  // Run slot-judge and committee-user queries in parallel
   const submissionIds = filteredPosters.map((p) => p.submissionId);
-  const slotJudgeRows =
-    submissionIds.length > 0
-      ? await db.query.posterSlotJudges.findMany({
-          where: inArray(posterSlotJudges.submissionId, submissionIds),
-          with: {
-            judge: { columns: { id: true, name: true } },
-          },
+
+  const slotJudgePromise = submissionIds.length > 0
+    ? db.query.posterSlotJudges.findMany({
+        where: inArray(posterSlotJudges.submissionId, submissionIds),
+        with: {
+          judge: { columns: { id: true, name: true } },
+        },
+      })
+    : Promise.resolve([]);
+
+  const committeePromise = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")
+    ? db
+        .select({
+          id: user.id,
+          name: user.name,
+          trackId: userRoles.trackId,
         })
-      : [];
+        .from(user)
+        .innerJoin(userRoles, eq(user.id, userRoles.userId))
+        .where(
+          scopedTrackIds === null
+            ? eq(userRoles.role, "COMMITTEE")
+            : and(
+                eq(userRoles.role, "COMMITTEE"),
+                scopedTrackIds.length > 0
+                  ? inArray(userRoles.trackId, scopedTrackIds)
+                  : eq(userRoles.trackId, "00000000-0000-0000-0000-000000000000")
+              )
+        )
+    : Promise.resolve([]);
+
+  const [slotJudgeRows, committeeUsers] = await Promise.all([slotJudgePromise, committeePromise]);
 
   // Group slot judges by submission
   const slotJudgesBySubmission = new Map<string, PosterSlotJudge[]>();
@@ -171,32 +197,6 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
     author: row.submission.author,
     slotJudges: slotJudgesBySubmission.get(row.submissionId) || [],
   }));
-
-  // Committee users
-  let committeeUsers: Array<{ id: string; name: string; trackId: string | null }> = [];
-
-  if (hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
-    const roleRows = await db
-      .select({
-        id: user.id,
-        name: user.name,
-        trackId: userRoles.trackId,
-      })
-      .from(user)
-      .innerJoin(userRoles, eq(user.id, userRoles.userId))
-      .where(
-        scopedTrackIds === null
-          ? eq(userRoles.role, "COMMITTEE")
-          : and(
-              eq(userRoles.role, "COMMITTEE"),
-              scopedTrackIds.length > 0
-                ? inArray(userRoles.trackId, scopedTrackIds)
-                : eq(userRoles.trackId, "00000000-0000-0000-0000-000000000000")
-            )
-      );
-
-    committeeUsers = roleRows;
-  }
 
   return {
     sessionSettings,

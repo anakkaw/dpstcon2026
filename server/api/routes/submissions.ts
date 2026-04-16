@@ -149,11 +149,13 @@ async function getLatestStoredKeyForKind(
 }
 
 async function deleteSubmissionCascade(submissionId: string) {
+  // Collect file keys before deleting DB records so we can clean up R2 afterwards
   const files = await db
     .select({ id: storedFiles.id, storedKey: storedFiles.storedKey })
     .from(storedFiles)
     .where(eq(storedFiles.submissionId, submissionId));
 
+  // 1. Delete presentation-related children (must happen before presentation_assignments)
   const presentationRows = await db
     .select({ id: presentationAssignments.id })
     .from(presentationAssignments)
@@ -161,40 +163,44 @@ async function deleteSubmissionCascade(submissionId: string) {
 
   if (presentationRows.length > 0) {
     const presentationIds = presentationRows.map((row) => row.id);
-    await db
-      .delete(presentationEvaluations)
-      .where(inArray(presentationEvaluations.presentationId, presentationIds));
-    await db
-      .delete(presentationCommitteeAssignments)
-      .where(inArray(presentationCommitteeAssignments.presentationId, presentationIds));
-    await db
-      .delete(presentationAssignments)
-      .where(inArray(presentationAssignments.id, presentationIds));
+    await Promise.all([
+      db.delete(presentationEvaluations).where(inArray(presentationEvaluations.presentationId, presentationIds)),
+      db.delete(presentationCommitteeAssignments).where(inArray(presentationCommitteeAssignments.presentationId, presentationIds)),
+    ]);
+    await db.delete(presentationAssignments).where(inArray(presentationAssignments.id, presentationIds));
   }
 
-  await db.delete(storedFiles).where(eq(storedFiles.submissionId, submissionId));
-  await db.delete(posterSlotJudges).where(eq(posterSlotJudges.submissionId, submissionId));
-  await db.delete(reviews).where(eq(reviews.submissionId, submissionId));
-  await db.delete(reviewAssignments).where(eq(reviewAssignments.submissionId, submissionId));
-  await db.delete(decisions).where(eq(decisions.submissionId, submissionId));
-  await db.delete(conflicts).where(eq(conflicts.submissionId, submissionId));
-  await db.delete(bids).where(eq(bids.submissionId, submissionId));
-  await db.delete(discussions).where(eq(discussions.submissionId, submissionId));
-  await db.delete(coAuthors).where(eq(coAuthors.submissionId, submissionId));
+  // 2. Delete all FK-constrained children in parallel (all reference submissionId directly)
+  await Promise.all([
+    db.delete(storedFiles).where(eq(storedFiles.submissionId, submissionId)),
+    db.delete(posterSlotJudges).where(eq(posterSlotJudges.submissionId, submissionId)),
+    db.delete(reviews).where(eq(reviews.submissionId, submissionId)),
+    db.delete(reviewAssignments).where(eq(reviewAssignments.submissionId, submissionId)),
+    db.delete(decisions).where(eq(decisions.submissionId, submissionId)),
+    db.delete(conflicts).where(eq(conflicts.submissionId, submissionId)),
+    db.delete(bids).where(eq(bids.submissionId, submissionId)),
+    db.delete(discussions).where(eq(discussions.submissionId, submissionId)),
+    db.delete(coAuthors).where(eq(coAuthors.submissionId, submissionId)),
+  ]);
+
+  // 3. Delete the parent submission last
   await db.delete(submissions).where(eq(submissions.id, submissionId));
 
-  for (const file of files) {
-    try {
-      await deleteFile(file.storedKey);
-    } catch (error) {
-      console.error("[submissions.deleteSubmission] Failed to remove object from storage", {
-        submissionId,
-        fileId: file.id,
-        storedKey: file.storedKey,
-        error,
-      });
-    }
-  }
+  // 4. Best-effort R2 cleanup (log failures but don't throw — DB is already consistent)
+  await Promise.allSettled(
+    files.map(async (file) => {
+      try {
+        await deleteFile(file.storedKey);
+      } catch (error) {
+        console.error("[submissions.deleteSubmission] Failed to remove object from storage", {
+          submissionId,
+          fileId: file.id,
+          storedKey: file.storedKey,
+          error,
+        });
+      }
+    })
+  );
 }
 
 async function canAccessSubmission(
@@ -373,7 +379,8 @@ app.get("/:id", async (c) => {
 
   const access = await getSubmissionAccessFlags(currentUser, submission);
 
-  if (!(await canAccessSubmission(currentUser, submission))) {
+  // Use access flags directly instead of calling canAccessSubmission (which would re-query reviewAssignments)
+  if (!access.isAdmin && !access.isAuthor && !access.isAssignedReviewer && !access.isTrackHead) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -631,11 +638,13 @@ app.post("/:id/resend-advisor-approval", async (c) => {
 
   const advisorToken = crypto.randomUUID();
 
+  // Reset submittedAt to restart the token expiry window on resend.
+  // This is intentional: the advisor gets a fresh 14-day window.
+  // Only update the token and updatedAt — preserve advisorApprovalStatus (already PENDING).
   await db
     .update(submissions)
     .set({
       advisorApprovalToken: advisorToken,
-      advisorApprovalStatus: "PENDING",
       submittedAt: new Date(),
       updatedAt: new Date(),
     })
@@ -883,7 +892,7 @@ app.post("/:id/confirm-upload", async (c) => {
 
   const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
   if (!submission) return c.json({ error: "Not found" }, 404);
-  const isStaff = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
+  const isStaff = canManageSubmissionAsStaff(currentUser, submission);
   const isOwner = submission.authorId === currentUser.id;
   if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
     return c.json({ error: "Forbidden" }, 403);

@@ -2,6 +2,9 @@ export const APP_NAME = "DPSTCon";
 export const APP_DESCRIPTION = "ระบบบริหารการส่งและพิจารณาบทความ";
 export const APP_VERSION = "1.0.1";
 
+/** Number of days an advisor approval token remains valid after submission */
+export const ADVISOR_TOKEN_EXPIRY_DAYS = 14;
+
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export const ALLOWED_FILE_TYPES = [
   "application/pdf",

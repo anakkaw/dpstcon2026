@@ -493,6 +493,7 @@ export const presentationAssignments = pgTable(
     duration: integer("duration"),
   },
   (table) => [
+    index("presentation_type_idx").on(table.type),
     index("presentation_status_idx").on(table.status),
     index("presentation_submission_idx").on(table.submissionId),
     uniqueIndex("presentation_submission_type_unique").on(

@@ -19,6 +19,7 @@ import {
   RECOMMENDATION_LABELS,
   DECISION_LABELS,
 } from "@/lib/labels";
+import { ADVISOR_TOKEN_EXPIRY_DAYS } from "@/lib/constants";
 import { formatDateTime, formatDate } from "@/lib/utils";
 import { submitPaper, withdrawPaper, resubmitPaper } from "@/server/actions/submission";
 import { FileUpload } from "@/components/ui/file-upload";
@@ -519,6 +520,23 @@ export function SubmissionDetail({
               >
                 {submission.advisorApprovalStatus === "APPROVED" ? "รับรองแล้ว" : submission.advisorApprovalStatus === "PENDING" ? "รออนุมัติ" : submission.advisorApprovalStatus || "—"}
               </Badge>
+              {isAdmin && submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
+                const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+                const now = new Date();
+                const isExpired = now > expiresAt;
+                const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+                return (
+                  <div className="mt-1.5">
+                    {isExpired ? (
+                      <Badge tone="danger">ลิงก์หมดอายุแล้ว</Badge>
+                    ) : (
+                      <Badge tone={daysRemaining <= 3 ? "warning" : "info"}>
+                        ลิงก์หมดอายุใน {daysRemaining} วัน ({formatDate(expiresAt.toISOString())})
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })()}
               {canManageOwnSubmission && submission.status === "ADVISOR_APPROVAL_PENDING" && submission.advisorApprovalStatus === "PENDING" && (
                 <div className="mt-2">
                   <Button

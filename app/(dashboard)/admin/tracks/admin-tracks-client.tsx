@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,11 +36,13 @@ export function AdminTracksClient({
   const [form, setForm] = useState({ name: "", description: "", chairUserIds: [] as string[] });
   const [saving, setSaving] = useState(false);
 
-  function showMsg(text: string, type: "success" | "danger" = "success") {
+  const msgTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const showMsg = useCallback((text: string, type: "success" | "danger" = "success") => {
     setMessage(text);
     setMessageType(type);
-    setTimeout(() => setMessage(""), 5000);
-  }
+    clearTimeout(msgTimerRef.current);
+    msgTimerRef.current = setTimeout(() => setMessage(""), 5000);
+  }, []);
 
   async function refreshTracks() {
     try {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,10 +68,16 @@ export function SubmissionsPageClient({
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("desc"); }
-  }
+  const toggleSort = useCallback((key: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDir("desc");
+      return key;
+    });
+  }, []);
 
   async function savePaperCode(submissionId: string) {
     setSavingPaperCode(true);
@@ -139,48 +145,55 @@ export function SubmissionsPageClient({
     }
   }
 
-  const statusCounts: Record<string, number> = {};
-  for (const sub of submissions) {
-    if (trackFilter && sub.track?.id !== trackFilter) continue;
-    statusCounts[sub.status] = (statusCounts[sub.status] || 0) + 1;
-  }
-  const totalFiltered = Object.values(statusCounts).reduce((s, v) => s + v, 0);
+  const { statusCounts, totalFiltered } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const sub of submissions) {
+      if (trackFilter && sub.track?.id !== trackFilter) continue;
+      counts[sub.status] = (counts[sub.status] || 0) + 1;
+    }
+    return { statusCounts: counts, totalFiltered: Object.values(counts).reduce((s, v) => s + v, 0) };
+  }, [submissions, trackFilter]);
 
-  const trackCounts: Record<string, number> = {};
-  for (const sub of submissions) {
-    if (sub.track?.id) trackCounts[sub.track.id] = (trackCounts[sub.track.id] || 0) + 1;
-  }
+  const trackCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const sub of submissions) {
+      if (sub.track?.id) counts[sub.track.id] = (counts[sub.track.id] || 0) + 1;
+    }
+    return counts;
+  }, [submissions]);
 
-  const filtered = submissions
-    .filter((s) => {
-      if (trackFilter && s.track?.id !== trackFilter) return false;
-      if (statusFilter !== "ALL" && s.status !== statusFilter) return false;
-      if (debouncedSearch) {
-        const q = debouncedSearch.toLowerCase();
-        return s.title.toLowerCase().includes(q) ||
-          displayNameTh(s.author).toLowerCase().includes(q) ||
-          s.author.email.toLowerCase().includes(q) ||
-          s.track?.name.toLowerCase().includes(q) ||
-          (statusLabels[s.status] || s.status).toLowerCase().includes(q);
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const dir = sortDir === "asc" ? 1 : -1;
-      switch (sortKey) {
-        case "title": return dir * a.title.localeCompare(b.title);
-        case "author": return dir * displayNameTh(a.author).localeCompare(displayNameTh(b.author));
-        case "track": return dir * (a.track?.name || "").localeCompare(b.track?.name || "");
-        case "status": return dir * a.status.localeCompare(b.status);
-        case "createdAt": return dir * a.createdAt.localeCompare(b.createdAt);
-        case "reviews": {
-          const ra = a.reviewAssignments?.length || 0;
-          const rb = b.reviewAssignments?.length || 0;
-          return dir * (ra - rb);
+  const filtered = useMemo(() =>
+    submissions
+      .filter((s) => {
+        if (trackFilter && s.track?.id !== trackFilter) return false;
+        if (statusFilter !== "ALL" && s.status !== statusFilter) return false;
+        if (debouncedSearch) {
+          const q = debouncedSearch.toLowerCase();
+          return s.title.toLowerCase().includes(q) ||
+            displayNameTh(s.author).toLowerCase().includes(q) ||
+            s.author.email.toLowerCase().includes(q) ||
+            s.track?.name.toLowerCase().includes(q) ||
+            (statusLabels[s.status] || s.status).toLowerCase().includes(q);
         }
-        default: return 0;
-      }
-    });
+        return true;
+      })
+      .sort((a, b) => {
+        const dir = sortDir === "asc" ? 1 : -1;
+        switch (sortKey) {
+          case "title": return dir * a.title.localeCompare(b.title);
+          case "author": return dir * displayNameTh(a.author).localeCompare(displayNameTh(b.author));
+          case "track": return dir * (a.track?.name || "").localeCompare(b.track?.name || "");
+          case "status": return dir * a.status.localeCompare(b.status);
+          case "createdAt": return dir * a.createdAt.localeCompare(b.createdAt);
+          case "reviews": {
+            const ra = a.reviewAssignments?.length || 0;
+            const rb = b.reviewAssignments?.length || 0;
+            return dir * (ra - rb);
+          }
+          default: return 0;
+        }
+      }),
+    [submissions, trackFilter, statusFilter, debouncedSearch, sortKey, sortDir, statusLabels]);
 
   if (!isAdmin) {
     return (
@@ -521,7 +534,7 @@ export function SubmissionsPageClient({
   );
 }
 
-function SortTh({ label, sortKey_, currentKey, dir, onSort, align, className }: {
+const SortTh = memo(function SortTh({ label, sortKey_, currentKey, dir, onSort, align, className }: {
   label: string; sortKey_: string; currentKey: string; dir: "asc" | "desc";
   onSort: (k: never) => void; align?: "center" | "left"; className?: string;
 }) {
@@ -537,4 +550,4 @@ function SortTh({ label, sortKey_, currentKey, dir, onSort, align, className }: 
       </span>
     </th>
   );
-}
+});

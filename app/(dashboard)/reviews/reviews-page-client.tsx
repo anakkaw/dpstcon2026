@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, memo, Fragment } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,31 +95,37 @@ export function ReviewsPageClient({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [now, setNow] = useState(() => Date.now());
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
-  }
+  const toggleSort = useCallback((key: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDir("asc");
+      return key;
+    });
+  }, []);
 
-  async function reloadAssignments() {
+  const reloadAssignments = useCallback(async () => {
     const data = await fetch("/api/reviews/assignments").then((response) => response.json());
     setAssignments(data.assignments || []);
-  }
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  function isDueSoon(dueDate: string | null) {
+  const isDueSoon = useCallback((dueDate: string | null) => {
     if (!dueDate) return false;
     const diff = new Date(dueDate).getTime() - now;
     return diff > 0 && diff < 3 * 24 * 60 * 60 * 1000;
-  }
+  }, [now]);
 
-  function isOverdue(dueDate: string | null) {
+  const isOverdue = useCallback((dueDate: string | null) => {
     if (!dueDate) return false;
     return new Date(dueDate).getTime() < now;
-  }
+  }, [now]);
 
   async function handleAssign(submissionId: string) {
     if (!selectedReviewerId) return;
@@ -167,70 +173,77 @@ export function ReviewsPageClient({
     setAssignmentToRemove(null);
   }
 
-  const statusCounts: Record<string, number> = {};
-  for (const assignment of assignments) {
-    if (trackFilter && assignment.submission.track?.id !== trackFilter) continue;
-    statusCounts[assignment.status] = (statusCounts[assignment.status] || 0) + 1;
-  }
-  const totalAssignments = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
-
-  const trackCounts: Record<string, number> = {};
-  for (const assignment of assignments) {
-    if (assignment.submission.track?.id) {
-      trackCounts[assignment.submission.track.id] = (trackCounts[assignment.submission.track.id] || 0) + 1;
+  const { statusCounts, totalAssignments } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const assignment of assignments) {
+      if (trackFilter && assignment.submission.track?.id !== trackFilter) continue;
+      counts[assignment.status] = (counts[assignment.status] || 0) + 1;
     }
-  }
+    return { statusCounts: counts, totalAssignments: Object.values(counts).reduce((sum, count) => sum + count, 0) };
+  }, [assignments, trackFilter]);
 
-  const groupMap = new Map<string, GroupedSubmission>();
-  for (const assignment of assignments) {
-    if (trackFilter && assignment.submission.track?.id !== trackFilter) continue;
-    if (statusFilter !== "ALL" && assignment.status !== statusFilter) continue;
-    let group = groupMap.get(assignment.submission.id);
-    if (!group) {
-      group = {
-        submissionId: assignment.submission.id,
-        title: assignment.submission.title,
-        authorName: displayNameTh(assignment.submission.author),
-        track: assignment.submission.track,
-        assignments: [],
-        completedCount: 0,
-        totalCount: 0,
-        hasOverdue: false,
-      };
-      groupMap.set(assignment.submission.id, group);
-    }
-    group.assignments.push(assignment);
-    group.totalCount++;
-    if (assignment.status === "COMPLETED") group.completedCount++;
-    if (assignment.status !== "COMPLETED" && assignment.status !== "DECLINED" && isOverdue(assignment.dueDate)) {
-      group.hasOverdue = true;
-    }
-  }
-
-  const groups = [...groupMap.values()]
-    .filter((group) => {
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
-      return group.title.toLowerCase().includes(q) ||
-        group.authorName.toLowerCase().includes(q) ||
-        group.track?.name.toLowerCase().includes(q) ||
-        group.assignments.some((assignment) => assignment.reviewer ? displayNameTh(assignment.reviewer).toLowerCase().includes(q) : false);
-    })
-    .sort((a, b) => {
-      const dir = sortDir === "asc" ? 1 : -1;
-      switch (sortKey) {
-        case "title": return dir * a.title.localeCompare(b.title);
-        case "author": return dir * a.authorName.localeCompare(b.authorName);
-        case "track": return dir * (a.track?.name || "").localeCompare(b.track?.name || "");
-        case "reviewers": return dir * (a.totalCount - b.totalCount);
-        case "progress": {
-          const pa = a.totalCount > 0 ? a.completedCount / a.totalCount : 0;
-          const pb = b.totalCount > 0 ? b.completedCount / b.totalCount : 0;
-          return dir * (pa - pb);
-        }
-        default: return 0;
+  const trackCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const assignment of assignments) {
+      if (assignment.submission.track?.id) {
+        counts[assignment.submission.track.id] = (counts[assignment.submission.track.id] || 0) + 1;
       }
-    });
+    }
+    return counts;
+  }, [assignments]);
+
+  const groups = useMemo(() => {
+    const groupMap = new Map<string, GroupedSubmission>();
+    for (const assignment of assignments) {
+      if (trackFilter && assignment.submission.track?.id !== trackFilter) continue;
+      if (statusFilter !== "ALL" && assignment.status !== statusFilter) continue;
+      let group = groupMap.get(assignment.submission.id);
+      if (!group) {
+        group = {
+          submissionId: assignment.submission.id,
+          title: assignment.submission.title,
+          authorName: displayNameTh(assignment.submission.author),
+          track: assignment.submission.track,
+          assignments: [],
+          completedCount: 0,
+          totalCount: 0,
+          hasOverdue: false,
+        };
+        groupMap.set(assignment.submission.id, group);
+      }
+      group.assignments.push(assignment);
+      group.totalCount++;
+      if (assignment.status === "COMPLETED") group.completedCount++;
+      if (assignment.status !== "COMPLETED" && assignment.status !== "DECLINED" && isOverdue(assignment.dueDate)) {
+        group.hasOverdue = true;
+      }
+    }
+
+    return [...groupMap.values()]
+      .filter((group) => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return group.title.toLowerCase().includes(q) ||
+          group.authorName.toLowerCase().includes(q) ||
+          group.track?.name.toLowerCase().includes(q) ||
+          group.assignments.some((assignment) => assignment.reviewer ? displayNameTh(assignment.reviewer).toLowerCase().includes(q) : false);
+      })
+      .sort((a, b) => {
+        const dir = sortDir === "asc" ? 1 : -1;
+        switch (sortKey) {
+          case "title": return dir * a.title.localeCompare(b.title);
+          case "author": return dir * a.authorName.localeCompare(b.authorName);
+          case "track": return dir * (a.track?.name || "").localeCompare(b.track?.name || "");
+          case "reviewers": return dir * (a.totalCount - b.totalCount);
+          case "progress": {
+            const pa = a.totalCount > 0 ? a.completedCount / a.totalCount : 0;
+            const pb = b.totalCount > 0 ? b.completedCount / b.totalCount : 0;
+            return dir * (pa - pb);
+          }
+          default: return 0;
+        }
+      });
+  }, [assignments, trackFilter, statusFilter, searchQuery, sortKey, sortDir, isOverdue]);
 
   if (!canManageReviews) {
     const myFiltered = assignments.filter((assignment) => !trackFilter || assignment.submission.track?.id === trackFilter);
@@ -283,9 +296,11 @@ export function ReviewsPageClient({
     { key: "DECLINED", label: t("reviews.declined"), count: statusCounts.DECLINED || 0 },
   ].filter((tab) => tab.key === "ALL" || tab.count > 0);
 
-  const assignedReviewerIds = assigningSubId
-    ? new Set(assignments.filter((assignment) => assignment.submission.id === assigningSubId).map((assignment) => assignment.reviewer?.id).filter(Boolean))
-    : new Set<string>();
+  const assignedReviewerIds = useMemo(() =>
+    assigningSubId
+      ? new Set(assignments.filter((assignment) => assignment.submission.id === assigningSubId).map((assignment) => assignment.reviewer?.id).filter(Boolean))
+      : new Set<string>(),
+    [assignments, assigningSubId]);
 
   return (
     <div className="space-y-6">
@@ -781,7 +796,7 @@ export function ReviewsPageClient({
   );
 }
 
-function SortTh({ label, sortKey_, currentKey, dir, onSort, align, className }: {
+const SortTh = memo(function SortTh({ label, sortKey_, currentKey, dir, onSort, align, className }: {
   label: string; sortKey_: string; currentKey: string; dir: "asc" | "desc";
   onSort: (k: never) => void; align?: "center" | "left"; className?: string;
 }) {
@@ -797,4 +812,4 @@ function SortTh({ label, sortKey_, currentKey, dir, onSort, align, className }: 
       </span>
     </th>
   );
-}
+});

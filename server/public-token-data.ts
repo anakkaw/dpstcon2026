@@ -1,11 +1,10 @@
 import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/server/db";
 import { storedFiles, submissions, user } from "@/server/db/schema";
-
-const ADVISOR_TOKEN_EXPIRY_DAYS = 7;
+import { ADVISOR_TOKEN_EXPIRY_DAYS } from "@/lib/constants";
 
 function isAdvisorTokenExpired(submittedAt: Date | null): boolean {
-  if (!submittedAt) return false;
+  if (!submittedAt) return true; // No submission date means token is invalid
   const expiresAt = new Date(submittedAt.getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
   return new Date() > expiresAt;
 }
