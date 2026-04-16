@@ -481,6 +481,8 @@ app.patch("/:id", async (c) => {
     trackId: z.string().uuid().optional(),
     advisorEmail: z.string().email().optional(),
     advisorName: z.string().optional(),
+    advisorApprovalStatus: z.enum(["NOT_REQUESTED", "PENDING", "APPROVED", "REJECTED"]).optional(),
+    sendAdvisorEmail: z.boolean().optional(),
     paperCode: z.string().trim().min(1).max(32).optional(),
     status: z.enum([
       "DRAFT", "ADVISOR_APPROVAL_PENDING", "SUBMITTED", "UNDER_REVIEW",
@@ -513,6 +515,12 @@ app.patch("/:id", async (c) => {
   if (parsed.data.paperCode && !canManageAsStaff) {
     return c.json({ error: "Forbidden — only chairs can change Paper ID" }, 403);
   }
+  if (parsed.data.advisorApprovalStatus && !canManageAsStaff) {
+    return c.json({ error: "Forbidden — only chairs can override advisor status" }, 403);
+  }
+  if (parsed.data.sendAdvisorEmail && !canManageAsStaff) {
+    return c.json({ error: "Forbidden — only chairs can trigger advisor emails" }, 403);
+  }
 
   const normalizedPaperCode = parsed.data.paperCode?.toUpperCase();
   if (normalizedPaperCode) {
@@ -522,9 +530,69 @@ app.patch("/:id", async (c) => {
     }
   }
 
+  // Build the update payload — exclude non-column fields
+  const { sendAdvisorEmail: shouldSendEmail, ...patchFields } = parsed.data;
+  const updatePayload: Record<string, unknown> = {
+    ...patchFields,
+    paperCode: normalizedPaperCode,
+    updatedAt: new Date(),
+  };
+
+  // Side-effect: advisor approval status override by admin
+  if (parsed.data.advisorApprovalStatus && canManageAsStaff) {
+    updatePayload.advisorApprovalAt = new Date();
+    updatePayload.advisorApprovalToken = null;
+
+    if (parsed.data.advisorApprovalStatus === "APPROVED" && existing.status === "ADVISOR_APPROVAL_PENDING") {
+      updatePayload.status = "SUBMITTED";
+    } else if (parsed.data.advisorApprovalStatus === "REJECTED" && existing.status === "ADVISOR_APPROVAL_PENDING") {
+      updatePayload.status = "DRAFT";
+    }
+  }
+
+  // Side-effect: send advisor email when requested (e.g. after changing advisor email)
+  if (shouldSendEmail && canManageAsStaff && (parsed.data.advisorEmail || existing.advisorEmail)) {
+    const advisorToken = crypto.randomUUID();
+    updatePayload.advisorApprovalToken = advisorToken;
+    updatePayload.advisorApprovalStatus = "PENDING";
+    updatePayload.advisorApprovalAt = null;
+    updatePayload.submittedAt = new Date();
+    if (existing.status === "DRAFT" || existing.status === "ADVISOR_APPROVAL_PENDING") {
+      updatePayload.status = "ADVISOR_APPROVAL_PENDING";
+    }
+
+    const targetEmail = parsed.data.advisorEmail || existing.advisorEmail!;
+    const targetName = parsed.data.advisorName || existing.advisorName || "Advisor";
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+    const authorData = await db.query.submissions.findFirst({
+      where: eq(submissions.id, id),
+      with: { author: { columns: { name: true } } },
+    });
+
+    const emailContent = advisorApprovalEmail({
+      advisorName: targetName,
+      studentName: authorData?.author.name || "Student",
+      paperTitle: existing.title,
+      approvalUrl: `${appUrl}/advisor-approval/${advisorToken}`,
+    });
+
+    try {
+      await queueEmail({
+        to: targetEmail,
+        subject: emailContent.subject,
+        html: emailContent.html,
+        text: emailContent.text,
+        throwOnFailure: true,
+      });
+    } catch {
+      return c.json({ error: "ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้" }, 500);
+    }
+  }
+
   const [updated] = await db
     .update(submissions)
-    .set({ ...parsed.data, paperCode: normalizedPaperCode, updatedAt: new Date() })
+    .set(updatePayload)
     .where(eq(submissions.id, id))
     .returning();
 
@@ -727,6 +795,35 @@ app.post("/:id/withdraw", async (c) => {
     .returning();
 
   return c.json({ submission: updated });
+});
+
+// POST /api/submissions/bulk-delete — admin-only bulk delete
+app.post("/bulk-delete", async (c) => {
+  const currentUser = c.get("user");
+  if (!hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const body = await c.req.json();
+  const ids: string[] = body.ids;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return c.json({ error: "ids must be a non-empty array" }, 400);
+  }
+  if (ids.length > 100) {
+    return c.json({ error: "Maximum 100 submissions per request" }, 400);
+  }
+
+  const existing = await db.query.submissions.findMany({
+    where: inArray(submissions.id, ids),
+    columns: { id: true },
+  });
+  const existingIds = existing.map((s) => s.id);
+
+  for (const id of existingIds) {
+    await deleteSubmissionCascade(id);
+  }
+
+  return c.json({ ok: true, deletedCount: existingIds.length });
 });
 
 // DELETE /api/submissions/:id

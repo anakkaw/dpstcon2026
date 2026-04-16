@@ -21,7 +21,7 @@ import { useDebounce } from "@/lib/hooks/use-debounce";
 import {
   Plus, FileText, Download, ChevronUp, ChevronDown, ArrowUpDown,
   ExternalLink, Users, Search, X, CheckCircle2, XCircle, Clock,
-  Eye,
+  Eye, Trash2,
 } from "lucide-react";
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { getNextAction } from "@/lib/author-utils";
@@ -37,6 +37,8 @@ export interface SubmissionData {
   track: { id: string; name: string } | null;
   reviews: { id: string; recommendation: string | null; completedAt: string | null }[];
   reviewAssignments?: { id: string; status: string }[];
+  advisorApprovalStatus?: string | null;
+  advisorName?: string | null;
 }
 
 type SortKey = "title" | "author" | "track" | "status" | "createdAt" | "reviews";
@@ -64,6 +66,9 @@ export function SubmissionsPageClient({
   const [savingPaperCode, setSavingPaperCode] = useState(false);
   const [generatingCodes, setGeneratingCodes] = useState(false);
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -145,6 +150,51 @@ export function SubmissionsPageClient({
     }
   }
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback((filteredIds: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = filteredIds.every((id) => prev.has(id));
+      if (allSelected) return new Set();
+      return new Set(filteredIds);
+    });
+  }, []);
+
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/submissions/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessageTone("danger");
+        setMessage(data?.error || t("detail.deleteError"));
+        return;
+      }
+      setSubmissions((prev) => prev.filter((s) => !selectedIds.has(s.id)));
+      setMessageTone("success");
+      setMessage(t("submissions.bulkDeleteSuccess", { n: data.deletedCount }));
+      setSelectedIds(new Set());
+    } catch {
+      setMessageTone("danger");
+      setMessage(t("detail.deleteError"));
+    } finally {
+      setBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
+    }
+  }
+
   const { statusCounts, totalFiltered } = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const sub of submissions) {
@@ -173,7 +223,8 @@ export function SubmissionsPageClient({
             displayNameTh(s.author).toLowerCase().includes(q) ||
             s.author.email.toLowerCase().includes(q) ||
             s.track?.name.toLowerCase().includes(q) ||
-            (statusLabels[s.status] || s.status).toLowerCase().includes(q);
+            (statusLabels[s.status] || s.status).toLowerCase().includes(q) ||
+            (s.advisorName && s.advisorName.toLowerCase().includes(q));
         }
         return true;
       })
@@ -269,6 +320,17 @@ export function SubmissionsPageClient({
         }}
         onCancel={() => setShowGenerateConfirm(false)}
       />
+      <ConfirmDialog
+        open={showBulkDeleteConfirm}
+        title={t("submissions.bulkDeleteConfirm", { n: selectedIds.size })}
+        description={t("submissions.bulkDeleteDesc")}
+        confirmLabel={t("detail.deleteAction")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        loading={bulkDeleting}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
       <SectionTitle
         title={t("submissions.submissions")}
         subtitle={t("submissions.managementSubtitle", { n: totalFiltered })}
@@ -332,6 +394,23 @@ export function SubmissionsPageClient({
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-medium text-red-800">
+            {t("submissions.deleteSelected", { n: selectedIds.size })}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => setShowBulkDeleteConfirm(true)}>
+              <Trash2 className="h-3.5 w-3.5" />
+              {t("detail.deleteAction")}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <EmptyState
           icon={<FileText className="h-12 w-12" />}
@@ -351,7 +430,14 @@ export function SubmissionsPageClient({
               const completedAssign = sub.reviewAssignments?.filter((a) => a.status === "COMPLETED").length || 0;
 
               return (
-                <Link key={sub.id} href={`/submissions/${sub.id}`}>
+                <div key={sub.id} className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(sub.id)}
+                    onChange={() => toggleSelect(sub.id)}
+                    className="mt-4 h-4 w-4 shrink-0 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                  />
+                  <Link href={`/submissions/${sub.id}`} className="flex-1 min-w-0">
                   <Card hover>
                     <CardBody className="space-y-3">
                       <div className="flex items-start justify-between gap-3">
@@ -387,6 +473,23 @@ export function SubmissionsPageClient({
                           </p>
                           <p className="mt-1 text-ink">{formatDate(sub.createdAt, locale)}</p>
                         </div>
+                        {sub.advisorName && (
+                          <div className="col-span-2">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                              {t("submissions.advisorCol")}
+                            </p>
+                            <p className="mt-1 text-ink inline-flex items-center gap-1">
+                              {sub.advisorApprovalStatus === "APPROVED" ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                              ) : sub.advisorApprovalStatus === "PENDING" ? (
+                                <Clock className="h-3.5 w-3.5 text-amber-500" />
+                              ) : sub.advisorApprovalStatus === "REJECTED" ? (
+                                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                              ) : null}
+                              {sub.advisorName}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between gap-3">
@@ -409,7 +512,8 @@ export function SubmissionsPageClient({
                       </div>
                     </CardBody>
                   </Card>
-                </Link>
+                  </Link>
+                </div>
               );
             })}
           </div>
@@ -420,6 +524,14 @@ export function SubmissionsPageClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-border/60">
+                    <th className="w-10 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id))}
+                        onChange={() => toggleSelectAll(filtered.map((s) => s.id))}
+                        className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                      />
+                    </th>
                     <th className="w-12 px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">#</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">Paper ID</th>
                     <SortTh label={t("submissions.title")} sortKey_="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="w-[35%]" />
@@ -428,6 +540,7 @@ export function SubmissionsPageClient({
                     <SortTh label={t("submissions.reviewsCol")} sortKey_="reviews" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                     <SortTh label={t("submissions.submitted")} sortKey_="createdAt" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                     <SortTh label={t("submissions.status")} sortKey_="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("submissions.advisorCol")}</th>
                     <th className="w-10" />
                   </tr>
                 </thead>
@@ -436,7 +549,15 @@ export function SubmissionsPageClient({
                     const totalAssign = sub.reviewAssignments?.length || 0;
                     const completedAssign = sub.reviewAssignments?.filter((a) => a.status === "COMPLETED").length || 0;
                     return (
-                      <tr key={sub.id} className="border-t border-border/40 hover:bg-blue-50/30 transition-colors group">
+                      <tr key={sub.id} className={`border-t border-border/40 transition-colors group ${selectedIds.has(sub.id) ? "bg-red-50/40" : "hover:bg-blue-50/30"}`}>
+                        <td className="px-4 py-3.5">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(sub.id)}
+                            onChange={() => toggleSelect(sub.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                          />
+                        </td>
                         <td className="px-4 py-3.5 text-xs text-ink-muted font-medium">{idx + 1}</td>
                         <td className="px-4 py-3.5">
                           {editingPaperId === sub.id ? (
@@ -504,6 +625,26 @@ export function SubmissionsPageClient({
                           <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"} dot>
                             {statusLabels[sub.status] || sub.status}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {sub.advisorApprovalStatus === "APPROVED" ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              {sub.advisorName ? truncate(sub.advisorName, 20) : "—"}
+                            </span>
+                          ) : sub.advisorApprovalStatus === "PENDING" ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                              <Clock className="h-3.5 w-3.5" />
+                              {sub.advisorName ? truncate(sub.advisorName, 20) : "—"}
+                            </span>
+                          ) : sub.advisorApprovalStatus === "REJECTED" ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-red-500">
+                              <XCircle className="h-3.5 w-3.5" />
+                              {sub.advisorName ? truncate(sub.advisorName, 20) : "—"}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-ink-muted">—</span>
+                          )}
                         </td>
                         <td className="pr-4 py-3.5">
                           <Link

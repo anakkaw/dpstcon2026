@@ -13,6 +13,8 @@ import { Divider } from "@/components/ui/divider";
 import { Collapsible } from "@/components/ui/collapsible";
 import { Alert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { Input } from "@/components/ui/input";
 import {
   SUBMISSION_STATUS_LABELS,
   SUBMISSION_STATUS_COLORS,
@@ -35,7 +37,7 @@ import { AssignReviewerCard } from "@/components/review/assign-reviewer-card";
 import {
   Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
-  Trash2,
+  Trash2, Pencil, Mail, ShieldCheck, UserCheck,
 } from "lucide-react";
 
 interface Props {
@@ -135,6 +137,16 @@ export function SubmissionDetail({
   const [discussionMsg, setDiscussionMsg] = useState("");
   const [posting, setPosting] = useState(false);
   const [resendingAdvisor, setResendingAdvisor] = useState(false);
+
+  // Advisor management state (admin)
+  const [showEditAdvisorModal, setShowEditAdvisorModal] = useState(false);
+  const [editAdvisorName, setEditAdvisorName] = useState(submission.advisorName || "");
+  const [editAdvisorEmail, setEditAdvisorEmail] = useState(submission.advisorEmail || "");
+  const [sendAdvisorEmailOnChange, setSendAdvisorEmailOnChange] = useState(true);
+  const [savingAdvisor, setSavingAdvisor] = useState(false);
+  const [showOverrideConfirm, setShowOverrideConfirm] = useState(false);
+  const [overrideTarget, setOverrideTarget] = useState<string>("");
+  const [overriding, setOverriding] = useState(false);
 
   // Review form state
   const [reviewRecommendation, setReviewRecommendation] = useState("");
@@ -289,6 +301,67 @@ export function SubmissionDetail({
     }
   }
 
+  async function handleSaveAdvisor() {
+    if (!editAdvisorEmail.trim() || !editAdvisorName.trim()) return;
+    setSavingAdvisor(true);
+    try {
+      const payload: Record<string, unknown> = {
+        advisorName: editAdvisorName.trim(),
+        advisorEmail: editAdvisorEmail.trim(),
+      };
+      if (sendAdvisorEmailOnChange && editAdvisorEmail.trim() !== (submission.advisorEmail || "")) {
+        payload.sendAdvisorEmail = true;
+      }
+      const res = await fetch(`/api/submissions/${submission.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setMessage(t("advisor.saveSuccess"));
+        setShowEditAdvisorModal(false);
+        router.refresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        setMessage(data?.error || t("advisor.saveError"));
+      }
+    } catch {
+      setMessage(t("advisor.saveError"));
+    } finally {
+      setSavingAdvisor(false);
+    }
+  }
+
+  async function handleOverrideAdvisorStatus() {
+    if (!overrideTarget) return;
+    setOverriding(true);
+    try {
+      const payload: Record<string, unknown> = { advisorApprovalStatus: overrideTarget };
+      // When resetting to pending, also send a new email
+      if (overrideTarget === "PENDING") {
+        payload.sendAdvisorEmail = true;
+      }
+      const res = await fetch(`/api/submissions/${submission.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setMessage(t("advisor.overrideSuccess"));
+        setShowOverrideConfirm(false);
+        setOverrideTarget("");
+        router.refresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        setMessage(data?.error || t("advisor.overrideError"));
+      }
+    } catch {
+      setMessage(t("advisor.overrideError"));
+    } finally {
+      setOverriding(false);
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       <ConfirmDialog
@@ -331,6 +404,81 @@ export function SubmissionDetail({
           await handleDeleteSubmission();
           setConfirmAction(null);
         }}
+      />
+
+      {/* Edit Advisor Modal */}
+      {isAdmin && (
+        <ModalShell
+          open={showEditAdvisorModal}
+          onClose={() => setShowEditAdvisorModal(false)}
+          title={t("advisor.editAdvisorTitle")}
+        >
+          <div className="space-y-4 p-4">
+            <Field label={t("advisor.advisorName")} htmlFor="editAdvisorName" required>
+              <Input
+                id="editAdvisorName"
+                value={editAdvisorName}
+                onChange={(e) => setEditAdvisorName(e.target.value)}
+              />
+            </Field>
+            <Field label={t("advisor.advisorEmail")} htmlFor="editAdvisorEmail" required>
+              <Input
+                id="editAdvisorEmail"
+                type="email"
+                value={editAdvisorEmail}
+                onChange={(e) => setEditAdvisorEmail(e.target.value)}
+              />
+            </Field>
+            {editAdvisorEmail.trim() !== (submission.advisorEmail || "") && (
+              <label className="flex items-center gap-2 text-sm text-ink-light cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sendAdvisorEmailOnChange}
+                  onChange={(e) => setSendAdvisorEmailOnChange(e.target.checked)}
+                  className="rounded border-border"
+                />
+                {t("advisor.sendEmailToNewAdvisor")}
+              </label>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 p-4 border-t border-border">
+            <Button variant="secondary" onClick={() => setShowEditAdvisorModal(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={handleSaveAdvisor}
+              loading={savingAdvisor}
+              disabled={!editAdvisorName.trim() || !editAdvisorEmail.trim()}
+            >
+              {t("common.save")}
+            </Button>
+          </div>
+        </ModalShell>
+      )}
+
+      {/* Override Advisor Status Confirm */}
+      <ConfirmDialog
+        open={showOverrideConfirm}
+        title={t("advisor.overrideConfirmTitle")}
+        description={
+          overrideTarget === "APPROVED"
+            ? t("advisor.overrideApproveDesc")
+            : overrideTarget === "REJECTED"
+              ? t("advisor.overrideRejectDesc")
+              : t("advisor.overrideResetDesc")
+        }
+        confirmLabel={
+          overrideTarget === "APPROVED"
+            ? t("advisor.markApproved")
+            : overrideTarget === "REJECTED"
+              ? t("advisor.markRejected")
+              : t("advisor.resetPending")
+        }
+        cancelLabel={t("common.cancel")}
+        tone={overrideTarget === "REJECTED" ? "danger" : "primary"}
+        loading={overriding}
+        onCancel={() => { setShowOverrideConfirm(false); setOverrideTarget(""); }}
+        onConfirm={handleOverrideAdvisorStatus}
       />
 
       <Breadcrumb items={[{ label: t("detail.papers"), href: "/submissions" }, { label: submission.title }]} />
@@ -448,26 +596,131 @@ export function SubmissionDetail({
         </Card>
       )}
 
-      {/* Advisor Link Status (visible to admin + author) */}
-      {(isAdmin || isOwner) && submission.advisorName && submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
-        const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-        const now = new Date();
-        const isExpired = now > expiresAt;
-        const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-        return (
-          <Alert tone={isExpired ? "danger" : daysRemaining <= 3 ? "warning" : "info"}>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 shrink-0" />
-              <span>
-                {t("advisor.linkStatus", { name: submission.advisorName })}{" "}
-                {isExpired
-                  ? t("advisor.linkExpired")
-                  : t("advisor.linkExpiresIn", { n: daysRemaining, date: formatDate(expiresAt.toISOString()) })}
-              </span>
+      {/* Advisor Endorsement Card */}
+      {(isAdmin || isOwner) && submission.advisorName && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <UserCheck className="h-4 w-4" />
+                {t("advisor.sectionTitle")}
+              </h3>
+              <Badge
+                tone={
+                  submission.advisorApprovalStatus === "APPROVED" ? "success"
+                    : submission.advisorApprovalStatus === "PENDING" ? "warning"
+                      : submission.advisorApprovalStatus === "REJECTED" ? "danger"
+                        : "neutral"
+                }
+              >
+                {submission.advisorApprovalStatus === "APPROVED"
+                  ? t("advisor.statusApproved")
+                  : submission.advisorApprovalStatus === "PENDING"
+                    ? t("advisor.statusPending")
+                    : submission.advisorApprovalStatus === "REJECTED"
+                      ? t("advisor.statusRejected")
+                      : t("advisor.statusNotRequested")}
+              </Badge>
             </div>
-          </Alert>
-        );
-      })()}
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-medium text-ink-muted mb-0.5">{t("advisor.advisorName")}</p>
+                <p className="text-sm text-ink">{submission.advisorName}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-ink-muted mb-0.5">{t("advisor.advisorEmail")}</p>
+                <p className="text-sm text-ink">{submission.advisorEmail || "—"}</p>
+              </div>
+            </div>
+
+            {/* Link expiry info */}
+            {submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
+              const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+              const now = new Date();
+              const isExpired = now > expiresAt;
+              const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+              return (
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
+                  {isExpired ? (
+                    <Badge tone="danger">{t("advisor.linkExpiredBadge")}</Badge>
+                  ) : (
+                    <Badge tone={daysRemaining <= 3 ? "warning" : "info"}>
+                      {t("advisor.linkExpiresBadge", { n: daysRemaining, date: formatDate(expiresAt.toISOString()) })}
+                    </Badge>
+                  )}
+                </div>
+              );
+            })()}
+          </CardBody>
+          <CardFooter>
+            <div className="flex flex-wrap gap-2">
+              {/* Resend email — visible to admin and author when pending */}
+              {(isAdmin || canManageOwnSubmission) && submission.status === "ADVISOR_APPROVAL_PENDING" && submission.advisorApprovalStatus === "PENDING" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  loading={resendingAdvisor}
+                  onClick={handleResendAdvisorApproval}
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  {t("advisor.resendEmail")}
+                </Button>
+              )}
+
+              {/* Admin-only actions */}
+              {isAdmin && (
+                <>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setEditAdvisorName(submission.advisorName || "");
+                      setEditAdvisorEmail(submission.advisorEmail || "");
+                      setSendAdvisorEmailOnChange(true);
+                      setShowEditAdvisorModal(true);
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    {t("advisor.editAdvisor")}
+                  </Button>
+
+                  {/* Override status dropdown */}
+                  {submission.advisorApprovalStatus !== "NOT_REQUESTED" && (
+                    <div className="relative">
+                      <Select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            setOverrideTarget(e.target.value);
+                            setShowOverrideConfirm(true);
+                          }
+                        }}
+                        className="text-xs h-8"
+                      >
+                        <option value="">{t("advisor.overrideStatus")}</option>
+                        {submission.advisorApprovalStatus !== "APPROVED" && (
+                          <option value="APPROVED">{t("advisor.markApproved")}</option>
+                        )}
+                        {submission.advisorApprovalStatus !== "REJECTED" && (
+                          <option value="REJECTED">{t("advisor.markRejected")}</option>
+                        )}
+                        {submission.advisorApprovalStatus !== "PENDING" && (
+                          <option value="PENDING">{t("advisor.resetPending")}</option>
+                        )}
+                      </Select>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </CardFooter>
+        </Card>
+      )}
 
       {/* Review confirmation — shown after reviewer already submitted */}
       {isAssignedReviewer && submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (() => {
@@ -579,49 +832,6 @@ export function SubmissionDetail({
                   <span key={i} className="text-xs bg-surface-alt text-ink-light px-2.5 py-1 rounded-md">{kw.trim()}</span>
                 ))}
               </div>
-            </div>
-          )}
-
-          {submission.advisorName && (
-            <div>
-              <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">Advisor</h3>
-              <p className="text-sm text-ink">{submission.advisorName} ({submission.advisorEmail})</p>
-              <Badge
-                tone={submission.advisorApprovalStatus === "APPROVED" ? "success" : submission.advisorApprovalStatus === "PENDING" ? "warning" : "neutral"}
-                className="mt-1.5"
-              >
-                {submission.advisorApprovalStatus === "APPROVED" ? t("advisor.statusApproved") : submission.advisorApprovalStatus === "PENDING" ? t("advisor.statusPending") : submission.advisorApprovalStatus || "—"}
-              </Badge>
-              {(isAdmin || isOwner) && submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
-                const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-                const now = new Date();
-                const isExpired = now > expiresAt;
-                const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-                return (
-                  <div className="mt-1.5">
-                    {isExpired ? (
-                      <Badge tone="danger">{t("advisor.linkExpiredBadge")}</Badge>
-                    ) : (
-                      <Badge tone={daysRemaining <= 3 ? "warning" : "info"}>
-                        {t("advisor.linkExpiresBadge", { n: daysRemaining, date: formatDate(expiresAt.toISOString()) })}
-                      </Badge>
-                    )}
-                  </div>
-                );
-              })()}
-              {canManageOwnSubmission && submission.status === "ADVISOR_APPROVAL_PENDING" && submission.advisorApprovalStatus === "PENDING" && (
-                <div className="mt-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    loading={resendingAdvisor}
-                    onClick={handleResendAdvisorApproval}
-                  >
-                    {t("advisor.resendEmail")}
-                  </Button>
-                </div>
-              )}
             </div>
           )}
 
