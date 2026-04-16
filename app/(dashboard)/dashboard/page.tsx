@@ -10,6 +10,7 @@ import {
   reviewAssignments,
   reviews,
   settings,
+  storedFiles,
   submissions,
   tracks,
   userRoles,
@@ -27,7 +28,6 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
         paperCode: true,
         title: true,
         status: true,
-        fileUrl: true,
         createdAt: true,
         submittedAt: true,
       },
@@ -100,6 +100,16 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
     byStatus[submission.status] = (byStatus[submission.status] || 0) + 1;
   }
 
+  // Batch check which submissions have a manuscript file
+  const allSubIds = mySubmissions.map((s) => s.id);
+  const filesWithManuscript = allSubIds.length > 0
+    ? await db
+        .select({ submissionId: storedFiles.submissionId })
+        .from(storedFiles)
+        .where(and(inArray(storedFiles.submissionId, allSubIds), eq(storedFiles.kind, "MANUSCRIPT")))
+    : [];
+  const hasManuscriptSet = new Set(filesWithManuscript.map((f) => f.submissionId));
+
   return {
     totalSubmissions: mySubmissions.length,
     byStatus,
@@ -108,7 +118,7 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
       paperCode: submission.paperCode,
       title: submission.title,
       status: submission.status,
-      hasFile: !!submission.fileUrl,
+      hasFile: hasManuscriptSet.has(submission.id),
       trackName: submission.track?.name || null,
       reviewTotal: submission.reviewAssignments.length,
       reviewCompleted: submission.reviewAssignments.filter(

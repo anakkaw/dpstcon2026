@@ -33,7 +33,7 @@ test("submission validation requires all mandatory metadata before submission", 
       trackId: "track-id",
       advisorEmail: "advisor@example.com",
       advisorName: "Advisor",
-      fileUrl: "file-key",
+      hasManuscript: true,
     }),
     "กรุณากรอกชื่อบทความภาษาอังกฤษ"
   );
@@ -47,7 +47,7 @@ test("submission validation requires all mandatory metadata before submission", 
       trackId: "track-id",
       advisorEmail: "advisor@example.com",
       advisorName: "Advisor",
-      fileUrl: "file-key",
+      hasManuscript: true,
     }),
     null
   );

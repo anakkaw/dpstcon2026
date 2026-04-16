@@ -562,6 +562,8 @@ app.post("/:id/submit", async (c) => {
     return c.json({ error: "Forbidden — only authors can submit papers" }, 403);
   }
   if (submission.status !== "DRAFT") return c.json({ error: "Can only submit from DRAFT" }, 400);
+  const { hasFileOfKind } = await import("@/server/stored-files-helpers");
+  const hasManuscript = await hasFileOfKind(id, "MANUSCRIPT");
   const validationError = getSubmissionValidationError({
     title: submission.title,
     titleEn: submission.titleEn,
@@ -570,7 +572,7 @@ app.post("/:id/submit", async (c) => {
     trackId: submission.trackId,
     advisorEmail: submission.advisorEmail,
     advisorName: submission.advisorName,
-    fileUrl: submission.fileUrl,
+    hasManuscript,
   });
   if (validationError) return c.json({ error: validationError }, 400);
 
@@ -777,28 +779,8 @@ app.post("/:id/rebuttal", async (c) => {
   return c.json({ submission: updated });
 });
 
-// POST /api/submissions/:id/camera-ready
-app.post("/:id/camera-ready", async (c) => {
-  const { id } = c.req.param();
-  const currentUser = c.get("user");
-  const { cameraReadyUrl } = await c.req.json();
-
-  const submission = await db.query.submissions.findFirst({ where: eq(submissions.id, id) });
-  if (!submission) return c.json({ error: "Not found" }, 404);
-  if (submission.authorId !== currentUser.id) return c.json({ error: "Forbidden" }, 403);
-  if (!hasAuthorSubmissionRole(currentUser)) {
-    return c.json({ error: "Forbidden — only authors can submit camera-ready files" }, 403);
-  }
-  if (submission.status !== "CAMERA_READY_PENDING") return c.json({ error: "Not expected" }, 400);
-
-  const [updated] = await db
-    .update(submissions)
-    .set({ cameraReadyUrl, status: "CAMERA_READY_SUBMITTED", updatedAt: new Date() })
-    .where(eq(submissions.id, id))
-    .returning();
-
-  return c.json({ submission: updated });
-});
+// Legacy POST /api/submissions/:id/camera-ready removed.
+// Camera-ready uploads now go through the standard upload-url → confirm-upload flow.
 
 // POST /api/submissions/:id/upload-url
 const ALLOWED_MIME_TYPES = [
@@ -942,13 +924,11 @@ app.post("/:id/confirm-upload", async (c) => {
     })
     .returning();
 
-  if (kind === "MANUSCRIPT") {
-    await db.update(submissions).set({ fileUrl: fileKey, updatedAt: new Date() }).where(eq(submissions.id, id));
-  } else if (kind === "CAMERA_READY") {
-    await db
-      .update(submissions)
-      .set({ cameraReadyUrl: fileKey, status: "CAMERA_READY_SUBMITTED", updatedAt: new Date() })
-      .where(eq(submissions.id, id));
+  // Update submission timestamp; advance status for camera-ready uploads
+  if (kind === "CAMERA_READY") {
+    await db.update(submissions).set({ status: "CAMERA_READY_SUBMITTED", updatedAt: new Date() }).where(eq(submissions.id, id));
+  } else {
+    await db.update(submissions).set({ updatedAt: new Date() }).where(eq(submissions.id, id));
   }
 
   return c.json({ file }, 201);
@@ -976,16 +956,20 @@ app.get("/:id/file-url", async (c) => {
 
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, id),
-    columns: { id: true, fileUrl: true, authorId: true, trackId: true },
+    columns: { id: true, authorId: true, trackId: true },
   });
-  if (!submission?.fileUrl) return c.json({ error: "No file" }, 404);
+  if (!submission) return c.json({ error: "Not found" }, 404);
 
   if (!(await canAccessSubmission(currentUser, submission))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
+  const { getLatestFileKey } = await import("@/server/stored-files-helpers");
+  const fileKey = await getLatestFileKey(id, "MANUSCRIPT");
+  if (!fileKey) return c.json({ error: "No file" }, 404);
+
   try {
-    const url = await getDownloadUrl(submission.fileUrl);
+    const url = await getDownloadUrl(fileKey);
     return c.json({ url });
   } catch {
     return c.json({ error: "File storage not configured" }, 503);
@@ -1039,33 +1023,18 @@ app.delete("/:id/files/:fileId", async (c) => {
   });
   if (!file) return c.json({ error: "File not found" }, 404);
 
-  const nextManuscriptKey =
-    file.kind === "MANUSCRIPT"
-      ? await getLatestStoredKeyForKind(id, "MANUSCRIPT", file.id)
-      : null;
-  const nextCameraReadyKey =
-    file.kind === "CAMERA_READY"
-      ? await getLatestStoredKeyForKind(id, "CAMERA_READY", file.id)
-      : null;
-
-  // The app uses the neon-http driver, which does not support db.transaction().
-  // Keep the submission pointers in sync first, then remove the stored file row.
-  if (file.kind === "MANUSCRIPT") {
-    await db
-      .update(submissions)
-      .set({ fileUrl: nextManuscriptKey, updatedAt: new Date() })
-      .where(eq(submissions.id, id));
-  }
-
+  // When deleting a camera-ready file, revert status if no other camera-ready remains
   if (file.kind === "CAMERA_READY") {
+    const nextCameraReadyKey = await getLatestStoredKeyForKind(id, "CAMERA_READY", file.id);
     await db
       .update(submissions)
       .set({
-        cameraReadyUrl: nextCameraReadyKey,
         status: nextCameraReadyKey ? submission.status : "CAMERA_READY_PENDING",
         updatedAt: new Date(),
       })
       .where(eq(submissions.id, id));
+  } else {
+    await db.update(submissions).set({ updatedAt: new Date() }).where(eq(submissions.id, id));
   }
 
   await db.delete(storedFiles).where(eq(storedFiles.id, file.id));

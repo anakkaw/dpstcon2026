@@ -46,7 +46,7 @@ interface Props {
     abstract: string | null;
     keywords: string | null;
     status: string;
-    fileUrl: string | null;
+    fileUrl?: string | null;
     advisorEmail: string | null;
     advisorName: string | null;
     advisorApprovalStatus: string | null;
@@ -143,7 +143,8 @@ export function SubmissionDetail({
   const [submittingReview, setSubmittingReview] = useState(false);
 
   // Computed values for author view
-  const nextAction = isAuthor ? getNextAction(submission.status, !!submission.fileUrl) : null;
+  const hasManuscript = files.some((f) => f.kind === "MANUSCRIPT");
+  const nextAction = isAuthor ? getNextAction(submission.status, hasManuscript) : null;
   const deadlineKey = isAuthor ? getRelevantDeadlineKey(submission.status) : null;
   const relevantDeadline = deadlineKey && deadlines ? deadlines[deadlineKey] : null;
   const daysLeft = relevantDeadline ? getDaysUntil(relevantDeadline) : null;

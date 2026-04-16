@@ -826,8 +826,6 @@ const th = {
   "action.uploadAndSubmitDesc": "แนบไฟล์ต้นฉบับบทความก่อนส่ง",
   "action.reviseAndResubmit": "แก้ไขและส่งบทความใหม่",
   "action.reviseAndResubmitDesc": "ตรวจสอบ feedback จาก reviewer และแก้ไขบทความ",
-  "action.writeRebuttal": "เขียนคำชี้แจง",
-  "action.writeRebuttalDesc": "ส่งคำชี้แจง (rebuttal) ตอบกลับ reviewer",
   "action.uploadCameraReady": "อัปโหลดฉบับสมบูรณ์",
   "action.uploadCameraReadyDesc": "อัปโหลดไฟล์ Camera-Ready สำหรับตีพิมพ์",
 

@@ -102,6 +102,8 @@ export async function submitPaper(id: string) {
   if (submission.authorId !== session.user.id) throw new Error("Forbidden");
   if (submission.status !== "DRAFT") throw new Error("Can only submit from DRAFT");
 
+  const { hasFileOfKind } = await import("@/server/stored-files-helpers");
+  const hasManuscript = await hasFileOfKind(id, "MANUSCRIPT");
   const validationError = getSubmissionValidationError({
     title: submission.title,
     titleEn: submission.titleEn,
@@ -110,7 +112,7 @@ export async function submitPaper(id: string) {
     trackId: submission.trackId,
     advisorEmail: submission.advisorEmail,
     advisorName: submission.advisorName,
-    fileUrl: submission.fileUrl,
+    hasManuscript,
   });
   if (validationError) throw new Error(validationError);
   const advisorEmail = submission.advisorEmail;

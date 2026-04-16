@@ -25,7 +25,9 @@ export interface SubmissionReadinessInput {
   trackId: string | null | undefined;
   advisorEmail: string | null | undefined;
   advisorName: string | null | undefined;
+  /** @deprecated Use hasManuscript instead */
   fileUrl?: string | null | undefined;
+  hasManuscript?: boolean;
 }
 
 function hasText(value: string | null | undefined): value is string {
@@ -84,7 +86,10 @@ export function getSubmissionValidationError(input: SubmissionReadinessInput) {
     return "กรุณากรอกอีเมล Advisor ให้ถูกต้อง";
   }
 
-  if ("fileUrl" in input && !hasText(input.fileUrl)) {
+  // Check manuscript file existence (prefer hasManuscript, fallback to legacy fileUrl)
+  if ("hasManuscript" in input && input.hasManuscript === false) {
+    return "กรุณาแนบไฟล์บทความก่อนส่ง";
+  } else if (!("hasManuscript" in input) && "fileUrl" in input && !hasText(input.fileUrl)) {
     return "กรุณาแนบไฟล์บทความก่อนส่ง";
   }
 

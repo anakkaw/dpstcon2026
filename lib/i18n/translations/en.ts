@@ -824,8 +824,6 @@ const en: Record<TranslationKey, string> = {
   "action.uploadAndSubmitDesc": "Attach your manuscript file before submitting",
   "action.reviseAndResubmit": "Revise & Resubmit",
   "action.reviseAndResubmitDesc": "Check reviewer feedback and revise your paper",
-  "action.writeRebuttal": "Write Rebuttal",
-  "action.writeRebuttalDesc": "Submit a rebuttal response to the reviewer",
   "action.uploadCameraReady": "Upload Camera-Ready",
   "action.uploadCameraReadyDesc": "Upload the camera-ready file for publication",
 
