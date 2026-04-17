@@ -438,7 +438,7 @@ export function SubmissionsPageClient({
       ) : (
         <>
           <div className="space-y-3 lg:hidden">
-            {filtered.map((sub) => {
+            {pagedFiltered.map((sub) => {
               const totalAssign = sub.reviewAssignments?.length || 0;
               const completedAssign = sub.reviewAssignments?.filter((a) => a.status === "COMPLETED").length || 0;
 

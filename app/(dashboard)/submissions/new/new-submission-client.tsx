@@ -101,6 +101,9 @@ export function NewSubmissionClient() {
           (el as unknown as { value: string }).value = value;
         }
       }
+      // Sync word counters with restored textarea content
+      if (draft.abstract) setAbstractWords(countWords(draft.abstract));
+      if (draft.abstractEn) setAbstractEnWords(countWords(draft.abstractEn));
       setDraftRestored(true);
       setFormDirty(true);
     } catch { /* ignore corrupt data */ }
