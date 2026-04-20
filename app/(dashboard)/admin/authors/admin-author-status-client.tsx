@@ -12,13 +12,37 @@ import { Card, CardBody } from "@/components/ui/card";
 import { getSubmissionStatusLabels, SUBMISSION_STATUS_COLORS } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { displayNameTh } from "@/lib/display-name";
-import type { AuthorStatusRow, AuthorStatusStats } from "@/server/admin-author-status-data";
+import type { AuthorStatusRow } from "@/server/admin-author-status-data";
 import {
-  Users, Search, X, FileText, CheckCircle2, XCircle, Clock,
+  Users, Search, X, FileText, CheckCircle2, Clock,
   AlertTriangle, UserX, ChevronDown, ChevronUp, ExternalLink,
 } from "lucide-react";
 
-type FilterKey = "ALL" | "NO_SUBMISSION" | "DRAFT" | "ADVISOR_APPROVAL_PENDING" | "SUBMITTED" | "UNDER_REVIEW" | "REVISION_REQUIRED" | "REBUTTAL" | "ACCEPTED" | "CAMERA_READY_PENDING" | "CAMERA_READY_SUBMITTED" | "REJECTED" | "DESK_REJECTED" | "WITHDRAWN";
+// Each filter group defines which submission statuses it covers.
+// null statuses = match all; empty array = match authors with no submissions.
+type FilterGroupKey = "ALL" | "NO_SUBMISSION" | "DRAFT" | "ADVISOR_PENDING" | "IN_REVIEW" | "ACCEPTED" | "REJECTED";
+
+interface FilterGroup {
+  key: FilterGroupKey;
+  label: string;
+  statuses: string[] | null;
+}
+
+const FILTER_GROUPS: FilterGroup[] = [
+  { key: "ALL",             label: "ทั้งหมด",                   statuses: null },
+  { key: "NO_SUBMISSION",   label: "ยังไม่ส่งบทความ",            statuses: [] },
+  { key: "DRAFT",           label: "อยู่ในร่าง",                 statuses: ["DRAFT"] },
+  { key: "ADVISOR_PENDING", label: "รออาจารย์ที่ปรึกษา",          statuses: ["ADVISOR_APPROVAL_PENDING"] },
+  { key: "IN_REVIEW",       label: "ส่งแล้ว / กำลังพิจารณา",     statuses: ["SUBMITTED", "UNDER_REVIEW", "REVISION_REQUIRED", "REBUTTAL"] },
+  { key: "ACCEPTED",        label: "ตอบรับแล้ว",                 statuses: ["ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"] },
+  { key: "REJECTED",        label: "ปฏิเสธ",                    statuses: ["REJECTED", "DESK_REJECTED"] },
+];
+
+function matchesGroup(author: AuthorStatusRow, group: FilterGroup): boolean {
+  if (group.statuses === null) return true;
+  if (group.statuses.length === 0) return author.submissions.length === 0;
+  return author.submissions.some((s) => group.statuses!.includes(s.status));
+}
 
 function getAuthorHighestStatus(subs: AuthorStatusRow["submissions"]): string {
   if (subs.length === 0) return "NO_SUBMISSION";
@@ -32,31 +56,28 @@ function getAuthorHighestStatus(subs: AuthorStatusRow["submissions"]): string {
   };
 
   return subs.reduce((best, s) => {
-    const bp = PRIORITY[best] ?? 99;
-    const sp = PRIORITY[s.status] ?? 99;
-    return sp < bp ? s.status : best;
+    return (PRIORITY[s.status] ?? 99) < (PRIORITY[best] ?? 99) ? s.status : best;
   }, subs[0].status);
 }
 
-function matchesFilter(author: AuthorStatusRow, filter: FilterKey): boolean {
-  if (filter === "ALL") return true;
-  if (filter === "NO_SUBMISSION") return author.submissions.length === 0;
-  return author.submissions.some((s) => s.status === filter);
-}
-
-export function AdminAuthorStatusClient({
-  authors,
-  stats,
-}: {
-  authors: AuthorStatusRow[];
-  stats: AuthorStatusStats;
-}) {
+export function AdminAuthorStatusClient({ authors }: { authors: AuthorStatusRow[] }) {
   const { t } = useI18n();
   const statusLabels = getSubmissionStatusLabels(t);
 
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<FilterKey>("ALL");
+  const [activeKey, setActiveKey] = useState<FilterGroupKey>("ALL");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  // Counts computed directly from authors — always matches what the filter shows
+  const counts = useMemo(() => {
+    const result = {} as Record<FilterGroupKey, number>;
+    for (const group of FILTER_GROUPS) {
+      result[group.key] = authors.filter((a) => matchesGroup(a, group)).length;
+    }
+    return result;
+  }, [authors]);
+
+  const activeGroup = FILTER_GROUPS.find((g) => g.key === activeKey)!;
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -67,28 +88,17 @@ export function AdminAuthorStatusClient({
         const affil = (a.affiliation ?? "").toLowerCase();
         if (!name.includes(q) && !email.includes(q) && !affil.includes(q)) return false;
       }
-      return matchesFilter(a, filter);
+      return matchesGroup(a, activeGroup);
     });
-  }, [authors, search, filter]);
+  }, [authors, search, activeGroup]);
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
-
-  const FILTER_OPTIONS: { key: FilterKey; label: string }[] = [
-    { key: "ALL", label: `ทั้งหมด (${stats.totalAuthors})` },
-    { key: "NO_SUBMISSION", label: `ยังไม่ส่ง (${stats.noSubmission})` },
-    { key: "DRAFT", label: `ร่าง (${stats.draftOnly})` },
-    { key: "ADVISOR_APPROVAL_PENDING", label: `รออาจารย์ที่ปรึกษา (${stats.pendingAdvisor})` },
-    { key: "SUBMITTED", label: `ส่งแล้ว / อยู่ระหว่างพิจารณา (${stats.submitted})` },
-    { key: "ACCEPTED", label: `ตอบรับแล้ว (${stats.accepted})` },
-    { key: "REJECTED", label: `ปฏิเสธ (${stats.rejected})` },
-  ];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
@@ -104,60 +114,30 @@ export function AdminAuthorStatusClient({
         subtitle="ภาพรวมสถานะการส่งบทความของผู้เขียนทั้งหมดในระบบ"
       />
 
-      {/* Stats */}
+      {/* Summary cards — same source of truth as filter counts */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <SummaryStatCard
-          label="ผู้เขียนทั้งหมด"
-          value={stats.totalAuthors}
-          icon={<Users className="h-5 w-5" />}
-          color="blue"
-        />
-        <SummaryStatCard
-          label="ยังไม่ส่งบทความ"
-          value={stats.noSubmission}
-          icon={<UserX className="h-5 w-5" />}
-          color="gray"
-        />
-        <SummaryStatCard
-          label="อยู่ในร่าง"
-          value={stats.draftOnly}
-          icon={<FileText className="h-5 w-5" />}
-          color="indigo"
-        />
-        <SummaryStatCard
-          label="รออาจารย์ที่ปรึกษา"
-          value={stats.pendingAdvisor}
-          icon={<Clock className="h-5 w-5" />}
-          color="amber"
-        />
-        <SummaryStatCard
-          label="ส่งแล้ว / กำลังพิจารณา"
-          value={stats.submitted}
-          icon={<AlertTriangle className="h-5 w-5" />}
-          color="violet"
-        />
-        <SummaryStatCard
-          label="ตอบรับแล้ว"
-          value={stats.accepted}
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          color="emerald"
-        />
+        <SummaryStatCard label="ผู้เขียนทั้งหมด"           value={counts.ALL}             icon={<Users className="h-5 w-5" />}       color="blue"    />
+        <SummaryStatCard label="ยังไม่ส่งบทความ"           value={counts.NO_SUBMISSION}   icon={<UserX className="h-5 w-5" />}        color="gray"    />
+        <SummaryStatCard label="อยู่ในร่าง"                value={counts.DRAFT}           icon={<FileText className="h-5 w-5" />}     color="indigo"  />
+        <SummaryStatCard label="รออาจารย์ที่ปรึกษา"        value={counts.ADVISOR_PENDING} icon={<Clock className="h-5 w-5" />}        color="amber"   />
+        <SummaryStatCard label="ส่งแล้ว / กำลังพิจารณา"   value={counts.IN_REVIEW}       icon={<AlertTriangle className="h-5 w-5" />} color="violet"  />
+        <SummaryStatCard label="ตอบรับแล้ว"               value={counts.ACCEPTED}        icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
       </div>
 
-      {/* Filter + Search */}
+      {/* Filter chips + Search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
-          {FILTER_OPTIONS.map((opt) => (
+          {FILTER_GROUPS.map((group) => (
             <button
-              key={opt.key}
-              onClick={() => setFilter(opt.key)}
+              key={group.key}
+              onClick={() => setActiveKey(group.key)}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                filter === opt.key
+                activeKey === group.key
                   ? "border-blue-600 bg-blue-600 text-white"
                   : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
               }`}
             >
-              {opt.label}
+              {group.label} ({counts[group.key]})
             </button>
           ))}
         </div>
@@ -215,9 +195,7 @@ export function AdminAuthorStatusClient({
                           onClick={() => !noSub && toggleExpand(author.id)}
                         >
                           <td className="px-4 py-3">
-                            <div className="font-medium text-slate-800">
-                              {displayNameTh(author)}
-                            </div>
+                            <div className="font-medium text-slate-800">{displayNameTh(author)}</div>
                             <div className="text-xs text-slate-500">{author.email}</div>
                           </td>
                           <td className="px-4 py-3 text-slate-600">
@@ -240,17 +218,12 @@ export function AdminAuthorStatusClient({
                           <td className="px-4 py-3 text-right">
                             {!noSub && (
                               <span className="text-slate-400">
-                                {expanded ? (
-                                  <ChevronUp className="h-4 w-4" />
-                                ) : (
-                                  <ChevronDown className="h-4 w-4" />
-                                )}
+                                {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                               </span>
                             )}
                           </td>
                         </tr>
 
-                        {/* Expanded submissions */}
                         {expanded && author.submissions.map((sub) => (
                           <tr key={sub.id} className="bg-slate-50/60">
                             <td colSpan={5} className="px-6 py-2">
@@ -262,14 +235,10 @@ export function AdminAuthorStatusClient({
                                         {sub.paperCode}
                                       </span>
                                     )}
-                                    <span className="truncate text-sm font-medium text-slate-700">
-                                      {sub.title}
-                                    </span>
+                                    <span className="truncate text-sm font-medium text-slate-700">{sub.title}</span>
                                   </div>
                                   {sub.trackName && (
-                                    <div className="mt-0.5 text-xs text-slate-500">
-                                      สาขา: {sub.trackName}
-                                    </div>
+                                    <div className="mt-0.5 text-xs text-slate-500">สาขา: {sub.trackName}</div>
                                   )}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-3">

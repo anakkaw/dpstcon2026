@@ -15,7 +15,7 @@ export default async function AdminAuthorStatusPage() {
     redirect("/dashboard");
   }
 
-  const { authors, stats } = await getAdminAuthorStatusData();
+  const { authors } = await getAdminAuthorStatusData();
 
-  return <AdminAuthorStatusClient authors={authors} stats={stats} />;
+  return <AdminAuthorStatusClient authors={authors} />;
 }
