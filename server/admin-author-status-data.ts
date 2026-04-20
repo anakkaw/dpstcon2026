@@ -10,6 +10,10 @@ export interface AuthorSubmissionSummary {
   trackName: string | null;
   createdAt: string;
   updatedAt: string;
+  advisorName: string | null;
+  advisorEmail: string | null;
+  advisorApprovalStatus: string | null;
+  advisorApprovalAt: string | null;
 }
 
 export interface AuthorStatusRow {
@@ -51,6 +55,8 @@ export async function getAdminAuthorStatusData(): Promise<{ authors: AuthorStatu
       columns: {
         id: true, authorId: true, paperCode: true, title: true,
         status: true, createdAt: true, updatedAt: true,
+        advisorName: true, advisorEmail: true,
+        advisorApprovalStatus: true, advisorApprovalAt: true,
       },
       with: {
         track: { columns: { name: true } },
@@ -69,6 +75,10 @@ export async function getAdminAuthorStatusData(): Promise<{ authors: AuthorStatu
       trackName: sub.track?.name ?? null,
       createdAt: sub.createdAt.toISOString(),
       updatedAt: sub.updatedAt.toISOString(),
+      advisorName: sub.advisorName,
+      advisorEmail: sub.advisorEmail,
+      advisorApprovalStatus: sub.advisorApprovalStatus,
+      advisorApprovalAt: sub.advisorApprovalAt?.toISOString() ?? null,
     });
     subsByAuthor.set(sub.authorId, list);
   }

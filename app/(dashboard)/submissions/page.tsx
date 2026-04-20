@@ -23,6 +23,8 @@ async function loadInitialSubmissions(
     return results.map((submission) => ({
       ...submission,
       createdAt: submission.createdAt.toISOString(),
+      submittedAt: submission.submittedAt?.toISOString() || null,
+      advisorApprovalAt: submission.advisorApprovalAt?.toISOString() || null,
       reviews: submission.reviews.map((review) => ({
         ...review,
         completedAt: review.completedAt?.toISOString() || null,
@@ -78,6 +80,8 @@ async function loadInitialSubmissions(
   return results.map((submission) => ({
     ...submission,
     createdAt: submission.createdAt.toISOString(),
+    submittedAt: submission.submittedAt?.toISOString() || null,
+    advisorApprovalAt: submission.advisorApprovalAt?.toISOString() || null,
     reviews: submission.reviews.map((review) => ({
       ...review,
       completedAt: review.completedAt?.toISOString() || null,

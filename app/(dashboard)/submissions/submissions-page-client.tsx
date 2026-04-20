@@ -20,7 +20,8 @@ import { useDebounce } from "@/lib/hooks/use-debounce";
 import {
   Plus, FileText, Download, ChevronUp, ChevronDown, ArrowUpDown,
   ExternalLink, Users, Search, X, CheckCircle2, XCircle, Clock,
-  Eye, Trash2, MoreHorizontal, Pencil,
+  Eye, Trash2, MoreHorizontal, Pencil, AlertCircle, Copy, Check,
+  Send, FileDown,
 } from "lucide-react";
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { getNextAction } from "@/lib/author-utils";
@@ -38,6 +39,21 @@ export interface SubmissionData {
   reviewAssignments?: { id: string; status: string }[];
   advisorApprovalStatus?: string | null;
   advisorName?: string | null;
+  advisorEmail?: string | null;
+  advisorApprovalAt?: string | null;
+  submittedAt?: string | null;
+  fileUrl?: string | null;
+}
+
+const NEEDS_ACTION_STATUSES = new Set([
+  "DRAFT",
+  "ADVISOR_APPROVAL_PENDING",
+  "REVISION_REQUIRED",
+  "CAMERA_READY_PENDING",
+]);
+
+function daysSince(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
 type SortKey = "title" | "author" | "track" | "status" | "createdAt" | "reviews";
@@ -57,11 +73,51 @@ export function SubmissionsPageClient({
   const [trackFilter, setTrackFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  // quick filters: "none" | "needs_action" | "advisor_stalled"
+  const [quickFilter, setQuickFilter] = useState<"none" | "needs_action" | "advisor_stalled">("none");
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
 
   // Reset to page 1 whenever filters change
   const setTrackFilterAndReset = useCallback((v: string) => { setTrackFilter(v); setPage(1); }, []);
-  const setStatusFilterAndReset = useCallback((v: string) => { setStatusFilter(v); setPage(1); }, []);
+  const setStatusFilterAndReset = useCallback((v: string) => { setStatusFilter(v); setPage(1); setQuickFilter("none"); }, []);
   const setSearchQueryAndReset = useCallback((v: string) => { setSearchQuery(v); setPage(1); }, []);
+  const setQuickFilterAndReset = useCallback((v: "none" | "needs_action" | "advisor_stalled") => {
+    setQuickFilter((prev) => (prev === v ? "none" : v));
+    setStatusFilter("ALL");
+    setPage(1);
+  }, []);
+
+  async function handleResendAdvisor(subId: string) {
+    setResendingId(subId);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/submissions/${subId}/resend-advisor-approval`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessageTone("danger");
+        setMessage(data?.error || t("detail.advisorResendError"));
+        return;
+      }
+      setMessageTone("success");
+      setMessage(t("detail.advisorResendSuccess"));
+    } catch {
+      setMessageTone("danger");
+      setMessage(t("detail.advisorResendError"));
+    } finally {
+      setResendingId(null);
+    }
+  }
+
+  async function copyEmail(email: string) {
+    try {
+      await navigator.clipboard.writeText(email);
+      setCopiedEmail(email);
+      setTimeout(() => setCopiedEmail((e) => (e === email ? null : e)), 1500);
+    } catch {
+      // ignore
+    }
+  }
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
@@ -226,6 +282,11 @@ export function SubmissionsPageClient({
       .filter((s) => {
         if (trackFilter && s.track?.id !== trackFilter) return false;
         if (statusFilter !== "ALL" && s.status !== statusFilter) return false;
+        if (quickFilter === "needs_action" && !NEEDS_ACTION_STATUSES.has(s.status)) return false;
+        if (quickFilter === "advisor_stalled") {
+          if (s.status !== "ADVISOR_APPROVAL_PENDING") return false;
+          if (!s.submittedAt || daysSince(s.submittedAt) < 7) return false;
+        }
         if (debouncedSearch) {
           const q = debouncedSearch.toLowerCase();
           return s.title.toLowerCase().includes(q) ||
@@ -253,7 +314,7 @@ export function SubmissionsPageClient({
           default: return 0;
         }
       }),
-    [submissions, trackFilter, statusFilter, debouncedSearch, sortKey, sortDir, statusLabels]);
+    [submissions, trackFilter, statusFilter, debouncedSearch, sortKey, sortDir, statusLabels, quickFilter]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pagedFiltered = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -317,6 +378,20 @@ export function SubmissionsPageClient({
   const rejected = (statusCounts.REJECTED || 0) + (statusCounts.DESK_REJECTED || 0);
   const pending = (statusCounts.DRAFT || 0) + (statusCounts.ADVISOR_APPROVAL_PENDING || 0);
 
+  const needsActionCount = useMemo(
+    () => submissions.filter((s) => (!trackFilter || s.track?.id === trackFilter) && NEEDS_ACTION_STATUSES.has(s.status)).length,
+    [submissions, trackFilter]
+  );
+  const advisorStalledCount = useMemo(
+    () => submissions.filter((s) =>
+      (!trackFilter || s.track?.id === trackFilter) &&
+      s.status === "ADVISOR_APPROVAL_PENDING" &&
+      s.submittedAt &&
+      daysSince(s.submittedAt) >= 7
+    ).length,
+    [submissions, trackFilter]
+  );
+
   return (
     <div className="space-y-6">
       <ConfirmDialog
@@ -361,11 +436,21 @@ export function SubmissionsPageClient({
       {message && <Alert tone={messageTone}>{message}</Alert>}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <SummaryStatCard label={t("common.total")} value={totalFiltered} icon={<FileText className="h-5 w-5" />} color="blue" />
-        <SummaryStatCard label={t("submissions.inReview")} value={submitted} icon={<Eye className="h-5 w-5" />} color="indigo" />
-        <SummaryStatCard label={t("dashboard.accepted")} value={accepted} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
-        <SummaryStatCard label={t("submissions.rejected")} value={rejected} icon={<XCircle className="h-5 w-5" />} color="red" />
-        <SummaryStatCard label={t("dashboard.pending")} value={pending} icon={<Clock className="h-5 w-5" />} color="gray" />
+        <ClickableStatCard active={statusFilter === "ALL" && quickFilter === "none"} onClick={() => { setStatusFilterAndReset("ALL"); }}>
+          <SummaryStatCard label={t("common.total")} value={totalFiltered} icon={<FileText className="h-5 w-5" />} color="blue" />
+        </ClickableStatCard>
+        <ClickableStatCard active={statusFilter === "UNDER_REVIEW"} onClick={() => setStatusFilterAndReset("UNDER_REVIEW")}>
+          <SummaryStatCard label={t("submissions.inReview")} value={submitted} icon={<Eye className="h-5 w-5" />} color="indigo" />
+        </ClickableStatCard>
+        <ClickableStatCard active={statusFilter === "ACCEPTED"} onClick={() => setStatusFilterAndReset("ACCEPTED")}>
+          <SummaryStatCard label={t("dashboard.accepted")} value={accepted} icon={<CheckCircle2 className="h-5 w-5" />} color="emerald" />
+        </ClickableStatCard>
+        <ClickableStatCard active={statusFilter === "REJECTED"} onClick={() => setStatusFilterAndReset("REJECTED")}>
+          <SummaryStatCard label={t("submissions.rejected")} value={rejected} icon={<XCircle className="h-5 w-5" />} color="red" />
+        </ClickableStatCard>
+        <ClickableStatCard active={quickFilter === "needs_action"} onClick={() => setQuickFilterAndReset("needs_action")}>
+          <SummaryStatCard label={t("submissions.needsAction")} value={needsActionCount} icon={<AlertCircle className="h-5 w-5" />} color="amber" />
+        </ClickableStatCard>
       </div>
 
       {/* ── Unified toolbar: search + track + status in one row ── */}
@@ -386,6 +471,24 @@ export function SubmissionsPageClient({
           )}
         </div>
         <TrackFilter value={trackFilter} onChange={setTrackFilterAndReset} counts={trackCounts} />
+        {advisorStalledCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setQuickFilterAndReset("advisor_stalled")}
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
+              quickFilter === "advisor_stalled"
+                ? "bg-amber-500 text-white shadow-sm"
+                : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+            }`}
+            title={t("submissions.advisorStalled")}
+          >
+            <Clock className="h-3 w-3" />
+            {t("submissions.advisorStalled")}
+            <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-bold ${
+              quickFilter === "advisor_stalled" ? "bg-white/20 text-white" : "bg-amber-200/70 text-amber-800"
+            }`}>{advisorStalledCount}</span>
+          </button>
+        )}
         <div className="flex flex-wrap gap-1">
           {statusTabs.map((tab) => (
             <button
@@ -588,12 +691,35 @@ export function SubmissionsPageClient({
                           </td>
                           {/* title + author + time */}
                           <td className="px-4 py-3">
-                            <Link href={`/submissions/${sub.id}`} className="group/link block">
-                              <p className="font-medium text-ink leading-snug line-clamp-2 group-hover/link:text-brand-600 transition-colors">{sub.title}</p>
-                              <p className="mt-0.5 text-[11px] text-ink-muted">
-                                {displayNameTh(sub.author)} · {formatDate(sub.createdAt, locale)}
-                              </p>
-                            </Link>
+                            <div className="flex items-start gap-2">
+                              <Link href={`/submissions/${sub.id}`} className="group/link block min-w-0 flex-1">
+                                <p
+                                  className="font-medium text-ink leading-snug line-clamp-2 group-hover/link:text-brand-600 transition-colors"
+                                  title={sub.abstract || undefined}
+                                >
+                                  {sub.title}
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-ink-muted">
+                                  {displayNameTh(sub.author)} · {formatDate(sub.createdAt, locale)}
+                                  <span className="mx-1 text-ink-muted/60">·</span>
+                                  <span className={daysSince(sub.createdAt) >= 14 ? "text-amber-600 font-medium" : ""}>
+                                    {t("submissions.ageDays", { n: daysSince(sub.createdAt) })}
+                                  </span>
+                                </p>
+                              </Link>
+                              {sub.fileUrl && (
+                                <a
+                                  href={sub.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 text-ink-muted hover:text-brand-600 transition-colors"
+                                  title={t("submissions.openPdf")}
+                                  aria-label={t("submissions.openPdf")}
+                                >
+                                  <FileDown className="h-4 w-4" />
+                                </a>
+                              )}
+                            </div>
                           </td>
                           {/* track */}
                           <td className="px-4 py-3">
@@ -621,13 +747,20 @@ export function SubmissionsPageClient({
                             <Badge tone={SUBMISSION_STATUS_COLORS[sub.status] || "neutral"}>
                               {statusLabels[sub.status] || sub.status}
                             </Badge>
-                            {sub.advisorName && (
-                              <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-ink-muted">
-                                {sub.advisorApprovalStatus === "APPROVED" ? <CheckCircle2 className="h-3 w-3 text-emerald-500" aria-hidden="true" /> :
-                                  sub.advisorApprovalStatus === "REJECTED" ? <XCircle className="h-3 w-3 text-red-500" aria-hidden="true" /> :
-                                  <Clock className="h-3 w-3 text-amber-400" aria-hidden="true" />}
-                                {truncate(sub.advisorName, 22)}
-                              </p>
+                            {(sub.advisorName || sub.advisorEmail) && (
+                              <AdvisorCell
+                                sub={sub}
+                                copied={copiedEmail === sub.advisorEmail}
+                                onCopy={() => sub.advisorEmail && copyEmail(sub.advisorEmail)}
+                                onResend={() => handleResendAdvisor(sub.id)}
+                                resending={resendingId === sub.id}
+                                labels={{
+                                  copyEmail: t("submissions.copyEmail"),
+                                  copied: t("submissions.copied"),
+                                  resend: t("submissions.resendAdvisor"),
+                                  daysAgo: (n: number) => t("submissions.daysAgo", { n }),
+                                }}
+                              />
                             )}
                           </td>
                           {/* ⋮ actions */}
@@ -680,6 +813,81 @@ export function SubmissionsPageClient({
         </p>
       )}
     </div>
+  );
+}
+
+function AdvisorCell({
+  sub, copied, onCopy, onResend, resending, labels,
+}: {
+  sub: SubmissionData;
+  copied: boolean;
+  onCopy: () => void;
+  onResend: () => void;
+  resending: boolean;
+  labels: { copyEmail: string; copied: string; resend: string; daysAgo: (n: number) => string };
+}) {
+  const canResend = sub.status === "ADVISOR_APPROVAL_PENDING" && sub.advisorApprovalStatus === "PENDING" && !!sub.advisorEmail;
+  const pendingDays = sub.submittedAt && sub.advisorApprovalStatus === "PENDING" ? daysSince(sub.submittedAt) : null;
+  const stalled = pendingDays !== null && pendingDays >= 7;
+  const StatusIcon =
+    sub.advisorApprovalStatus === "APPROVED" ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> :
+    sub.advisorApprovalStatus === "REJECTED" ? <XCircle className="h-3 w-3 text-red-500" /> :
+    <Clock className={`h-3 w-3 ${stalled ? "text-amber-600" : "text-amber-400"}`} />;
+
+  return (
+    <div className="mt-1 space-y-0.5 text-[11px]">
+      <div className="inline-flex items-center gap-1 text-ink-muted">
+        {StatusIcon}
+        <span className={stalled ? "font-medium text-amber-700" : ""}>{truncate(sub.advisorName || "—", 22)}</span>
+        {pendingDays !== null && (
+          <span className={stalled ? "text-amber-700" : "text-ink-muted/70"}>
+            · {labels.daysAgo(pendingDays)}
+          </span>
+        )}
+      </div>
+      {sub.advisorEmail && (
+        <div className="flex items-center gap-1">
+          <span className="truncate max-w-[160px] font-mono text-[10px] text-ink-muted/90" title={sub.advisorEmail}>
+            {sub.advisorEmail}
+          </span>
+          <button
+            type="button"
+            onClick={onCopy}
+            className="text-ink-muted hover:text-ink transition-colors"
+            title={labels.copyEmail}
+            aria-label={labels.copyEmail}
+          >
+            {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+          </button>
+          {canResend && (
+            <button
+              type="button"
+              onClick={onResend}
+              disabled={resending}
+              className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50 transition-colors"
+              title={labels.resend}
+            >
+              <Send className="h-2.5 w-2.5" />
+              {resending ? "…" : labels.resend}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClickableStatCard({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-left rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
+        active ? "ring-2 ring-brand-500 ring-offset-1" : "hover:brightness-[1.03]"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
