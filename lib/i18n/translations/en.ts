@@ -52,6 +52,7 @@ const en: Record<TranslationKey, string> = {
   "nav.oralPresentation": "Oral Presentation",
   "nav.posterPresentation": "Poster Presentation",
   "nav.scheduleAndDocs": "Schedule & Documents",
+  "nav.authorStatus": "Author Status",
   "nav.userManagement": "User Management",
   "nav.trackManagement": "Track Management",
   "nav.trackTeam": "Track Team",

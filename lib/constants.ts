@@ -20,6 +20,7 @@ export const NAV_ITEMS = {
     { href: "/presentations/oral", label: "nav.oralPresentation", icon: "Mic" },
     { href: "/presentations/poster", label: "nav.posterPresentation", icon: "Image" },
     { href: "/deadlines", label: "nav.scheduleAndDocs", icon: "Calendar" },
+    { href: "/admin/authors", label: "nav.authorStatus", icon: "BarChart2" },
     { href: "/admin/users", label: "nav.userManagement", icon: "Users" },
     { href: "/admin/tracks", label: "nav.trackManagement", icon: "Layers" },
   ],

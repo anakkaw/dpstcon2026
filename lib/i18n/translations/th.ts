@@ -50,6 +50,7 @@ const th = {
   "nav.oralPresentation": "การนำเสนอแบบบรรยาย",
   "nav.posterPresentation": "การนำเสนอแบบโปสเตอร์",
   "nav.scheduleAndDocs": "กำหนดการและเอกสาร",
+  "nav.authorStatus": "ติดตามสถานะผู้เขียน",
   "nav.userManagement": "จัดการผู้ใช้",
   "nav.trackManagement": "จัดการสาขาวิชา",
   "nav.trackTeam": "ทีมสาขาวิชา",
