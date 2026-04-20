@@ -271,6 +271,7 @@ export const submissions = pgTable(
     ).default("NOT_REQUESTED"),
     advisorApprovalToken: varchar("advisor_approval_token", { length: 255 }),
     advisorApprovalAt: timestamp("advisor_approval_at"),
+    advisorAutoResendCount: integer("advisor_auto_resend_count").default(0).notNull(),
     rebuttalText: text("rebuttal_text"),
     submittedAt: timestamp("submitted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

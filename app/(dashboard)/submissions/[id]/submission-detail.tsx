@@ -102,12 +102,18 @@ interface Props {
   deadlines?: Record<string, string>;
   isAssignedReviewer?: boolean;
   reviewerAssignmentId?: string | null;
+  lastAdvisorEmail?: {
+    status: "PENDING" | "SENT" | "FAILED";
+    sentAt: string | null;
+    error: string | null;
+    createdAt: string;
+  } | null;
 }
 
 export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
   reviewCounts, decision, presentations, criteriaByType, deadlines,
-  isAssignedReviewer, reviewerAssignmentId,
+  isAssignedReviewer, reviewerAssignmentId, lastAdvisorEmail,
 }: Props) {
   const router = useRouter();
   const { t } = useI18n();
@@ -619,6 +625,22 @@ export function SubmissionDetail({
           ) : (
             <>
               <CardBody className="space-y-3">
+                {lastAdvisorEmail?.status === "FAILED" && submission.advisorApprovalStatus === "PENDING" && (
+                  <Alert tone="danger">
+                    <div className="space-y-1">
+                      <p className="font-medium">ส่งอีเมลถึงอาจารย์ที่ปรึกษาไม่สำเร็จ</p>
+                      <p className="text-sm">
+                        {lastAdvisorEmail.error
+                          ? `เหตุผล: ${lastAdvisorEmail.error}`
+                          : "ระบบไม่สามารถส่งอีเมลออกไปได้"}
+                      </p>
+                      <p className="text-sm">
+                        กรุณาตรวจสอบความถูกต้องของอีเมลอาจารย์ จากนั้นแก้ไข (ถ้าจำเป็น) แล้วกด &quot;{t("advisor.resendEmail")}&quot; เพื่อลองส่งอีกครั้ง
+                      </p>
+                    </div>
+                  </Alert>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <p className="text-xs font-medium text-ink-muted mb-0.5">{t("advisor.advisorName")}</p>

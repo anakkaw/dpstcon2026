@@ -6,11 +6,20 @@ import { logger } from "@/server/logger";
 
 // ─── Email Provider (Resend) ─────────────────────────────
 
-const FROM = "DPSTCon <noreply@acadscinu.org>";
+const FROM = "DPSTCon Academic <academic@acadscinu.org>";
+const REPLY_TO = "watcharaponga@nu.ac.th";
 
 function getResend() {
   if (!process.env.RESEND_API_KEY) return null;
   return new Resend(process.env.RESEND_API_KEY);
+}
+
+function getAppUrl() {
+  return (
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000"
+  );
 }
 
 /** Send email via Resend */
@@ -25,14 +34,16 @@ export async function sendEmail(opts: {
     throw new Error("RESEND_API_KEY is not configured");
   }
 
+  const unsubscribeUrl = `${getAppUrl()}/api/unsubscribe?email=${encodeURIComponent(opts.to)}`;
   const { data, error } = await resend.emails.send({
     from: FROM,
     to: opts.to,
+    replyTo: REPLY_TO,
     subject: opts.subject,
     html: opts.html,
     text: opts.text,
     headers: {
-      "List-Unsubscribe": "<mailto:noreply@acadscinu.org?subject=unsubscribe>",
+      "List-Unsubscribe": `<${unsubscribeUrl}>, <mailto:${REPLY_TO}?subject=unsubscribe>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
   });

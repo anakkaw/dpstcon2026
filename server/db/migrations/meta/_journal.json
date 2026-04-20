@@ -64,6 +64,13 @@
       "when": 1775566800000,
       "tag": "0008_remove_poster_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776384000000,
+      "tag": "0009_advisor_auto_resend",
+      "breakpoints": true
     }
   ]
 }

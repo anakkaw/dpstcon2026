@@ -9,8 +9,9 @@ import {
   reviewAssignments,
   settings,
   userRoles,
+  outgoingEmails,
 } from "@/server/db/schema";
-import { eq, sql, and, inArray } from "drizzle-orm";
+import { eq, sql, and, inArray, desc } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasTrackRole, hasRole } from "@/lib/permissions";
@@ -107,7 +108,7 @@ export default async function SubmissionDetailPage({
   }
 
   // Fetch all supplementary data in parallel (was 7 sequential queries)
-  const [reviewers, files, assignmentRows, decision, presRows, deadlineRows] = await Promise.all([
+  const [reviewers, files, assignmentRows, decision, presRows, deadlineRows, lastAdvisorEmailRows] = await Promise.all([
     // Reviewers list (only needed for admin on SUBMITTED/UNDER_REVIEW status)
     canManageSubmission && ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status)
       ? (async () => {
@@ -185,6 +186,25 @@ export default async function SubmissionDetailPage({
     db.select().from(settings).where(
       sql`${settings.key} IN ('submissionDeadline', 'reviewDeadline', 'notificationDate', 'cameraReadyDeadline')`
     ),
+    // Last advisor approval email status (for FAILED banner)
+    submission.advisorEmail
+      ? db
+          .select({
+            status: outgoingEmails.status,
+            sentAt: outgoingEmails.sentAt,
+            error: outgoingEmails.error,
+            createdAt: outgoingEmails.createdAt,
+          })
+          .from(outgoingEmails)
+          .where(
+            and(
+              eq(outgoingEmails.to, submission.advisorEmail),
+              sql`${outgoingEmails.subject} LIKE '%ขอความอนุเคราะห์รับรองบทความ%'`
+            )
+          )
+          .orderBy(desc(outgoingEmails.createdAt))
+          .limit(1)
+      : Promise.resolve([] as Array<{ status: string; sentAt: Date | null; error: string | null; createdAt: Date }>),
   ]);
 
   const presentationTypes = Array.from(
@@ -236,6 +256,16 @@ export default async function SubmissionDetailPage({
       deadlines={deadlineMap}
       isAssignedReviewer={isAssignedReviewer}
       reviewerAssignmentId={reviewerAssignmentId}
+      lastAdvisorEmail={
+        lastAdvisorEmailRows[0]
+          ? {
+              status: lastAdvisorEmailRows[0].status as "PENDING" | "SENT" | "FAILED",
+              sentAt: lastAdvisorEmailRows[0].sentAt?.toISOString() ?? null,
+              error: lastAdvisorEmailRows[0].error,
+              createdAt: lastAdvisorEmailRows[0].createdAt.toISOString(),
+            }
+          : null
+      }
     />
   );
 }
