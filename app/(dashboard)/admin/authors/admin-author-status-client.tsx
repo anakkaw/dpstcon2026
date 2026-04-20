@@ -45,20 +45,30 @@ function matchesGroup(author: AuthorStatusRow, group: FilterGroup): boolean {
   return author.submissions.some((s) => group.statuses!.includes(s.status));
 }
 
+// Maps variant statuses to their group representative for summary-row display,
+// so the badge always matches the filter group the author appears under.
+function normalizeDisplayStatus(status: string): string {
+  if (status === "CAMERA_READY_PENDING" || status === "CAMERA_READY_SUBMITTED") return "ACCEPTED";
+  if (status === "DESK_REJECTED") return "REJECTED";
+  return status;
+}
+
 function getAuthorHighestStatus(subs: AuthorStatusRow["submissions"]): string {
   if (subs.length === 0) return "NO_SUBMISSION";
 
   const PRIORITY: Record<string, number> = {
-    ACCEPTED: 0, CAMERA_READY_SUBMITTED: 1, CAMERA_READY_PENDING: 2,
+    CAMERA_READY_SUBMITTED: 0, CAMERA_READY_PENDING: 1, ACCEPTED: 2,
     REJECTED: 3, DESK_REJECTED: 4,
     UNDER_REVIEW: 5, REBUTTAL: 6, REVISION_REQUIRED: 7,
     SUBMITTED: 8, ADVISOR_APPROVAL_PENDING: 9,
     DRAFT: 10, WITHDRAWN: 11,
   };
 
-  return subs.reduce((best, s) => {
-    return (PRIORITY[s.status] ?? 99) < (PRIORITY[best] ?? 99) ? s.status : best;
+  const best = subs.reduce((b, s) => {
+    return (PRIORITY[s.status] ?? 99) < (PRIORITY[b] ?? 99) ? s.status : b;
   }, subs[0].status);
+
+  return normalizeDisplayStatus(best);
 }
 
 export function AdminAuthorStatusClient({ authors }: { authors: AuthorStatusRow[] }) {
