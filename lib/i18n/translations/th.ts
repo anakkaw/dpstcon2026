@@ -436,6 +436,26 @@ const th = {
   "presentations.thaiLabel": "TH",
   "presentations.englishLabel": "EN",
 
+  // ─── Scoring Form ────────────────────────────────────
+  "scoring.title": "ให้คะแนนการนำเสนอ",
+  "scoring.totalScore": "คะแนนรวม",
+  "scoring.progress": "ความคืบหน้า",
+  "scoring.maxPoints": "คะแนนเต็ม",
+  "scoring.points": "คะแนน",
+  "scoring.criteriaShort": "เกณฑ์",
+  "scoring.completedCount": "ประเมินแล้ว {n}/{total} เกณฑ์",
+  "scoring.completeAll": "กรุณาประเมินให้ครบทุกเกณฑ์ (เหลืออีก {n} เกณฑ์)",
+  "scoring.commentsTitle": "ความคิดเห็นและข้อเสนอแนะ",
+  "scoring.commentsHint": "ความคิดเห็นนี้จะถูกส่งถึงผู้จัดงานและอาจเปิดเผยต่อผู้นำเสนอ",
+  "scoring.commentsPlaceholder": "เช่น จุดแข็ง จุดที่ควรพัฒนา หรือข้อเสนอแนะเพิ่มเติม...",
+  "scoring.submit": "ส่งผลการประเมิน",
+  "scoring.update": "บันทึกการแก้ไข",
+  "scoring.saved": "บันทึกผลการประเมินเรียบร้อยแล้ว",
+  "scoring.saveError": "ไม่สามารถบันทึกผลการประเมินได้",
+  "scoring.submitted": "ส่งแล้ว",
+  "scoring.giveScore": "ให้คะแนน",
+  "scoring.viewScore": "ดูคะแนน",
+
   // ─── Poster Planner ──────────────────────────────────
   "poster.plannerTitle": "วางแผนจัดกลุ่มโปสเตอร์",
   "poster.plannerSubtitle": "กำหนดช่วงเวลา จัดกลุ่มบทความตามสาขา มอบหมายกรรมการ และจัดตารางนำเสนอ",

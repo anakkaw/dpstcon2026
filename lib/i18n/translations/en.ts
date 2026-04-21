@@ -434,6 +434,26 @@ const en: Record<TranslationKey, string> = {
   "presentations.thaiLabel": "TH",
   "presentations.englishLabel": "EN",
 
+  // ─── Scoring Form ────────────────────────────────────
+  "scoring.title": "Score Presentation",
+  "scoring.totalScore": "Total score",
+  "scoring.progress": "Progress",
+  "scoring.maxPoints": "Max",
+  "scoring.points": "pts",
+  "scoring.criteriaShort": "criteria",
+  "scoring.completedCount": "{n}/{total} criteria scored",
+  "scoring.completeAll": "Please score all criteria ({n} remaining)",
+  "scoring.commentsTitle": "Comments & feedback",
+  "scoring.commentsHint": "Shared with organizers; may be visible to the presenter.",
+  "scoring.commentsPlaceholder": "Strengths, areas to improve, or additional feedback...",
+  "scoring.submit": "Submit evaluation",
+  "scoring.update": "Update evaluation",
+  "scoring.saved": "Evaluation saved successfully",
+  "scoring.saveError": "Failed to save evaluation",
+  "scoring.submitted": "Submitted",
+  "scoring.giveScore": "Score",
+  "scoring.viewScore": "View score",
+
   // ─── Poster Planner ──────────────────────────────────
   "poster.plannerTitle": "Poster Group Planner",
   "poster.plannerSubtitle": "Set up shared slots, group papers by track, assign judges, and schedule presentations.",

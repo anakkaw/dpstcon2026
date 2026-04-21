@@ -1,8 +1,10 @@
 "use client";
 
 import { Fragment, useState, useMemo, useCallback, memo } from "react";
+import Link from "next/link";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { Image as ImageIcon, Calendar, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download, Mic } from "lucide-react";
+import { useDashboardAuth } from "@/components/dashboard-auth-context";
+import { Image as ImageIcon, Calendar, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download, Mic, Star } from "lucide-react";
 import { TrackFilter } from "@/components/track-filter";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +68,8 @@ export function PresentationsClient({
   canEditCriteria,
 }: PresentationsClientProps) {
   const { t } = useI18n();
+  const { roles } = useDashboardAuth();
+  const isCommittee = roles.includes("COMMITTEE");
   const [presentations, setPresentations] = useState(initialPresentations);
   const [criteria, setCriteria] = useState(initialCriteria);
   const [committeeUsers] = useState(initialCommitteeUsers);
@@ -397,6 +401,14 @@ export function PresentationsClient({
                         {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
                       </Button>
                     ) : null}
+                    {isCommittee && (
+                      <Link href={`/presentations/${presentation.id}/score`}>
+                        <Button size="sm" variant="primary">
+                          <Star className="h-3.5 w-3.5" />
+                          {t("scoring.giveScore")}
+                        </Button>
+                      </Link>
+                    )}
                   </CardBody>
                 </Card>
               ))}
@@ -451,28 +463,38 @@ export function PresentationsClient({
                               </Badge>
                             </td>
                             <td className="px-5 py-3.5 text-right">
-                              {canManage && editingId === presentation.id ? (
-                                <div className="flex justify-end gap-1">
-                                  <Button size="sm" onClick={() => handleSchedule(presentation.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
-                                  <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
-                                </div>
-                              ) : canManage ? (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
-                                  onClick={() => {
-                                    setEditingId(presentation.id);
-                                    setEditForm({
-                                      scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
-                                      room: presentation.room || "",
-                                      duration: presentation.duration?.toString() || "",
-                                    });
-                                  }}
-                                >
-                                  {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
-                                </Button>
-                              ) : null}
+                              <div className="flex items-center justify-end gap-1">
+                                {canManage && editingId === presentation.id ? (
+                                  <>
+                                    <Button size="sm" onClick={() => handleSchedule(presentation.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
+                                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
+                                  </>
+                                ) : canManage ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+                                    onClick={() => {
+                                      setEditingId(presentation.id);
+                                      setEditForm({
+                                        scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
+                                        room: presentation.room || "",
+                                        duration: presentation.duration?.toString() || "",
+                                      });
+                                    }}
+                                  >
+                                    {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
+                                  </Button>
+                                ) : null}
+                                {isCommittee && (
+                                  <Link href={`/presentations/${presentation.id}/score`}>
+                                    <Button size="sm" variant="primary">
+                                      <Star className="h-3.5 w-3.5" />
+                                      {t("scoring.giveScore")}
+                                    </Button>
+                                  </Link>
+                                )}
+                              </div>
                             </td>
                           </tr>
                           {canManage && editingId === presentation.id && (

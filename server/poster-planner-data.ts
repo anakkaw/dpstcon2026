@@ -260,6 +260,7 @@ export async function getPosterSlotsForAuthor(
 export interface CommitteePosterSlot {
   slotId: string;
   submissionId: string;
+  presentationId: string | null;
   title: string;
   paperCode: string | null;
   authorName: string;
@@ -288,9 +289,26 @@ export async function getPosterSlotsForCommittee(
     },
   });
 
+  const submissionIds = Array.from(new Set(slotRows.map((row) => row.submissionId)));
+  const posterAssignments =
+    submissionIds.length === 0
+      ? []
+      : await db
+          .select({ id: presentationAssignments.id, submissionId: presentationAssignments.submissionId })
+          .from(presentationAssignments)
+          .where(
+            and(
+              inArray(presentationAssignments.submissionId, submissionIds),
+              eq(presentationAssignments.type, "POSTER")
+            )
+          );
+
+  const presentationBySubmission = new Map(posterAssignments.map((row) => [row.submissionId, row.id]));
+
   return slotRows.map((row) => ({
     slotId: row.id,
     submissionId: row.submissionId,
+    presentationId: presentationBySubmission.get(row.submissionId) ?? null,
     title: row.submission.title,
     paperCode: row.submission.paperCode,
     authorName: row.submission.author.name,
