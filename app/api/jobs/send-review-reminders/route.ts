@@ -1,6 +1,6 @@
 import { db } from "@/server/db";
 import { reviewAssignments, submissions, user } from "@/server/db/schema";
-import { and, eq, inArray, isNotNull, lte, or, isNull, lt } from "drizzle-orm";
+import { and, eq, isNotNull, lte, or, isNull, lt } from "drizzle-orm";
 import { queueEmail, reviewReminderEmail } from "@/server/email";
 import { logger } from "@/server/logger";
 
@@ -34,6 +34,8 @@ export async function POST(req: Request) {
   // Candidates: ACCEPTED assignments with a due date, not completed,
   // whose dueDate is upcoming (<=3 days) or already overdue,
   // AND whose lastReminderAt is null or older than the cooldown window.
+  // Note: we deliberately EXCLUDE PENDING — those reviewers haven't accepted yet
+  // and should receive a separate "please accept/decline" nudge, not a due-date reminder.
   const rows = await db
     .select({
       assignmentId: reviewAssignments.id,
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
     .innerJoin(submissions, eq(submissions.id, reviewAssignments.submissionId))
     .where(
       and(
-        inArray(reviewAssignments.status, ["PENDING", "ACCEPTED"]),
+        eq(reviewAssignments.status, "ACCEPTED"),
         isNotNull(reviewAssignments.dueDate),
         lte(reviewAssignments.dueDate, upcomingCutoff),
         or(

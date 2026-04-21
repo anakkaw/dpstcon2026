@@ -233,33 +233,53 @@ export default async function SubmissionDetailPage({
     completed: assignmentRows.filter((r) => r.status === "COMPLETED").length,
   };
 
-  // Fetch workload (active/completed counts) for the reviewer dropdown
+  // Fetch workload (pending/active/completed counts) + affiliation for the reviewer dropdown
   const reviewerIdsForLoad = reviewers.map((r) => r.id);
-  let reviewersWithLoad: Array<typeof reviewers[number] & { activeLoad?: number; completedLoad?: number }> = reviewers;
+  let reviewersWithLoad: Array<typeof reviewers[number] & {
+    affiliation?: string | null;
+    pendingLoad?: number;
+    activeLoad?: number;
+    completedLoad?: number;
+  }> = reviewers;
   if (reviewerIdsForLoad.length > 0) {
-    const loadRows = await db
-      .select({
-        reviewerId: reviewAssignments.reviewerId,
-        status: reviewAssignments.status,
-        total: count(),
-      })
-      .from(reviewAssignments)
-      .where(inArray(reviewAssignments.reviewerId, reviewerIdsForLoad))
-      .groupBy(reviewAssignments.reviewerId, reviewAssignments.status);
+    const [loadRows, affiliationRows] = await Promise.all([
+      db
+        .select({
+          reviewerId: reviewAssignments.reviewerId,
+          status: reviewAssignments.status,
+          total: count(),
+        })
+        .from(reviewAssignments)
+        .where(inArray(reviewAssignments.reviewerId, reviewerIdsForLoad))
+        .groupBy(reviewAssignments.reviewerId, reviewAssignments.status),
+      db
+        .select({ id: user.id, affiliation: user.affiliation })
+        .from(user)
+        .where(inArray(user.id, reviewerIdsForLoad)),
+    ]);
 
-    const loadMap = new Map<string, { active: number; completed: number }>();
+    const loadMap = new Map<string, { pending: number; active: number; completed: number }>();
     for (const row of loadRows) {
-      const entry = loadMap.get(row.reviewerId) || { active: 0, completed: 0 };
-      if (row.status === "PENDING" || row.status === "ACCEPTED") {
+      const entry = loadMap.get(row.reviewerId) || { pending: 0, active: 0, completed: 0 };
+      if (row.status === "PENDING") {
+        entry.pending += Number(row.total);
+      } else if (row.status === "ACCEPTED") {
         entry.active += Number(row.total);
       } else if (row.status === "COMPLETED") {
         entry.completed += Number(row.total);
       }
       loadMap.set(row.reviewerId, entry);
     }
+    const affiliationMap = new Map(affiliationRows.map((a) => [a.id, a.affiliation]));
     reviewersWithLoad = reviewers.map((r) => {
       const entry = loadMap.get(r.id);
-      return { ...r, activeLoad: entry?.active ?? 0, completedLoad: entry?.completed ?? 0 };
+      return {
+        ...r,
+        affiliation: affiliationMap.get(r.id) ?? null,
+        pendingLoad: entry?.pending ?? 0,
+        activeLoad: entry?.active ?? 0,
+        completedLoad: entry?.completed ?? 0,
+      };
     });
   }
 

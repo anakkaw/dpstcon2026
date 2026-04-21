@@ -106,7 +106,7 @@ async function loadInitialReviewerUsers(
 
   const [users, loadRows] = await Promise.all([
     db
-      .select({ id: user.id, name: user.name, email: user.email })
+      .select({ id: user.id, name: user.name, email: user.email, affiliation: user.affiliation })
       .from(user)
       .where(inArray(user.id, reviewerIds)),
     db
@@ -120,10 +120,12 @@ async function loadInitialReviewerUsers(
       .groupBy(reviewAssignments.reviewerId, reviewAssignments.status),
   ]);
 
-  const loadMap = new Map<string, { active: number; completed: number }>();
+  const loadMap = new Map<string, { pending: number; active: number; completed: number }>();
   for (const row of loadRows) {
-    const entry = loadMap.get(row.reviewerId) || { active: 0, completed: 0 };
-    if (row.status === "PENDING" || row.status === "ACCEPTED") {
+    const entry = loadMap.get(row.reviewerId) || { pending: 0, active: 0, completed: 0 };
+    if (row.status === "PENDING") {
+      entry.pending += Number(row.total);
+    } else if (row.status === "ACCEPTED") {
       entry.active += Number(row.total);
     } else if (row.status === "COMPLETED") {
       entry.completed += Number(row.total);
@@ -132,7 +134,12 @@ async function loadInitialReviewerUsers(
   }
   return users.map((u) => {
     const entry = loadMap.get(u.id);
-    return { ...u, activeLoad: entry?.active ?? 0, completedLoad: entry?.completed ?? 0 };
+    return {
+      ...u,
+      pendingLoad: entry?.pending ?? 0,
+      activeLoad: entry?.active ?? 0,
+      completedLoad: entry?.completed ?? 0,
+    };
   });
 }
 

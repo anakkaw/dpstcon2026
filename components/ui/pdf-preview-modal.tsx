@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useId } from "react";
-import { Download, ExternalLink, Loader2, X, AlertCircle } from "lucide-react";
+import { Download, ExternalLink, Loader2, X, AlertCircle, FileText } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +10,15 @@ interface PdfPreviewModalProps {
   submissionId: string;
   fileId: string;
   fileName: string;
+  mimeType?: string;
   onClose: () => void;
+}
+
+function canInlinePreview(fileName: string, mimeType?: string): boolean {
+  if (mimeType === "application/pdf") return true;
+  if (mimeType?.startsWith("image/")) return true;
+  const ext = fileName.toLowerCase().split(".").pop() || "";
+  return ["pdf", "png", "jpg", "jpeg", "gif", "webp"].includes(ext);
 }
 
 export function PdfPreviewModal({
@@ -18,8 +26,10 @@ export function PdfPreviewModal({
   submissionId,
   fileId,
   fileName,
+  mimeType,
   onClose,
 }: PdfPreviewModalProps) {
+  const inlineSupported = canInlinePreview(fileName, mimeType);
   const { t } = useI18n();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -157,7 +167,7 @@ export function PdfPreviewModal({
               <p className="text-xs text-ink-muted">{t("pdfPreview.errorHint")}</p>
             </div>
           )}
-          {url && !loading && !error && (
+          {url && !loading && !error && inlineSupported && (
             <>
               <iframe
                 src={url}
@@ -177,6 +187,34 @@ export function PdfPreviewModal({
                 </a>
               </div>
             </>
+          )}
+          {url && !loading && !error && !inlineSupported && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+              <FileText className="h-12 w-12 text-ink-muted/60" />
+              <div>
+                <p className="text-sm font-semibold text-ink">{t("pdfPreview.notPreviewable")}</p>
+                <p className="mt-1 text-xs text-ink-muted">{t("pdfPreview.notPreviewableHint")}</p>
+              </div>
+              <div className="flex gap-2">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-surface-alt"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  {t("pdfPreview.openInNewTab")}
+                </a>
+                <a
+                  href={url}
+                  download={fileName}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+                >
+                  <Download className="h-4 w-4" />
+                  {t("common.download")}
+                </a>
+              </div>
+            </div>
           )}
         </div>
       </div>

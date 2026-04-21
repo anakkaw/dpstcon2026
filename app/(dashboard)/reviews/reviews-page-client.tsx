@@ -48,6 +48,8 @@ export interface ReviewerUser {
   id: string;
   name: string;
   email: string;
+  affiliation?: string | null;
+  pendingLoad?: number;
   activeLoad?: number;
   completedLoad?: number;
 }
@@ -632,15 +634,17 @@ export function ReviewsPageClient({
                                   {reviewerUsers
                                     .filter((reviewer) => !assignedReviewerIds.has(reviewer.id))
                                     .slice()
-                                    .sort((a, b) => (a.activeLoad || 0) - (b.activeLoad || 0))
+                                    .sort((a, b) => ((a.activeLoad ?? 0) + (a.pendingLoad ?? 0)) - ((b.activeLoad ?? 0) + (b.pendingLoad ?? 0)))
                                     .map((reviewer) => {
-                                      const load = reviewer.activeLoad ?? 0;
-                                      const suffix = load === 0
-                                        ? ` · ${t("reviews.workloadFree")}`
-                                        : ` · ${t("reviews.workloadActive", { n: load })}`;
+                                      const active = reviewer.activeLoad ?? 0;
+                                      const pending = reviewer.pendingLoad ?? 0;
+                                      const suffix =
+                                        active === 0 && pending === 0
+                                          ? ` · ${t("reviews.workloadFree")}`
+                                          : ` · ${t("reviews.workloadCompact", { active, pending })}`;
                                       return (
                                         <option key={reviewer.id} value={reviewer.id}>
-                                          {displayNameTh(reviewer)} ({reviewer.email}){suffix}
+                                          {displayNameTh(reviewer)}{reviewer.affiliation ? ` · ${reviewer.affiliation}` : ""}{suffix}
                                         </option>
                                       );
                                     })}
@@ -830,14 +834,16 @@ export function ReviewsPageClient({
                                         {reviewerUsers
                                           .filter((reviewer) => !assignedReviewerIds.has(reviewer.id))
                                           .slice()
-                                          .sort((a, b) => (a.activeLoad || 0) - (b.activeLoad || 0))
+                                          .sort((a, b) => ((a.activeLoad ?? 0) + (a.pendingLoad ?? 0)) - ((b.activeLoad ?? 0) + (b.pendingLoad ?? 0)))
                                           .map((reviewer) => {
-                                            const load = reviewer.activeLoad ?? 0;
-                                            const suffix = load === 0
-                                              ? ` · ${t("reviews.workloadFree")}`
-                                              : ` · ${t("reviews.workloadActive", { n: load })}`;
+                                            const active = reviewer.activeLoad ?? 0;
+                                            const pending = reviewer.pendingLoad ?? 0;
+                                            const suffix =
+                                              active === 0 && pending === 0
+                                                ? ` · ${t("reviews.workloadFree")}`
+                                                : ` · ${t("reviews.workloadCompact", { active, pending })}`;
                                             return (
-                                              <option key={reviewer.id} value={reviewer.id}>{displayNameTh(reviewer)} ({reviewer.email}){suffix}</option>
+                                              <option key={reviewer.id} value={reviewer.id}>{displayNameTh(reviewer)}{reviewer.affiliation ? ` · ${reviewer.affiliation}` : ""}{suffix}</option>
                                             );
                                           })}
                                       </Select>

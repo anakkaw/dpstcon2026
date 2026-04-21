@@ -112,7 +112,9 @@ app.post("/assignments/manual", async (c) => {
     return c.json({ error: "Forbidden — คุณไม่ใช่ผู้ดูแลบทความนี้" }, 403);
   }
 
-  // Check if already assigned
+  // Check if already assigned. If the reviewer previously DECLINED, allow re-assignment
+  // by reopening the same row (status → PENDING, reset response timestamp & reminder).
+  // Otherwise, block to avoid duplicate assignments.
   const existing = await db.query.reviewAssignments.findFirst({
     where: and(
       eq(reviewAssignments.submissionId, submissionId),
@@ -120,7 +122,7 @@ app.post("/assignments/manual", async (c) => {
     ),
   });
 
-  if (existing) {
+  if (existing && existing.status !== "DECLINED") {
     return c.json({ error: "Reviewer already assigned to this submission" }, 409);
   }
 
@@ -141,14 +143,30 @@ app.post("/assignments/manual", async (c) => {
     }, 409);
   }
 
-  const [assignment] = await db
-    .insert(reviewAssignments)
-    .values({
-      submissionId,
-      reviewerId,
-      dueDate: dueDate ? new Date(dueDate) : undefined,
-    })
-    .returning();
+  let assignment;
+  if (existing && existing.status === "DECLINED") {
+    // Reopen declined row
+    [assignment] = await db
+      .update(reviewAssignments)
+      .set({
+        status: "PENDING",
+        assignedAt: new Date(),
+        respondedAt: null,
+        lastReminderAt: null,
+        dueDate: dueDate ? new Date(dueDate) : null,
+      })
+      .where(eq(reviewAssignments.id, existing.id))
+      .returning();
+  } else {
+    [assignment] = await db
+      .insert(reviewAssignments)
+      .values({
+        submissionId,
+        reviewerId,
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+      })
+      .returning();
+  }
 
   // Update submission status to UNDER_REVIEW if SUBMITTED
   await db
@@ -343,6 +361,58 @@ app.post("/reviews", async (c) => {
   }
 
   return c.json({ review }, 201);
+});
+
+// PATCH /api/reviews/reviews/:id — edit own submitted review within 24h window
+const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+app.patch("/reviews/:id", async (c) => {
+  const currentUser = c.get("user");
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const schema = z.object({
+    commentsToAuthor: z.string().min(1),
+    commentsToChair: z.string().optional(),
+    recommendation: z.enum(["ACCEPT", "REVISE", "REJECT"]),
+  });
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Validation error", details: parsed.error.flatten() }, 400);
+  }
+
+  const review = await db.query.reviews.findFirst({
+    where: eq(reviews.id, id),
+    columns: { id: true, reviewerId: true, completedAt: true },
+  });
+  if (!review) return c.json({ error: "Review not found" }, 404);
+
+  if (review.reviewerId !== currentUser.id && !hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  // Admin can always edit; reviewer only within 24h of submission
+  const isAdminOverride = hasRole(currentUser, "ADMIN");
+  if (!isAdminOverride) {
+    if (!review.completedAt) {
+      return c.json({ error: "Cannot edit an incomplete review" }, 400);
+    }
+    const elapsed = Date.now() - review.completedAt.getTime();
+    if (elapsed > EDIT_WINDOW_MS) {
+      return c.json({ error: "Edit window has closed (24 hours)" }, 409);
+    }
+  }
+
+  const [updated] = await db
+    .update(reviews)
+    .set({
+      commentsToAuthor: parsed.data.commentsToAuthor,
+      commentsToChair: parsed.data.commentsToChair,
+      recommendation: parsed.data.recommendation,
+      updatedAt: new Date(),
+    })
+    .where(eq(reviews.id, id))
+    .returning();
+
+  return c.json({ review: updated });
 });
 
 // POST /api/reviews/decisions — make decision (ADMIN/track head only)

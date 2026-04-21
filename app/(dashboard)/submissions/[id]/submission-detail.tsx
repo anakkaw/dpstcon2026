@@ -38,7 +38,7 @@ import { AssignReviewerCard } from "@/components/review/assign-reviewer-card";
 import {
   Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
-  Trash2, Pencil, Mail, UserCheck, MessageSquare, AlertCircle,
+  Trash2, Pencil, Mail, UserCheck, MessageSquare, AlertCircle, AlertTriangle,
 } from "lucide-react";
 
 function StepHeader({
@@ -82,7 +82,9 @@ interface Props {
     id: string;
     paperCode?: string | null;
     title: string;
+    titleEn?: string | null;
     abstract: string | null;
+    abstractEn?: string | null;
     keywords: string | null;
     status: string;
     fileUrl?: string | null;
@@ -112,7 +114,7 @@ interface Props {
   };
   currentUserRoles: string[];
   currentUserId: string;
-  reviewers: { id: string; name: string; email: string; activeLoad?: number; completedLoad?: number }[];
+  reviewers: { id: string; name: string; email: string; affiliation?: string | null; pendingLoad?: number; activeLoad?: number; completedLoad?: number }[];
   files: {
     id: string;
     originalName: string;
@@ -233,6 +235,30 @@ export function SubmissionDetail({
   const [reviewCommentsToAuthor, setReviewCommentsToAuthor] = useState("");
   const [reviewCommentsToChair, setReviewCommentsToChair] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [editReviewMode, setEditReviewMode] = useState(false);
+
+  const myCompletedReview = submission.reviews.find(
+    (r) => r.reviewer.id === currentUserId && r.completedAt
+  );
+  const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const canEditReview = myCompletedReview?.completedAt
+    ? Date.now() - new Date(myCompletedReview.completedAt as unknown as string | Date).getTime() < EDIT_WINDOW_MS
+    : false;
+
+  function startEditReview() {
+    if (!myCompletedReview) return;
+    setReviewRecommendation(myCompletedReview.recommendation || "");
+    setReviewCommentsToAuthor(myCompletedReview.commentsToAuthor || "");
+    setReviewCommentsToChair(myCompletedReview.commentsToChair || "");
+    setEditReviewMode(true);
+  }
+
+  function cancelEditReview() {
+    setReviewRecommendation("");
+    setReviewCommentsToAuthor("");
+    setReviewCommentsToChair("");
+    setEditReviewMode(false);
+  }
 
   // Draft auto-save state
   const draftStorageKey = `review-draft-${submission.id}-${currentUserId}`;
@@ -317,6 +343,44 @@ export function SubmissionDetail({
     try { window.localStorage.removeItem(draftStorageKey); } catch {}
   }
 
+  // Multi-tab sync: if another tab writes to the same draft key, alert this tab
+  const [otherTabConflict, setOtherTabConflict] = useState(false);
+  useEffect(() => {
+    if (!canWriteReview) return;
+    function onStorage(e: StorageEvent) {
+      if (e.key !== draftStorageKey) return;
+      if (!e.newValue) return;
+      try {
+        const parsed = JSON.parse(e.newValue) as { savedAt?: number };
+        // Only flag if the incoming value is newer than the one we just wrote
+        if (parsed.savedAt && (!draftSavedAt || parsed.savedAt > draftSavedAt)) {
+          setOtherTabConflict(true);
+        }
+      } catch { /* ignore */ }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [canWriteReview, draftStorageKey, draftSavedAt]);
+
+  function reloadFromOtherTab() {
+    try {
+      const raw = window.localStorage.getItem(draftStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          recommendation?: string;
+          commentsToAuthor?: string;
+          commentsToChair?: string;
+          savedAt?: number;
+        };
+        setReviewRecommendation(parsed.recommendation || "");
+        setReviewCommentsToAuthor(parsed.commentsToAuthor || "");
+        setReviewCommentsToChair(parsed.commentsToChair || "");
+        setDraftSavedAt(parsed.savedAt || null);
+      }
+    } catch { /* ignore */ }
+    setOtherTabConflict(false);
+  }
+
   // Computed values for author view
   const hasManuscript = files.some((f) => f.kind === "MANUSCRIPT");
   const nextAction = isAuthor ? getNextAction(submission.status, hasManuscript) : null;
@@ -378,8 +442,23 @@ export function SubmissionDetail({
   }
 
 
+  const [decisionConfirmOpen, setDecisionConfirmOpen] = useState(false);
+
+  function requestDecision() {
+    if (!decisionOutcome) return;
+    const totalAssignments = reviewCounts?.total ?? submission.reviews.length;
+    const completedReviews = submission.reviews.filter((r) => r.completedAt).length;
+    // Confirm if not all reviewers have submitted yet
+    if (totalAssignments > 0 && completedReviews < totalAssignments) {
+      setDecisionConfirmOpen(true);
+      return;
+    }
+    void handleDecision();
+  }
+
   async function handleDecision() {
     if (!decisionOutcome) return;
+    setDecisionConfirmOpen(false);
     setDeciding(true);
     try {
       const res = await fetch("/api/reviews/decisions", {
@@ -417,22 +496,31 @@ export function SubmissionDetail({
     if (!reviewRecommendation || !reviewCommentsToAuthor.trim()) return;
     setSubmittingReview(true);
     try {
-      const res = await fetch("/api/reviews/reviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submissionId: submission.id,
-          assignmentId: reviewerAssignmentId || undefined,
-          commentsToAuthor: reviewCommentsToAuthor,
-          commentsToChair: reviewCommentsToChair || undefined,
-          recommendation: reviewRecommendation,
-        }),
-      });
+      const isEdit = editReviewMode && myCompletedReview;
+      const res = await fetch(
+        isEdit ? `/api/reviews/reviews/${myCompletedReview.id}` : "/api/reviews/reviews",
+        {
+          method: isEdit ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...(isEdit
+              ? {}
+              : {
+                  submissionId: submission.id,
+                  assignmentId: reviewerAssignmentId || undefined,
+                }),
+            commentsToAuthor: reviewCommentsToAuthor,
+            commentsToChair: reviewCommentsToChair || undefined,
+            recommendation: reviewRecommendation,
+          }),
+        }
+      );
       if (res.ok) {
-        setMessage(t("reviewForm.submitted"));
+        setMessage(isEdit ? t("reviewForm.editSaved") : t("reviewForm.submitted"));
         setReviewRecommendation("");
         setReviewCommentsToAuthor("");
         setReviewCommentsToChair("");
+        setEditReviewMode(false);
         try { window.localStorage.removeItem(draftStorageKey); } catch {}
         setDraftSavedAt(null);
         setHasRestoredDraft(false);
@@ -666,6 +754,24 @@ export function SubmissionDetail({
         </Alert>
       )}
 
+      {/* Workflow hint — shown to the common dual-role case (PC who's also reviewing).
+          Sequential flow: write your review → then make the chair decision. */}
+      {isAdmin && isAssignedReviewer && !isOwner && (
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-alt px-4 py-2.5 text-sm">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 font-bold text-xs">
+            {myCompletedReview ? 2 : 1}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-ink">
+              {myCompletedReview ? t("detail.workflowStep2Title") : t("detail.workflowStep1Title")}
+            </p>
+            <p className="text-xs text-ink-muted">
+              {myCompletedReview ? t("detail.workflowStep2Desc") : t("detail.workflowStep1Desc")}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Next Action (author view) */}
       {isAuthor && nextAction && (
         <Card accent={nextAction.urgency === "urgent" ? "danger" : nextAction.urgency === "warning" ? "warning" : "brand"}>
@@ -679,8 +785,8 @@ export function SubmissionDetail({
         </Card>
       )}
 
-      {/* Decision Display (author view) */}
-      {decision && (
+      {/* Decision Display — hidden from reviewers while they're writing their review to avoid bias */}
+      {decision && !(isAssignedReviewer && !isOwner && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt)) && (
         <Card accent={decision.outcome === "ACCEPT" || decision.outcome === "CONDITIONAL_ACCEPT" ? "success" : "danger"}>
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
@@ -902,105 +1008,161 @@ export function SubmissionDetail({
         </Card>
       )}
 
-      {/* Review confirmation — shown after reviewer already submitted */}
-      {isAssignedReviewer && submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (() => {
-        const myReview = submission.reviews.find((r) => r.reviewer.id === currentUserId && r.completedAt);
-        return (
-          <Alert tone="success">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
+      {/* Review confirmation — shown after reviewer already submitted (hidden while editing) */}
+      {isAssignedReviewer && myCompletedReview && !editReviewMode && (
+        <Alert tone="success">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium">{t("reviewForm.alreadySubmitted")}</p>
                 <p className="text-sm mt-0.5">{t("reviewForm.alreadySubmittedDesc")}</p>
-                {myReview?.recommendation && (
-                  <p className="text-sm mt-1">{t("reviewForm.yourRecommendation")} <Badge tone={myReview.recommendation === "ACCEPT" ? "success" : myReview.recommendation === "REJECT" ? "danger" : "warning"}>{RECOMMENDATION_LABELS[myReview.recommendation] || myReview.recommendation}</Badge></p>
+                {myCompletedReview.recommendation && (
+                  <p className="text-sm mt-1">
+                    {t("reviewForm.yourRecommendation")}{" "}
+                    <Badge tone={myCompletedReview.recommendation === "ACCEPT" ? "success" : myCompletedReview.recommendation === "REJECT" ? "danger" : "warning"}>
+                      {RECOMMENDATION_LABELS[myCompletedReview.recommendation] || myCompletedReview.recommendation}
+                    </Badge>
+                  </p>
                 )}
               </div>
             </div>
-          </Alert>
-        );
-      })()}
+            {canEditReview && (
+              <Button size="sm" variant="secondary" onClick={startEditReview}>
+                <Pencil className="h-3.5 w-3.5" />
+                {t("reviewForm.editReview")}
+              </Button>
+            )}
+          </div>
+          {canEditReview && (
+            <p className="mt-2 text-[11px] text-ink-muted">
+              {t("reviewForm.editWindowHint")}
+            </p>
+          )}
+        </Alert>
+      )}
 
       {/* Paper details for reviewers — shown prominently above the review form so reviewer
           can reference the paper while writing */}
-      {isAssignedReviewer && !isOwner && (
-        <Card id="section-paper-details" accent="info">
-          <CardHeader>
-            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              {t("detail.paperDetails")}
-            </h3>
-          </CardHeader>
-          <CardBody className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
-                  {t("detail.authorLabel")}
-                </p>
-                <p className="text-sm text-ink">
-                  {displayNameTh(submission.author)}
-                  {submission.author.affiliation && (
-                    <span className="text-ink-muted"> ({submission.author.affiliation})</span>
-                  )}
-                </p>
-              </div>
-              {submission.track && (
+      {isAssignedReviewer && !isOwner && (() => {
+        const paperFiles = files.filter((f) => f.kind === "MANUSCRIPT" || f.kind === "SUPPLEMENTARY");
+        return (
+          <Card id="section-paper-details" accent="info">
+            <CardHeader>
+              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                {t("detail.paperDetails")}
+              </h3>
+            </CardHeader>
+            <CardBody className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
-                    {t("detail.trackLabel")}
+                    {t("detail.authorLabel")}
                   </p>
-                  <Badge tone="info">{submission.track.name}</Badge>
+                  <p className="text-sm text-ink">
+                    {displayNameTh(submission.author)}
+                    {submission.author.affiliation && (
+                      <span className="text-ink-muted"> ({submission.author.affiliation})</span>
+                    )}
+                  </p>
+                </div>
+                {submission.track && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
+                      {t("detail.trackLabel")}
+                    </p>
+                    <Badge tone="info">{submission.track.name}</Badge>
+                  </div>
+                )}
+              </div>
+
+              {submission.coAuthors.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
+                    {t("detail.coAuthorsLabel")}
+                  </p>
+                  <p className="text-sm text-ink">
+                    {submission.coAuthors
+                      .map((ca) => `${ca.name}${ca.affiliation ? ` (${ca.affiliation})` : ""}`)
+                      .join(", ")}
+                  </p>
                 </div>
               )}
-            </div>
 
-            {submission.coAuthors.length > 0 && (
-              <div>
-                <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
-                  {t("detail.coAuthorsLabel")}
-                </p>
-                <p className="text-sm text-ink">
-                  {submission.coAuthors
-                    .map((ca) => `${ca.name}${ca.affiliation ? ` (${ca.affiliation})` : ""}`)
-                    .join(", ")}
-                </p>
-              </div>
-            )}
-
-            {submission.abstract && (
-              <div>
-                <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
-                  {t("detail.abstract")}
-                </p>
-                <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
-                  {submission.abstract}
-                </p>
-              </div>
-            )}
-
-            {submission.keywords && (
-              <div>
-                <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
-                  {t("detail.keywords")}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {submission.keywords.split(",").map((kw, i) => (
-                    <span
-                      key={i}
-                      className="text-xs bg-white border border-border text-ink-light px-2.5 py-1 rounded-md"
-                    >
-                      {kw.trim()}
-                    </span>
-                  ))}
+              {submission.titleEn && (
+                <div>
+                  <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
+                    {t("detail.titleEn")}
+                  </p>
+                  <p className="text-sm text-ink italic">{submission.titleEn}</p>
                 </div>
-              </div>
-            )}
-          </CardBody>
-        </Card>
-      )}
+              )}
 
-      {/* Review Submission Form — for assigned reviewers (shown prominently before paper info) */}
-      {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (() => {
+              {(submission.abstract || submission.abstractEn) && (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {submission.abstract && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
+                        {t("detail.abstractTh")}
+                      </p>
+                      <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
+                        {submission.abstract}
+                      </p>
+                    </div>
+                  )}
+                  {submission.abstractEn && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
+                        {t("detail.abstractEn")}
+                      </p>
+                      <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
+                        {submission.abstractEn}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {submission.keywords && (
+                <div>
+                  <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
+                    {t("detail.keywords")}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {submission.keywords.split(",").map((kw, i) => (
+                      <span
+                        key={i}
+                        className="text-xs bg-white border border-border text-ink-light px-2.5 py-1 rounded-md"
+                      >
+                        {kw.trim()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {paperFiles.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-2">
+                    {t("detail.paperFiles")}
+                  </p>
+                  <FileList
+                    submissionId={submission.id}
+                    files={paperFiles}
+                    canDelete={false}
+                    currentUserId={currentUserId}
+                  />
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        );
+      })()}
+
+      {/* Review Submission Form — for assigned reviewers (shown prominently before paper info);
+          also shown when they chose to edit within the 24h window */}
+      {isAssignedReviewer && (!myCompletedReview || editReviewMode) && (() => {
         const myAttachments = files.filter(
           (f) => f.kind === "REVIEW_ATTACHMENT" && f.uploadedById === currentUserId
         );
@@ -1027,6 +1189,19 @@ export function SubmissionDetail({
                   <Button size="sm" variant="ghost" onClick={discardDraft}>
                     <Trash2 className="h-3.5 w-3.5" />
                     {t("reviewForm.discardDraft")}
+                  </Button>
+                </div>
+              </Alert>
+            )}
+            {otherTabConflict && (
+              <Alert tone="warning">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm">
+                    <p className="font-medium">{t("reviewForm.otherTabConflictTitle")}</p>
+                    <p className="text-xs">{t("reviewForm.otherTabConflictDesc")}</p>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={reloadFromOtherTab}>
+                    {t("reviewForm.otherTabReload")}
                   </Button>
                 </div>
               </Alert>
@@ -1147,14 +1322,21 @@ export function SubmissionDetail({
                 <span className="text-ink-muted/70">{t("reviewForm.draftAutoSaveHint")}</span>
               )}
             </div>
-            <Button
-              onClick={handleSubmitReview}
-              loading={submittingReview}
-              disabled={!ready}
-            >
-              <Send className="h-3.5 w-3.5" />
-              {t("reviewForm.submit")}
-            </Button>
+            <div className="flex gap-2">
+              {editReviewMode && (
+                <Button variant="ghost" onClick={cancelEditReview} size="sm">
+                  {t("common.cancel")}
+                </Button>
+              )}
+              <Button
+                onClick={handleSubmitReview}
+                loading={submittingReview}
+                disabled={!ready}
+              >
+                <Send className="h-3.5 w-3.5" />
+                {editReviewMode ? t("reviewForm.saveEdit") : t("reviewForm.submit")}
+              </Button>
+            </div>
           </div>
         );
 
@@ -1233,13 +1415,10 @@ export function SubmissionDetail({
           <Card id="section-review-form" accent="brand">
             <CardHeader>
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-                    <Send className="h-4 w-4" />
-                    {t("reviewForm.title")}
-                  </h3>
-                  {isAdmin && <Badge tone="info">{t("detail.modeReviewer")}</Badge>}
-                </div>
+                <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                  <Send className="h-4 w-4" />
+                  {t("reviewForm.title")}
+                </h3>
                 {headerControls}
               </div>
             </CardHeader>
@@ -1304,7 +1483,8 @@ export function SubmissionDetail({
       </div>
       )}
 
-      {/* Files Section */}
+      {/* Files Section — hidden for reviewers because paper files already appear in the Paper Details card above */}
+      {!(isAssignedReviewer && !isOwner) && (
       <Card id="section-files">
         <CardHeader>
           <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
@@ -1355,6 +1535,7 @@ export function SubmissionDetail({
           )}
         </CardBody>
       </Card>
+      )}
 
       {/* Review Progress + Reviews */}
       {(submission.reviews.length > 0 || (reviewCounts && reviewCounts.total > 0)) && (
@@ -1482,21 +1663,6 @@ export function SubmissionDetail({
         />
       )}
 
-      {/* Chair-mode divider — only shown to dual-role users so they see a clear switch of context */}
-      {isAdmin && isAssignedReviewer && (
-        (["SUBMITTED", "UNDER_REVIEW"].includes(submission.status) ||
-          (submission.status === "UNDER_REVIEW" && submission.reviews.some((r) => r.completedAt))) && (
-          <div className="flex items-center gap-3 pt-2">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-300 to-amber-300" />
-            <div className="flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 border border-amber-200">
-              <Gavel className="h-3 w-3" />
-              {t("detail.chairActionsSection")}
-            </div>
-            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-300 to-amber-300" />
-          </div>
-        )
-      )}
-
       {/* Admin: Assign Reviewer */}
       {isAdmin && ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status) && (
         <AssignReviewerCard
@@ -1517,9 +1683,6 @@ export function SubmissionDetail({
                 <Gavel className="h-4 w-4" />
                 {t("detail.makeDecision")}
               </h3>
-              {isAssignedReviewer && (
-                <Badge tone="warning">{t("detail.modeChair")}</Badge>
-              )}
             </div>
           </CardHeader>
           <CardBody className="space-y-3">
@@ -1553,12 +1716,27 @@ export function SubmissionDetail({
             )}
           </CardBody>
           <CardFooter className="flex justify-end">
-            <Button onClick={handleDecision} loading={deciding} disabled={!decisionOutcome || (decisionOutcome === "CONDITIONAL_ACCEPT" && !decisionConditions.trim())}>
+            <Button onClick={requestDecision} loading={deciding} disabled={!decisionOutcome || (decisionOutcome === "CONDITIONAL_ACCEPT" && !decisionConditions.trim())}>
               {t("detail.confirmDecision")}
             </Button>
           </CardFooter>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={decisionConfirmOpen}
+        title={t("detail.decisionPartialConfirmTitle")}
+        description={t("detail.decisionPartialConfirmDesc", {
+          completed: submission.reviews.filter((r) => r.completedAt).length,
+          total: reviewCounts?.total ?? submission.reviews.length,
+        })}
+        confirmLabel={t("detail.decisionPartialConfirmBtn")}
+        cancelLabel={t("common.cancel")}
+        tone="primary"
+        loading={deciding}
+        onCancel={() => setDecisionConfirmOpen(false)}
+        onConfirm={() => { void handleDecision(); }}
+      />
 
       {/* Discussion */}
       {(isAdmin || isReviewer) && (
@@ -1617,9 +1795,11 @@ export function SubmissionDetail({
                 <FileText className="h-3.5 w-3.5 shrink-0" />
                 {isAssignedReviewer && !isOwner ? t("detail.paperDetails") : t("detail.paperInfo")}
               </a>
-              <a href="#section-files" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
-                <Paperclip className="h-3.5 w-3.5 shrink-0" />{t("detail.files")}
-              </a>
+              {!(isAssignedReviewer && !isOwner) && (
+                <a href="#section-files" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
+                  <Paperclip className="h-3.5 w-3.5 shrink-0" />{t("detail.files")}
+                </a>
+              )}
               {(isAdmin || isOwner) && !(isAssignedReviewer && !isOwner) && submission.advisorName && (
                 <a href="#section-advisor" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
                   <UserCheck className="h-3.5 w-3.5 shrink-0" />{t("advisor.sectionTitle")}
@@ -1672,6 +1852,7 @@ export function SubmissionDetail({
           submissionId={submission.id}
           fileId={manuscriptFile.id}
           fileName={manuscriptFile.originalName}
+          mimeType={manuscriptFile.mimeType}
           onClose={() => setPreviewOpen(false)}
         />
       )}

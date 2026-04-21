@@ -57,7 +57,9 @@ export function FileList({
 
   function isPreviewable(file: StoredFile) {
     if (file.mimeType === "application/pdf") return true;
-    return file.originalName.toLowerCase().endsWith(".pdf");
+    if (file.mimeType?.startsWith("image/")) return true;
+    const ext = file.originalName.toLowerCase().split(".").pop() || "";
+    return ["pdf", "png", "jpg", "jpeg", "gif", "webp"].includes(ext);
   }
 
   async function handleDownload(fileId: string) {
@@ -198,6 +200,7 @@ export function FileList({
           submissionId={submissionId}
           fileId={previewFile.id}
           fileName={previewFile.originalName}
+          mimeType={previewFile.mimeType}
           onClose={() => setPreviewFile(null)}
         />
       )}

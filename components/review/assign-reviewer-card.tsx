@@ -15,10 +15,13 @@ interface Reviewer {
   id: string;
   name: string;
   email: string;
+  affiliation?: string | null;
   prefixTh?: string | null;
   firstNameTh?: string | null;
   lastNameTh?: string | null;
-  /** Number of active (PENDING+ACCEPTED, not completed) assignments */
+  /** Assignments awaiting reviewer response */
+  pendingLoad?: number;
+  /** Assignments the reviewer accepted and is working on */
   activeLoad?: number;
   /** Number of completed reviews */
   completedLoad?: number;
@@ -104,16 +107,19 @@ export function AssignReviewerCard({
                 <option value="">{t("reviews.selectReviewer")}</option>
                 {availableReviewers
                   .slice()
-                  .sort((a, b) => (a.activeLoad || 0) - (b.activeLoad || 0))
+                  .sort((a, b) => ((a.activeLoad ?? 0) + (a.pendingLoad ?? 0)) - ((b.activeLoad ?? 0) + (b.pendingLoad ?? 0)))
                   .map((r) => {
-                    const load = r.activeLoad ?? 0;
+                    const active = r.activeLoad ?? 0;
+                    const pending = r.pendingLoad ?? 0;
                     const suffix =
-                      load === 0
+                      active === 0 && pending === 0
                         ? ` · ${t("reviews.workloadFree")}`
-                        : ` · ${t("reviews.workloadActive", { n: load })}`;
+                        : ` · ${t("reviews.workloadCompact", { active, pending })}`;
                     return (
                       <option key={r.id} value={r.id}>
-                        {displayNameTh(r)} ({r.email}){suffix}
+                        {displayNameTh(r)}
+                        {r.affiliation ? ` · ${r.affiliation}` : ""}
+                        {suffix}
                       </option>
                     );
                   })}
@@ -121,17 +127,20 @@ export function AssignReviewerCard({
             </Field>
             {selectedReviewer && (() => {
               const picked = availableReviewers.find((r) => r.id === selectedReviewer);
-              if (!picked || picked.activeLoad === undefined) return null;
-              const isHeavy = (picked.activeLoad ?? 0) >= 5;
+              if (!picked) return null;
+              const active = picked.activeLoad ?? 0;
+              const pending = picked.pendingLoad ?? 0;
+              const done = picked.completedLoad ?? 0;
+              const isHeavy = active >= 5;
               return (
-                <p className={`mt-1 text-xs ${isHeavy ? "text-amber-700 font-medium" : "text-ink-muted"}`}>
-                  {isHeavy
-                    ? t("reviews.workloadHeavy", { n: picked.activeLoad })
-                    : t("reviews.workloadSummary", {
-                        active: picked.activeLoad ?? 0,
-                        done: picked.completedLoad ?? 0,
-                      })}
-                </p>
+                <div className={`mt-1 text-xs ${isHeavy ? "text-amber-700 font-medium" : "text-ink-muted"} space-y-0.5`}>
+                  <p>
+                    {isHeavy
+                      ? t("reviews.workloadHeavy", { n: active })
+                      : t("reviews.workloadSummary2", { active, pending, done })}
+                  </p>
+                  {picked.affiliation && <p className="text-ink-muted/80">{picked.affiliation}</p>}
+                </div>
               );
             })()}
           </div>
