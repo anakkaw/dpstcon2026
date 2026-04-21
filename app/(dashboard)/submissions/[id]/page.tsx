@@ -174,8 +174,21 @@ export default async function SubmissionDetailPage({
             .where(inArray(user.id, reviewerIds));
         })()
       : Promise.resolve([]),
-    // Uploaded files
-    db.select().from(storedFiles).where(eq(storedFiles.submissionId, id)),
+    // Uploaded files (with uploader info for review attachments)
+    db
+      .select({
+        id: storedFiles.id,
+        originalName: storedFiles.originalName,
+        mimeType: storedFiles.mimeType,
+        size: storedFiles.size,
+        kind: storedFiles.kind,
+        uploadedAt: storedFiles.uploadedAt,
+        uploadedById: storedFiles.uploadedById,
+        uploaderName: user.name,
+      })
+      .from(storedFiles)
+      .leftJoin(user, eq(storedFiles.uploadedById, user.id))
+      .where(eq(storedFiles.submissionId, id)),
     // Review assignment counts
     db.select({ status: reviewAssignments.status }).from(reviewAssignments).where(eq(reviewAssignments.submissionId, id)),
     // Decision
@@ -233,10 +246,18 @@ export default async function SubmissionDetailPage({
       currentUserRoles={currentUser.roles}
       currentUserId={currentUser.id}
       reviewers={reviewers}
-      files={files.map((f) => ({
-        ...f,
-        uploadedAt: f.uploadedAt.toISOString(),
-      }))}
+      files={files
+        .filter((f) => {
+          if (f.kind !== "REVIEW_ATTACHMENT") return true;
+          // Review attachments are hidden from authors, and reviewers see only their own
+          if (canManageSubmission) return true;
+          if (isAssignedReviewer && f.uploadedById === currentUser.id) return true;
+          return false;
+        })
+        .map((f) => ({
+          ...f,
+          uploadedAt: f.uploadedAt.toISOString(),
+        }))}
       reviewCounts={reviewCounts}
       decision={decision ? {
         outcome: decision.outcome,

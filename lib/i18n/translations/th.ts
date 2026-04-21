@@ -131,6 +131,9 @@ const th = {
   "dashboard.scheduleSettingDesc": "ตั้งค่าวันสำคัญ",
   "dashboard.exportData": "Export ข้อมูล",
   "dashboard.exportDataDesc": "ดาวน์โหลด CSV",
+  "dashboard.assignReviewersDesc": "มอบหมายและติดตามผู้ทรงคุณวุฒิ",
+  "dashboard.trackTeamDesc": "จัดการทีมผู้รีวิวและกรรมการ",
+  "dashboard.priorityActionsDescChair": "เข้าถึงพื้นที่จัดการสำคัญสำหรับสาขาวิชาที่คุณดูแล",
   "dashboard.summaryByStatus": "สรุปตามสถานะ",
   "dashboard.summaryByTrack": "สรุปตามสาขาวิชา",
   // Committee
@@ -285,6 +288,7 @@ const th = {
   "detail.recommendation": "คำแนะนำ: ",
   "detail.commentsToAuthorLabel": "ความคิดเห็นถึง Author:",
   "detail.commentsToChairLabel": "ความคิดเห็นถึงประธาน (เฉพาะ admin):",
+  "detail.reviewerAttachments": "ไฟล์แนบจากผู้รีวิว",
   "detail.sendBtn": "ส่ง",
   "detail.onThisPage": "ในหน้านี้",
   "detail.actions": "การดำเนินการ",
@@ -328,6 +332,7 @@ const th = {
   "reviews.removeFailed": "ไม่สามารถลบการมอบหมายได้",
   "reviews.accept": "รับมอบหมาย",
   "reviews.decline": "ปฏิเสธ",
+  "reviews.writeReview": "เขียนรีวิว",
   "reviews.accepted": "รับมอบหมายเรียบร้อยแล้ว",
   "reviews.declinedMsg": "ปฏิเสธการมอบหมายแล้ว",
   "reviews.respondFailed": "ไม่สามารถตอบรับการมอบหมายได้",
@@ -638,7 +643,8 @@ const th = {
   "trackTeam.notAssigned": "คุณยังไม่ได้รับมอบหมายเป็น Program Chair สาขาวิชาใดๆ",
   "trackTeam.selectTrack": "เลือกสาขาวิชา",
   "trackTeam.addMember": "เพิ่มสมาชิก",
-  "trackTeam.selectUser": "-- เลือกผู้ใช้ --",
+  "trackTeam.selectUser": "เลือกบุคคลที่ต้องการเพิ่ม",
+  "trackTeam.selectUserPlaceholder": "-- เลือกผู้ใช้ --",
   "trackTeam.reviewers": "Reviewers ({n})",
   "trackTeam.reviewersLabel": "Reviewer",
   "trackTeam.noReviewers": "ยังไม่มี Reviewer ในสาขานี้",
@@ -784,6 +790,10 @@ const th = {
   "fileUpload.kindManuscript": "ต้นฉบับ",
   "fileUpload.kindSupplementary": "เอกสารเสริม",
   "fileUpload.kindCameraReady": "Camera-Ready",
+  "fileUpload.kindReviewAttachment": "ไฟล์แนบจากผู้รีวิว",
+  "fileUpload.uploadedBy": "อัปโหลดโดย",
+  "fileUpload.reviewAttachLabel": "แนบไฟล์ประกอบรีวิว (ไม่บังคับ)",
+  "fileUpload.reviewAttachHint": "เช่น ไฟล์ annotate PDF หรือข้อเสนอแนะเชิงลึก",
 
   // ─── Error page ──────────────────────────────────────────
   "error.title": "เกิดข้อผิดพลาด",
@@ -807,6 +817,7 @@ const th = {
 
   // ─── Review Form ──────────────────────────────────────
   "reviewForm.title": "ส่งผลรีวิว",
+  "reviewForm.openManuscript": "เปิดไฟล์บทความ",
   "reviewForm.recommendation": "คำแนะนำ",
   "reviewForm.recommendationPlaceholder": "— เลือกคำแนะนำ —",
   "reviewForm.commentsToAuthor": "ความคิดเห็นถึง Author",
@@ -928,6 +939,8 @@ const th = {
   "dashboard.reviewerDueDate": "กำหนดส่งรีวิว",
   "dashboard.reviewerNoDueDate": "ไม่มีกำหนด",
   "dashboard.reviewerOverdue": "เลยกำหนดแล้ว",
+  "dashboard.reviewerOverdueAlert": "มีงานรีวิวที่เกินกำหนดส่งแล้ว กรุณาดำเนินการด่วน",
+  "dashboard.reviewerMorePending": "ดูอีก {n} รายการที่เหลือ",
   "submissions.generatePaperCodes": "สร้างรหัสบทความ",
   "submissions.deleteSelected": "ลบที่เลือก ({n})",
   "submissions.selectAll": "เลือกบทความทั้งหมด",

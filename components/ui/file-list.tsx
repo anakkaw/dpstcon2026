@@ -15,12 +15,15 @@ interface StoredFile {
   size: number;
   kind: string;
   uploadedAt: string | Date;
+  uploadedById?: string | null;
+  uploaderName?: string | null;
 }
 
 interface FileListProps {
   submissionId: string;
   files: StoredFile[];
   canDelete?: boolean;
+  currentUserId?: string;
   onDeleteComplete?: (fileId: string) => void;
 }
 
@@ -28,6 +31,7 @@ const KIND_KEYS: Record<string, string> = {
   MANUSCRIPT: "fileUpload.kindManuscript",
   SUPPLEMENTARY: "fileUpload.kindSupplementary",
   CAMERA_READY: "fileUpload.kindCameraReady",
+  REVIEW_ATTACHMENT: "fileUpload.kindReviewAttachment",
 };
 
 function formatFileSize(bytes: number) {
@@ -40,6 +44,7 @@ export function FileList({
   submissionId,
   files,
   canDelete = false,
+  currentUserId,
   onDeleteComplete,
 }: FileListProps) {
   const { t } = useI18n();
@@ -114,11 +119,14 @@ export function FileList({
           className="flex flex-col gap-3 rounded-lg bg-surface-alt px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <FileText className="h-4 w-4 text-brand-500 shrink-0" />
+            <FileText className={cn("h-4 w-4 shrink-0", file.kind === "REVIEW_ATTACHMENT" ? "text-violet-500" : "text-brand-500")} />
             <div className="min-w-0">
               <p className="text-sm text-ink font-medium truncate">{file.originalName}</p>
               <p className="text-xs text-ink-muted">
                 {KIND_KEYS[file.kind] ? t(KIND_KEYS[file.kind] as Parameters<typeof t>[0]) : file.kind} · {formatFileSize(file.size)}
+                {file.uploaderName && file.kind === "REVIEW_ATTACHMENT" && (
+                  <> · {t("fileUpload.uploadedBy")} {file.uploaderName}</>
+                )}
               </p>
             </div>
           </div>
@@ -141,7 +149,7 @@ export function FileList({
               {t("common.download")}
             </button>
 
-            {canDelete && (
+            {(canDelete || (file.kind === "REVIEW_ATTACHMENT" && currentUserId && file.uploadedById === currentUserId)) && (
               <Button
                 type="button"
                 variant="ghost"

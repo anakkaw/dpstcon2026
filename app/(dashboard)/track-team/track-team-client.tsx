@@ -163,9 +163,9 @@ export function TrackTeamClient({
                 </Select>
               </Field>
             )}
-            <Field label={currentTrack ? currentTrack.name : t("trackTeam.selectTrack")}>
+            <Field label={t("trackTeam.selectUser")}>
               <Select value={addUserId} onChange={(e) => setAddUserId(e.target.value)}>
-                <option value="">{t("trackTeam.selectUser")}</option>
+                <option value="">{t("trackTeam.selectUserPlaceholder")}</option>
                 {available.map((entry) => (
                   <option key={entry.id} value={entry.id}>
                     {displayNameTh(entry)} ({entry.email}){entry.affiliation ? ` - ${entry.affiliation}` : ""}

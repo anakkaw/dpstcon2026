@@ -24,17 +24,25 @@ const barClasses = [
   "bg-bar-amber",
 ];
 
-export default function AdminDashboard({ stats }: { stats: Record<string, unknown> }) {
+export default function AdminDashboard({ stats, roles = [] }: { stats: Record<string, unknown>; roles?: string[] }) {
   const { t } = useI18n();
   const statusLabels = getSubmissionStatusLabels(t);
+  const isAdmin = roles.includes("ADMIN");
 
   /* Full static class strings — Tailwind v4 scanner finds these */
-  const quickActions = [
-    { href: "/admin/users", icon: <UserPlus className="h-4.5 w-4.5" />, label: t("dashboard.manageUsers"), sub: t("dashboard.manageUsersDesc"), iconWrap: "bg-blue-50 text-blue-600" },
-    { href: "/submissions", icon: <FileText className="h-4.5 w-4.5" />, label: t("dashboard.managePapers"), sub: t("dashboard.managePapersDesc"), iconWrap: "bg-brand-50 text-brand-600" },
-    { href: "/deadlines", icon: <Settings className="h-4.5 w-4.5" />, label: t("dashboard.scheduleSetting"), sub: t("dashboard.scheduleSettingDesc"), iconWrap: "bg-emerald-50 text-emerald-600" },
-    { href: "/api/exports/proceedings?format=csv", icon: <Download className="h-4.5 w-4.5" />, label: t("dashboard.exportData"), sub: t("dashboard.exportDataDesc"), iconWrap: "bg-violet-50 text-violet-600", isExternal: true },
-  ];
+  const quickActions = isAdmin
+    ? [
+        { href: "/admin/users", icon: <UserPlus className="h-4.5 w-4.5" />, label: t("dashboard.manageUsers"), sub: t("dashboard.manageUsersDesc"), iconWrap: "bg-blue-50 text-blue-600" },
+        { href: "/submissions", icon: <FileText className="h-4.5 w-4.5" />, label: t("dashboard.managePapers"), sub: t("dashboard.managePapersDesc"), iconWrap: "bg-brand-50 text-brand-600" },
+        { href: "/deadlines", icon: <Settings className="h-4.5 w-4.5" />, label: t("dashboard.scheduleSetting"), sub: t("dashboard.scheduleSettingDesc"), iconWrap: "bg-emerald-50 text-emerald-600" },
+        { href: "/api/exports/proceedings?format=csv", icon: <Download className="h-4.5 w-4.5" />, label: t("dashboard.exportData"), sub: t("dashboard.exportDataDesc"), iconWrap: "bg-violet-50 text-violet-600", isExternal: true },
+      ]
+    : [
+        { href: "/submissions", icon: <FileText className="h-4.5 w-4.5" />, label: t("dashboard.managePapers"), sub: t("dashboard.managePapersDesc"), iconWrap: "bg-brand-50 text-brand-600" },
+        { href: "/reviews", icon: <ClipboardCheck className="h-4.5 w-4.5" />, label: t("nav.reviews"), sub: t("dashboard.assignReviewersDesc"), iconWrap: "bg-blue-50 text-blue-600" },
+        { href: "/track-team", icon: <Users className="h-4.5 w-4.5" />, label: t("nav.trackTeam"), sub: t("dashboard.trackTeamDesc"), iconWrap: "bg-violet-50 text-violet-600" },
+        { href: "/deadlines", icon: <Settings className="h-4.5 w-4.5" />, label: t("dashboard.scheduleSetting"), sub: t("dashboard.scheduleSettingDesc"), iconWrap: "bg-emerald-50 text-emerald-600" },
+      ];
 
   const byStatus = (stats.submissionsByStatus || {}) as Record<string, number>;
   const byTrack = (stats.submissionsByTrack || []) as { name: string; count: number }[];
@@ -64,7 +72,9 @@ export default function AdminDashboard({ stats }: { stats: Record<string, unknow
         <section className="space-y-4">
           <div className="space-y-1">
             <h2 className="text-base font-semibold text-ink">{t("dashboard.priorityActions")}</h2>
-            <p className="text-sm text-ink-muted">{t("dashboard.priorityActionsDesc")}</p>
+            <p className="text-sm text-ink-muted">
+              {isAdmin ? t("dashboard.priorityActionsDesc") : t("dashboard.priorityActionsDescChair")}
+            </p>
           </div>
           <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
             {quickActions.map((item, index) => {

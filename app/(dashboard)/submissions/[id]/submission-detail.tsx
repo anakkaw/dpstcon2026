@@ -82,6 +82,8 @@ interface Props {
     size: number;
     kind: string;
     uploadedAt: string;
+    uploadedById?: string | null;
+    uploaderName?: string | null;
   }[];
   reviewCounts?: { total: number; completed: number };
   decision?: {
@@ -762,12 +764,23 @@ export function SubmissionDetail({
 
       {/* Review Submission Form — for assigned reviewers (shown prominently before paper info) */}
       {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (
-        <Card accent="brand">
+        <Card id="section-review-form" accent="brand">
           <CardHeader>
-            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <Send className="h-4 w-4" />
-              {t("reviewForm.title")}
-            </h3>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <Send className="h-4 w-4" />
+                {t("reviewForm.title")}
+              </h3>
+              {files.some((f) => f.kind === "MANUSCRIPT") && (
+                <a
+                  href="#section-files"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                  {t("reviewForm.openManuscript")}
+                </a>
+              )}
+            </div>
           </CardHeader>
           <CardBody className="space-y-3">
             <Field label={t("reviewForm.recommendation")} htmlFor="reviewRecommendation" required>
@@ -796,6 +809,36 @@ export function SubmissionDetail({
                 rows={3}
               />
             </Field>
+
+            {/* Reviewer attachment upload */}
+            <div className="space-y-2">
+              {(() => {
+                const myAttachments = files.filter(
+                  (f) => f.kind === "REVIEW_ATTACHMENT" && f.uploadedById === currentUserId
+                );
+                return (
+                  <>
+                    {myAttachments.length > 0 && (
+                      <FileList
+                        submissionId={submission.id}
+                        files={myAttachments}
+                        canDelete={false}
+                        currentUserId={currentUserId}
+                        onDeleteComplete={() => router.refresh()}
+                      />
+                    )}
+                    <FileUpload
+                      submissionId={submission.id}
+                      kind="REVIEW_ATTACHMENT"
+                      label={t("fileUpload.reviewAttachLabel")}
+                      hint={t("fileUpload.reviewAttachHint")}
+                      accept=".pdf,.doc,.docx,.zip"
+                      onUploadComplete={() => router.refresh()}
+                    />
+                  </>
+                );
+              })()}
+            </div>
           </CardBody>
           <CardFooter className="flex justify-end">
             <Button
@@ -876,6 +919,7 @@ export function SubmissionDetail({
             submissionId={submission.id}
             files={files}
             canDelete={canDeleteFiles}
+            currentUserId={currentUserId}
             onDeleteComplete={() => router.refresh()}
           />
 
@@ -958,6 +1002,23 @@ export function SubmissionDetail({
                             <p className="text-sm text-ink whitespace-pre-wrap bg-amber-50/60 border border-amber-200/40 rounded-lg p-3 leading-relaxed">{review.commentsToChair}</p>
                           </div>
                         )}
+                        {(() => {
+                          const reviewerAttachments = files.filter(
+                            (f) => f.kind === "REVIEW_ATTACHMENT" && f.uploadedById === review.reviewer.id
+                          );
+                          if (reviewerAttachments.length === 0) return null;
+                          return (
+                            <div>
+                              <p className="text-xs text-ink-muted mb-2">{t("detail.reviewerAttachments")}</p>
+                              <FileList
+                                submissionId={submission.id}
+                                files={reviewerAttachments}
+                                canDelete={false}
+                                currentUserId={currentUserId}
+                              />
+                            </div>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <p className="text-sm text-ink-muted flex items-center gap-2">
@@ -1126,6 +1187,11 @@ export function SubmissionDetail({
           <nav className="rounded-2xl border border-border bg-white p-4 shadow-elev-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">{t("detail.onThisPage")}</p>
             <div className="space-y-0.5 text-sm">
+              {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (
+                <a href="#section-review-form" className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-brand-50 text-brand-700 font-medium hover:bg-brand-100 transition-colors">
+                  <Send className="h-3.5 w-3.5 shrink-0" />{t("reviewForm.title")}
+                </a>
+              )}
               <a href="#section-paper-info" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
                 <FileText className="h-3.5 w-3.5 shrink-0" />{t("detail.paperInfo")}
               </a>

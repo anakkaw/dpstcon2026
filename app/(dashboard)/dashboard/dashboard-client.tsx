@@ -61,7 +61,7 @@ export function DashboardClient({
       {visibleRoles.includes("REVIEWER") && (
         <ReviewerDashboard stats={statsByRole.REVIEWER || {}} />
       )}
-      {showManagerDashboard && <AdminDashboard stats={statsByRole.MANAGER || {}} />}
+      {showManagerDashboard && <AdminDashboard stats={statsByRole.MANAGER || {}} roles={visibleRoles} />}
       {visibleRoles.includes("COMMITTEE") && <CommitteeDashboard stats={statsByRole.COMMITTEE} />}
     </div>
   );

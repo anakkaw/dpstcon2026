@@ -46,6 +46,7 @@ const FILE_KIND_PATHS = {
   MANUSCRIPT: "manuscript",
   SUPPLEMENTARY: "supplementary",
   CAMERA_READY: "camera-ready",
+  REVIEW_ATTACHMENT: "review-attachments",
 } as const;
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
@@ -899,8 +900,22 @@ const uploadSchema = z.object({
     { message: "ไฟล์ประเภทนี้ไม่ได้รับอนุญาต (อนุญาต: PDF, DOCX, XLSX, ZIP, PNG, JPEG)" }
   ),
   fileSize: z.number().positive().max(MAX_UPLOAD_SIZE),
-  kind: z.enum(["MANUSCRIPT", "SUPPLEMENTARY", "CAMERA_READY"]),
+  kind: z.enum(["MANUSCRIPT", "SUPPLEMENTARY", "CAMERA_READY", "REVIEW_ATTACHMENT"]),
 });
+
+async function isAssignedReviewerFor(
+  userId: string,
+  submissionId: string
+) {
+  const assignment = await db.query.reviewAssignments.findFirst({
+    where: and(
+      eq(reviewAssignments.submissionId, submissionId),
+      eq(reviewAssignments.reviewerId, userId)
+    ),
+    columns: { id: true },
+  });
+  return Boolean(assignment);
+}
 
 app.post("/:id/upload-url", async (c) => {
   const { id } = c.req.param();
@@ -913,16 +928,26 @@ app.post("/:id/upload-url", async (c) => {
   if (!submission) return c.json({ error: "Not found" }, 404);
   const isStaff = canManageSubmissionAsStaff(currentUser, submission);
   const isOwner = submission.authorId === currentUser.id;
-  if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
-
   const { fileName, mimeType, kind } = parsed.data;
-  if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
-    return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
-  }
-  if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
-    return c.json({ error: "Camera-ready upload is not available for this submission" }, 400);
+
+  if (kind === "REVIEW_ATTACHMENT") {
+    const canReviewerUpload =
+      hasRole(currentUser, "REVIEWER") &&
+      (await isAssignedReviewerFor(currentUser.id, id));
+    if (!isStaff && !canReviewerUpload) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  } else {
+    if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
+      return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
+    }
+    if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
+      return c.json({ error: "Camera-ready upload is not available for this submission" }, 400);
+    }
   }
 
   const fileKey = generateFileKey(id, fileName, FILE_KIND_PATHS[kind]);
@@ -958,7 +983,7 @@ const confirmUploadSchema = z.object({
     { message: "ไฟล์ประเภทนี้ไม่ได้รับอนุญาต" }
   ),
   fileSize: z.number().positive().max(MAX_UPLOAD_SIZE),
-  kind: z.enum(["MANUSCRIPT", "SUPPLEMENTARY", "CAMERA_READY"]),
+  kind: z.enum(["MANUSCRIPT", "SUPPLEMENTARY", "CAMERA_READY", "REVIEW_ATTACHMENT"]),
   uploadToken: z.string().min(1),
 });
 
@@ -973,11 +998,20 @@ app.post("/:id/confirm-upload", async (c) => {
   if (!submission) return c.json({ error: "Not found" }, 404);
   const isStaff = canManageSubmissionAsStaff(currentUser, submission);
   const isOwner = submission.authorId === currentUser.id;
-  if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
+
+  const { fileKey, fileName, mimeType, fileSize, kind, uploadToken } = parsed.data;
+
+  if (kind === "REVIEW_ATTACHMENT") {
+    const canReviewerUpload =
+      hasRole(currentUser, "REVIEWER") &&
+      (await isAssignedReviewerFor(currentUser.id, id));
+    if (!isStaff && !canReviewerUpload) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  } else if (!isStaff && (!isOwner || !hasAuthorSubmissionRole(currentUser))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  const { fileKey, fileName, mimeType, fileSize, kind, uploadToken } = parsed.data;
   const tokenPayload = verifyUploadToken(uploadToken);
 
   if (!tokenPayload) {
@@ -1000,12 +1034,14 @@ app.post("/:id/confirm-upload", async (c) => {
     return c.json({ error: "Invalid file key" }, 400);
   }
 
-  if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
-    return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
-  }
+  if (kind !== "REVIEW_ATTACHMENT") {
+    if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
+      return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
+    }
 
-  if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
-    return c.json({ error: "Camera-ready upload is not allowed in the current status" }, 400);
+    if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
+      return c.json({ error: "Camera-ready upload is not allowed in the current status" }, 400);
+    }
   }
 
   const [file] = await db
@@ -1042,7 +1078,13 @@ app.get("/:id/files", async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  const files = await db.select().from(storedFiles).where(eq(storedFiles.submissionId, id));
+  const rows = await db.select().from(storedFiles).where(eq(storedFiles.submissionId, id));
+  const isStaff = canManageSubmissionAsStaff(currentUser, submission);
+  const files = rows.filter((f) => {
+    if (f.kind !== "REVIEW_ATTACHMENT") return true;
+    if (isStaff) return true;
+    return f.uploadedById === currentUser.id;
+  });
   return c.json({ files });
 });
 
@@ -1089,6 +1131,15 @@ app.get("/:id/download/:fileId", async (c) => {
   });
   if (!file) return c.json({ error: "File not found" }, 404);
 
+  // Gate REVIEW_ATTACHMENT to uploader and staff (not author, not other reviewers)
+  if (file.kind === "REVIEW_ATTACHMENT") {
+    const isStaff = canManageSubmissionAsStaff(currentUser, submission);
+    const isUploader = file.uploadedById === currentUser.id;
+    if (!isStaff && !isUploader) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  }
+
   try {
     const url = await getDownloadUrl(file.storedKey);
     return c.json({ url, fileName: file.originalName });
@@ -1111,14 +1162,19 @@ app.delete("/:id/files/:fileId", async (c) => {
     submission.status === "DRAFT" &&
     hasAuthorSubmissionRole(currentUser);
 
-  if (!canManageAsStaff && !canManageOwnDraft) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
-
   const file = await db.query.storedFiles.findFirst({
     where: and(eq(storedFiles.id, fileId), eq(storedFiles.submissionId, id)),
   });
   if (!file) return c.json({ error: "File not found" }, 404);
+
+  // Reviewers can delete their own REVIEW_ATTACHMENT files
+  const canReviewerDeleteOwn =
+    file.kind === "REVIEW_ATTACHMENT" &&
+    file.uploadedById === currentUser.id;
+
+  if (!canManageAsStaff && !canManageOwnDraft && !canReviewerDeleteOwn) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
 
   // When deleting a camera-ready file, revert status if no other camera-ready remains
   if (file.kind === "CAMERA_READY") {

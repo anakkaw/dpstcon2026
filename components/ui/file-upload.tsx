@@ -7,7 +7,7 @@ import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from "lucide-reac
 
 interface FileUploadProps {
   submissionId: string;
-  kind: "MANUSCRIPT" | "SUPPLEMENTARY" | "CAMERA_READY";
+  kind: "MANUSCRIPT" | "SUPPLEMENTARY" | "CAMERA_READY" | "REVIEW_ATTACHMENT";
   accept?: string;
   maxSizeMB?: number;
   label?: string;
@@ -18,7 +18,7 @@ interface FileUploadProps {
     storedKey: string;
     mimeType: string;
     size: number;
-    kind: "MANUSCRIPT" | "SUPPLEMENTARY" | "CAMERA_READY";
+    kind: "MANUSCRIPT" | "SUPPLEMENTARY" | "CAMERA_READY" | "REVIEW_ATTACHMENT";
     uploadedAt: string | Date;
   }) => void;
   disabled?: boolean;

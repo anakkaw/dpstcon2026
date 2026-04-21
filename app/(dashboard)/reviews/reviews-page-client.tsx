@@ -305,14 +305,25 @@ export function ReviewsPageClient({
                       <Badge tone={STATUS_COLORS[assignment.status] || "neutral"}>{assignmentLabels[assignment.status] || assignment.status}</Badge>
                     </div>
                   </Link>
-                  {assignment.status === "PENDING" && (
+                  {(assignment.status === "PENDING" || assignment.status === "ACCEPTED") && (
                     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border-light">
-                      <Button size="sm" onClick={() => handleRespond(assignment.id, "ACCEPTED")} loading={respondingId === assignment.id}>
-                        <CheckCircle className="h-3.5 w-3.5" />{t("reviews.accept")}
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => handleRespond(assignment.id, "DECLINED")} loading={respondingId === assignment.id}>
-                        <XCircle className="h-3.5 w-3.5" />{t("reviews.decline")}
-                      </Button>
+                      {assignment.status === "PENDING" && (
+                        <>
+                          <Button size="sm" onClick={() => handleRespond(assignment.id, "ACCEPTED")} loading={respondingId === assignment.id}>
+                            <CheckCircle className="h-3.5 w-3.5" />{t("reviews.accept")}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => handleRespond(assignment.id, "DECLINED")} loading={respondingId === assignment.id}>
+                            <XCircle className="h-3.5 w-3.5" />{t("reviews.decline")}
+                          </Button>
+                        </>
+                      )}
+                      {assignment.status === "ACCEPTED" && (
+                        <Link href={`/submissions/${assignment.submission.id}#section-review-form`} className="flex-1">
+                          <Button size="sm" className="w-full sm:w-auto">
+                            <ExternalLink className="h-3.5 w-3.5" />{t("reviews.writeReview")}
+                          </Button>
+                        </Link>
+                      )}
                     </div>
                   )}
                 </CardBody>

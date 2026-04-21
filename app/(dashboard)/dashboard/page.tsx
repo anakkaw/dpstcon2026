@@ -142,11 +142,30 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
 }
 
 async function loadReviewerStats(userId: string): Promise<DashboardStats> {
-  const myAssignments = await db
-    .select({ status: reviewAssignments.status, count: count() })
-    .from(reviewAssignments)
-    .where(eq(reviewAssignments.reviewerId, userId))
-    .groupBy(reviewAssignments.status);
+  const [myAssignments, topPending] = await Promise.all([
+    db
+      .select({ status: reviewAssignments.status, count: count() })
+      .from(reviewAssignments)
+      .where(eq(reviewAssignments.reviewerId, userId))
+      .groupBy(reviewAssignments.status),
+    db.query.reviewAssignments.findMany({
+      where: and(
+        eq(reviewAssignments.reviewerId, userId),
+        inArray(reviewAssignments.status, ["PENDING", "ACCEPTED"])
+      ),
+      orderBy: (ra, { asc, desc }) => [
+        desc(ra.status), // PENDING before ACCEPTED
+        asc(ra.dueDate),
+      ],
+      limit: 5,
+      with: {
+        submission: {
+          columns: { id: true, title: true },
+          with: { track: { columns: { id: true, name: true } } },
+        },
+      },
+    }),
+  ]);
 
   return {
     totalAssignments: myAssignments.reduce((sum, row) => sum + Number(row.count), 0),
@@ -156,6 +175,14 @@ async function loadReviewerStats(userId: string): Promise<DashboardStats> {
         .filter((row) => ["PENDING", "ACCEPTED"].includes(row.status))
         .reduce((sum, row) => sum + Number(row.count), 0)
     ),
+    topPending: topPending.map((a) => ({
+      id: a.id,
+      submissionId: a.submission.id,
+      title: a.submission.title,
+      trackName: a.submission.track?.name ?? null,
+      status: a.status,
+      dueDate: a.dueDate?.toISOString() ?? null,
+    })),
   };
 }
 

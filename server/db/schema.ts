@@ -49,6 +49,7 @@ export const fileKindEnum = pgEnum("file_kind", [
   "MANUSCRIPT",
   "SUPPLEMENTARY",
   "CAMERA_READY",
+  "REVIEW_ATTACHMENT",
 ]);
 
 export const assignmentStatusEnum = pgEnum("assignment_status", [
