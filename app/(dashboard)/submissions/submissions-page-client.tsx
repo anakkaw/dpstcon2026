@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, memo, Fragment } from "react";
+import { useState, useMemo, useCallback, memo, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,13 @@ export function SubmissionsPageClient({
   const canCreateSubmission = roles.includes("AUTHOR");
 
   const [submissions, setSubmissions] = useState<SubmissionData[]>(initialSubmissions);
+
+  // Sync local state with fresh server data after router.refresh() (e.g. after
+  // assigning a reviewer). Without this, useState keeps the initial prop and
+  // the table looks stale.
+  useEffect(() => {
+    setSubmissions(initialSubmissions);
+  }, [initialSubmissions]);
   const [trackFilter, setTrackFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
