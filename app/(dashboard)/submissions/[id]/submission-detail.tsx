@@ -1208,7 +1208,7 @@ export function SubmissionDetail({
         const myAttachments = files.filter(
           (f) => f.kind === "REVIEW_ATTACHMENT" && f.uploadedById === currentUserId
         );
-        const MIN_COMMENTS = 50;
+        const MIN_COMMENTS = 1;
         const authorChars = reviewCommentsToAuthor.length;
         const chairChars = reviewCommentsToChair.length;
         const ready = Boolean(reviewRecommendation) && reviewCommentsToAuthor.trim().length >= MIN_COMMENTS;
