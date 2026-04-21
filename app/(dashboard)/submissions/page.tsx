@@ -4,18 +4,77 @@ import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
 import { reviewAssignments, submissions } from "@/server/db/schema";
+import { loadReviewerPool } from "@/server/reviewer-pool";
 import { SubmissionsPageClient, type SubmissionData } from "./submissions-page-client";
 
 async function loadInitialSubmissions(
   currentUser: NonNullable<Awaited<ReturnType<typeof getServerAuthContext>>>["user"]
 ): Promise<SubmissionData[]> {
+  // Always fetch the full reviewer-aware assignment shape — we'll strip it
+  // downstream for pure authors. This avoids branching query return types.
+  const assignmentWith = {
+    columns: {
+      id: true,
+      status: true,
+      assignedAt: true,
+      dueDate: true,
+      reviewerId: true,
+    } as const,
+    with: {
+      reviewer: {
+        columns: {
+          id: true,
+          name: true,
+          affiliation: true,
+          prefixTh: true,
+          firstNameTh: true,
+          lastNameTh: true,
+        },
+      },
+    },
+  };
+
+  type RawAssignment = {
+    id: string;
+    status: string;
+    assignedAt: Date;
+    dueDate: Date | null;
+    reviewer: {
+      id: string;
+      name: string;
+      affiliation: string | null;
+      prefixTh: string | null;
+      firstNameTh: string | null;
+      lastNameTh: string | null;
+    } | null;
+  };
+
+  function serializeAssignment(a: RawAssignment) {
+    return {
+      id: a.id,
+      status: a.status,
+      assignedAt: a.assignedAt.toISOString(),
+      dueDate: a.dueDate ? a.dueDate.toISOString() : null,
+      reviewer: a.reviewer
+        ? {
+            id: a.reviewer.id,
+            name: a.reviewer.name,
+            affiliation: a.reviewer.affiliation,
+            prefixTh: a.reviewer.prefixTh,
+            firstNameTh: a.reviewer.firstNameTh,
+            lastNameTh: a.reviewer.lastNameTh,
+          }
+        : null,
+    };
+  }
+
   if (hasRole(currentUser, "ADMIN")) {
     const results = await db.query.submissions.findMany({
       with: {
         author: { columns: { id: true, name: true, email: true } },
         track: { columns: { id: true, name: true } },
         reviews: { columns: { id: true, recommendation: true, completedAt: true } },
-        reviewAssignments: { columns: { id: true, status: true } },
+        reviewAssignments: assignmentWith,
       },
       orderBy: [desc(submissions.createdAt)],
     });
@@ -29,6 +88,9 @@ async function loadInitialSubmissions(
         ...review,
         completedAt: review.completedAt?.toISOString() || null,
       })),
+      reviewAssignments: submission.reviewAssignments.map((a) =>
+        serializeAssignment(a as unknown as RawAssignment)
+      ),
     }));
   }
 
@@ -72,10 +134,15 @@ async function loadInitialSubmissions(
       author: { columns: { id: true, name: true, email: true } },
       track: { columns: { id: true, name: true } },
       reviews: { columns: { id: true, recommendation: true, completedAt: true } },
-      reviewAssignments: { columns: { id: true, status: true } },
+      reviewAssignments: assignmentWith,
     },
     orderBy: [desc(submissions.createdAt)],
   });
+
+  // Gate reviewer identity from pure authors — they should only see their own
+  // paper's reviewers if they're also an admin or chair (handled above).
+  const isAuthorOnly =
+    !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "REVIEWER");
 
   return results.map((submission) => ({
     ...submission,
@@ -86,6 +153,14 @@ async function loadInitialSubmissions(
       ...review,
       completedAt: review.completedAt?.toISOString() || null,
     })),
+    reviewAssignments: submission.reviewAssignments.map((a) => {
+      const serialized = serializeAssignment(a as unknown as RawAssignment);
+      if (isAuthorOnly) {
+        // strip reviewer identity but keep the counts so progress bars still work
+        return { id: serialized.id, status: serialized.status };
+      }
+      return serialized;
+    }),
   }));
 }
 
@@ -93,7 +168,15 @@ export default async function SubmissionsPage() {
   const authContext = await getServerAuthContext();
   if (!authContext?.user.isActive) redirect("/login");
 
-  const initialSubmissions = await loadInitialSubmissions(authContext.user);
+  const [initialSubmissions, reviewerPool] = await Promise.all([
+    loadInitialSubmissions(authContext.user),
+    loadReviewerPool(authContext.user),
+  ]);
 
-  return <SubmissionsPageClient initialSubmissions={initialSubmissions} />;
+  return (
+    <SubmissionsPageClient
+      initialSubmissions={initialSubmissions}
+      reviewerPool={reviewerPool}
+    />
+  );
 }

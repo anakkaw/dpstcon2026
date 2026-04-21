@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, memo } from "react";
+import { useState, useMemo, useCallback, memo, Fragment } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,24 @@ import {
 } from "lucide-react";
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { getNextAction } from "@/lib/author-utils";
+import { MyReviewTasksCard, type MyReviewTask } from "@/components/reviews/my-review-tasks-card";
+import { AssignmentPanel, type ReviewerOption } from "@/components/reviews/assignment-panel";
+import { ReviewProgressMini, type ProgressAssignment } from "@/components/reviews/review-progress-mini";
+
+export interface SubmissionAssignment {
+  id: string;
+  status: string;
+  assignedAt?: string;
+  dueDate?: string | null;
+  reviewer?: {
+    id: string;
+    name: string;
+    affiliation?: string | null;
+    prefixTh?: string | null;
+    firstNameTh?: string | null;
+    lastNameTh?: string | null;
+  } | null;
+}
 
 export interface SubmissionData {
   id: string;
@@ -36,7 +54,7 @@ export interface SubmissionData {
   author: { id: string; name: string; email: string };
   track: { id: string; name: string } | null;
   reviews: { id: string; recommendation: string | null; completedAt: string | null }[];
-  reviewAssignments?: { id: string; status: string }[];
+  reviewAssignments?: SubmissionAssignment[];
   advisorApprovalStatus?: string | null;
   advisorName?: string | null;
   advisorEmail?: string | null;
@@ -60,12 +78,14 @@ type SortKey = "title" | "author" | "track" | "status" | "createdAt" | "reviews"
 
 export function SubmissionsPageClient({
   initialSubmissions,
+  reviewerPool = [],
 }: {
   initialSubmissions: SubmissionData[];
+  reviewerPool?: ReviewerOption[];
 }) {
   const { t, locale } = useI18n();
   const statusLabels = getSubmissionStatusLabels(t);
-  const { roles } = useDashboardAuth();
+  const { roles, id: currentUserId } = useDashboardAuth();
   const isAdmin = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
   const canCreateSubmission = roles.includes("AUTHOR");
 
@@ -134,6 +154,7 @@ export function SubmissionsPageClient({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [actionsOpenId, setActionsOpenId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const PAGE_SIZE = 25;
 
@@ -382,6 +403,30 @@ export function SubmissionsPageClient({
     () => submissions.filter((s) => (!trackFilter || s.track?.id === trackFilter) && NEEDS_ACTION_STATUSES.has(s.status)).length,
     [submissions, trackFilter]
   );
+
+  // Derive "my review tasks" — the logged-in user's own pending/accepted assignments
+  // across any paper visible in the workbench. Powers the top card for dual-role PCs.
+  const myReviewTasks = useMemo<MyReviewTask[]>(() => {
+    if (!roles.includes("REVIEWER") || !currentUserId) return [];
+    const out: MyReviewTask[] = [];
+    for (const s of submissions) {
+      for (const a of s.reviewAssignments || []) {
+        if (!a.reviewer || a.reviewer.id !== currentUserId) continue;
+        if (a.status === "COMPLETED") continue;
+        out.push({
+          id: a.id,
+          status: a.status,
+          dueDate: a.dueDate ?? null,
+          submission: {
+            id: s.id,
+            title: s.title,
+            track: s.track,
+          },
+        });
+      }
+    }
+    return out;
+  }, [submissions, roles, currentUserId]);
   const advisorStalledCount = useMemo(
     () => submissions.filter((s) =>
       (!trackFilter || s.track?.id === trackFilter) &&
@@ -434,6 +479,10 @@ export function SubmissionsPageClient({
       />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
+
+      {/* Personal review tasks — surfaced on the workbench so PC+Reviewer users
+          see their own pending reviews before the management table. */}
+      <MyReviewTasksCard tasks={myReviewTasks} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <ClickableStatCard active={statusFilter === "ALL" && quickFilter === "none"} onClick={() => { setStatusFilterAndReset("ALL"); }}>
@@ -664,8 +713,20 @@ export function SubmissionsPageClient({
                     {pagedFiltered.map((sub) => {
                       const totalAssign = sub.reviewAssignments?.length || 0;
                       const completedAssign = sub.reviewAssignments?.filter((a) => a.status === "COMPLETED").length || 0;
+                      const isExpanded = expandedId === sub.id;
+                      const userIsReviewerOnThisPaper = Boolean(
+                        currentUserId &&
+                          sub.reviewAssignments?.some(
+                            (a) => a.reviewer?.id === currentUserId && a.status !== "DECLINED"
+                          )
+                      );
+                      const progressAssignments: ProgressAssignment[] =
+                        (sub.reviewAssignments || [])
+                          .filter((a): a is SubmissionAssignment & { reviewer: NonNullable<SubmissionAssignment["reviewer"]> } => Boolean(a.reviewer))
+                          .map((a) => ({ id: a.id, status: a.status, reviewer: a.reviewer }));
                       return (
-                        <tr key={sub.id} className={`border-t border-border/40 transition-colors group ${selectedIds.has(sub.id) ? "bg-brand-50/40" : "hover:bg-surface-1"}`}>
+                        <Fragment key={sub.id}>
+                        <tr className={`border-t border-border/40 transition-colors group ${selectedIds.has(sub.id) ? "bg-brand-50/40" : isExpanded ? "bg-brand-50/30" : "hover:bg-surface-1"}`}>
                           {/* checkbox */}
                           <td className="px-4 py-3">
                             <input
@@ -698,6 +759,11 @@ export function SubmissionsPageClient({
                                   title={sub.abstract || undefined}
                                 >
                                   {sub.title}
+                                  {userIsReviewerOnThisPaper && (
+                                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wider text-brand-700">
+                                      {t("reviews.youAreReviewer")}
+                                    </span>
+                                  )}
                                 </p>
                                 <p className="mt-0.5 text-[11px] text-ink-muted">
                                   {displayNameTh(sub.author)} · {formatDate(sub.createdAt, locale)}
@@ -725,9 +791,24 @@ export function SubmissionsPageClient({
                           <td className="px-4 py-3">
                             {sub.track ? <Badge tone="info">{sub.track.name}</Badge> : <span className="text-ink-muted text-xs">—</span>}
                           </td>
-                          {/* reviews */}
-                          <td className="px-4 py-3 text-center">
-                            {totalAssign > 0 ? (
+                          {/* reviews — avatar stack + progress bar for chairs who can see reviewers */}
+                          <td className="px-4 py-3">
+                            {isAdmin && progressAssignments.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedId((prev) => (prev === sub.id ? null : sub.id));
+                                }}
+                                className="w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-surface-alt"
+                                title={isExpanded ? t("common.collapse") : t("common.expand")}
+                              >
+                                <ReviewProgressMini
+                                  assignments={progressAssignments}
+                                  currentUserId={currentUserId}
+                                />
+                              </button>
+                            ) : totalAssign > 0 ? (
                               <div className="inline-flex items-center gap-1.5">
                                 <Users className="h-3 w-3 text-ink-muted" aria-hidden="true" />
                                 <span className={`text-xs font-medium ${completedAssign === totalAssign ? "text-emerald-600" : "text-ink"}`}>{completedAssign}/{totalAssign}</span>
@@ -738,6 +819,17 @@ export function SubmissionsPageClient({
                                   />
                                 </div>
                               </div>
+                            ) : isAdmin ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedId((prev) => (prev === sub.id ? null : sub.id));
+                                }}
+                                className="text-xs font-medium text-brand-600 hover:underline"
+                              >
+                                {t("reviews.assignReviewer")}
+                              </button>
                             ) : (
                               <span className="text-ink-muted text-xs">—</span>
                             )}
@@ -774,6 +866,30 @@ export function SubmissionsPageClient({
                             />
                           </td>
                         </tr>
+                        {isExpanded && isAdmin && (
+                          <tr className="border-t border-border/20 bg-brand-50/10">
+                            <td colSpan={7} className="px-6 py-4">
+                              <div className="max-w-3xl">
+                                <AssignmentPanel
+                                  submissionId={sub.id}
+                                  assignments={(sub.reviewAssignments || [])
+                                    .filter((a): a is SubmissionAssignment & { reviewer: NonNullable<SubmissionAssignment["reviewer"]>; assignedAt: string } => Boolean(a.reviewer && a.assignedAt))
+                                    .map((a) => ({
+                                      id: a.id,
+                                      status: a.status,
+                                      assignedAt: a.assignedAt,
+                                      dueDate: a.dueDate ?? null,
+                                      reviewer: a.reviewer,
+                                    }))}
+                                  reviewers={reviewerPool}
+                                  currentUserId={currentUserId}
+                                  onMessage={(msg) => { setMessage(msg); setMessageTone("success"); }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       );
                     })}
                   </tbody>

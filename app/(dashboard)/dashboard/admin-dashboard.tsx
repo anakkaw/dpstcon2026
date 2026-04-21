@@ -38,8 +38,7 @@ export default function AdminDashboard({ stats, roles = [] }: { stats: Record<st
         { href: "/api/exports/proceedings?format=csv", icon: <Download className="h-4.5 w-4.5" />, label: t("dashboard.exportData"), sub: t("dashboard.exportDataDesc"), iconWrap: "bg-violet-50 text-violet-600", isExternal: true },
       ]
     : [
-        { href: "/submissions", icon: <FileText className="h-4.5 w-4.5" />, label: t("dashboard.managePapers"), sub: t("dashboard.managePapersDesc"), iconWrap: "bg-brand-50 text-brand-600" },
-        { href: "/reviews", icon: <ClipboardCheck className="h-4.5 w-4.5" />, label: t("nav.reviews"), sub: t("dashboard.assignReviewersDesc"), iconWrap: "bg-blue-50 text-blue-600" },
+        { href: "/submissions", icon: <FileText className="h-4.5 w-4.5" />, label: t("nav.workbench"), sub: t("dashboard.assignReviewersDesc"), iconWrap: "bg-brand-50 text-brand-600" },
         { href: "/track-team", icon: <Users className="h-4.5 w-4.5" />, label: t("nav.trackTeam"), sub: t("dashboard.trackTeamDesc"), iconWrap: "bg-violet-50 text-violet-600" },
         { href: "/deadlines", icon: <Settings className="h-4.5 w-4.5" />, label: t("dashboard.scheduleSetting"), sub: t("dashboard.scheduleSettingDesc"), iconWrap: "bg-emerald-50 text-emerald-600" },
       ];

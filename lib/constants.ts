@@ -15,10 +15,8 @@ export const ALLOWED_FILE_TYPES = [
 export const NAV_ITEMS = {
   ADMIN: [
     { href: "/dashboard", label: "nav.dashboard", icon: "LayoutDashboard" },
-    { href: "/submissions", label: "nav.papers", icon: "FileText" },
-    { href: "/reviews", label: "nav.reviews", icon: "ClipboardCheck" },
-    { href: "/presentations/oral", label: "nav.oralPresentation", icon: "Mic" },
-    { href: "/presentations/poster", label: "nav.posterPresentation", icon: "Image" },
+    { href: "/submissions", label: "nav.workbench", icon: "FileText" },
+    { href: "/presentations", label: "nav.presentations", icon: "Presentation" },
     { href: "/deadlines", label: "nav.scheduleAndDocs", icon: "Calendar" },
     { href: "/admin/authors", label: "nav.authorStatus", icon: "BarChart2" },
     { href: "/admin/users", label: "nav.userManagement", icon: "Users" },
@@ -26,11 +24,9 @@ export const NAV_ITEMS = {
   ],
   PROGRAM_CHAIR: [
     { href: "/dashboard", label: "nav.dashboard", icon: "LayoutDashboard" },
-    { href: "/submissions", label: "nav.papers", icon: "FileText" },
-    { href: "/reviews", label: "nav.reviews", icon: "ClipboardCheck" },
+    { href: "/submissions", label: "nav.workbench", icon: "FileText" },
     { href: "/track-team", label: "nav.trackTeam", icon: "Users" },
-    { href: "/presentations/oral", label: "nav.oralPresentation", icon: "Mic" },
-    { href: "/presentations/poster", label: "nav.posterPresentation", icon: "Image" },
+    { href: "/presentations", label: "nav.presentations", icon: "Presentation" },
     { href: "/deadlines", label: "nav.scheduleAndDocs", icon: "Calendar" },
   ],
   REVIEWER: [
