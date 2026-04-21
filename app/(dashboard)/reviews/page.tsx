@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { eq, inArray, and } from "drizzle-orm";
+import { eq, inArray, and, count } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
@@ -104,10 +104,36 @@ async function loadInitialReviewerUsers(
     return [];
   }
 
-  return db
-    .select({ id: user.id, name: user.name, email: user.email })
-    .from(user)
-    .where(inArray(user.id, reviewerIds));
+  const [users, loadRows] = await Promise.all([
+    db
+      .select({ id: user.id, name: user.name, email: user.email })
+      .from(user)
+      .where(inArray(user.id, reviewerIds)),
+    db
+      .select({
+        reviewerId: reviewAssignments.reviewerId,
+        status: reviewAssignments.status,
+        total: count(),
+      })
+      .from(reviewAssignments)
+      .where(inArray(reviewAssignments.reviewerId, reviewerIds))
+      .groupBy(reviewAssignments.reviewerId, reviewAssignments.status),
+  ]);
+
+  const loadMap = new Map<string, { active: number; completed: number }>();
+  for (const row of loadRows) {
+    const entry = loadMap.get(row.reviewerId) || { active: 0, completed: 0 };
+    if (row.status === "PENDING" || row.status === "ACCEPTED") {
+      entry.active += Number(row.total);
+    } else if (row.status === "COMPLETED") {
+      entry.completed += Number(row.total);
+    }
+    loadMap.set(row.reviewerId, entry);
+  }
+  return users.map((u) => {
+    const entry = loadMap.get(u.id);
+    return { ...u, activeLoad: entry?.active ?? 0, completedLoad: entry?.completed ?? 0 };
+  });
 }
 
 export default async function ReviewsPage() {

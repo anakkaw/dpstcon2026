@@ -11,7 +11,7 @@ import {
   userRoles,
   outgoingEmails,
 } from "@/server/db/schema";
-import { eq, sql, and, inArray, desc } from "drizzle-orm";
+import { eq, sql, and, inArray, desc, count, ne } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasTrackRole, hasRole } from "@/lib/permissions";
@@ -233,6 +233,36 @@ export default async function SubmissionDetailPage({
     completed: assignmentRows.filter((r) => r.status === "COMPLETED").length,
   };
 
+  // Fetch workload (active/completed counts) for the reviewer dropdown
+  const reviewerIdsForLoad = reviewers.map((r) => r.id);
+  let reviewersWithLoad: Array<typeof reviewers[number] & { activeLoad?: number; completedLoad?: number }> = reviewers;
+  if (reviewerIdsForLoad.length > 0) {
+    const loadRows = await db
+      .select({
+        reviewerId: reviewAssignments.reviewerId,
+        status: reviewAssignments.status,
+        total: count(),
+      })
+      .from(reviewAssignments)
+      .where(inArray(reviewAssignments.reviewerId, reviewerIdsForLoad))
+      .groupBy(reviewAssignments.reviewerId, reviewAssignments.status);
+
+    const loadMap = new Map<string, { active: number; completed: number }>();
+    for (const row of loadRows) {
+      const entry = loadMap.get(row.reviewerId) || { active: 0, completed: 0 };
+      if (row.status === "PENDING" || row.status === "ACCEPTED") {
+        entry.active += Number(row.total);
+      } else if (row.status === "COMPLETED") {
+        entry.completed += Number(row.total);
+      }
+      loadMap.set(row.reviewerId, entry);
+    }
+    reviewersWithLoad = reviewers.map((r) => {
+      const entry = loadMap.get(r.id);
+      return { ...r, activeLoad: entry?.active ?? 0, completedLoad: entry?.completed ?? 0 };
+    });
+  }
+
   const deadlineMap: Record<string, string> = {};
   for (const row of deadlineRows) {
     if (row.value && typeof row.value === "string") deadlineMap[row.key] = row.value;
@@ -245,7 +275,7 @@ export default async function SubmissionDetailPage({
       submission={{ ...submission, discussions: filteredDiscussions, reviews: filteredReviews }}
       currentUserRoles={currentUser.roles}
       currentUserId={currentUser.id}
-      reviewers={reviewers}
+      reviewers={reviewersWithLoad}
       files={files
         .filter((f) => {
           if (f.kind !== "REVIEW_ATTACHMENT") return true;

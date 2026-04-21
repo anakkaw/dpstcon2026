@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { formatDateTime, formatDate } from "@/lib/utils";
 import { submitPaper, withdrawPaper, resubmitPaper } from "@/server/actions/submission";
 import { FileUpload } from "@/components/ui/file-upload";
 import { FileList } from "@/components/ui/file-list";
+import { PdfPreviewModal } from "@/components/ui/pdf-preview-modal";
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { ReviewProgress } from "@/components/author/review-progress";
 import { PresentationCard } from "@/components/author/presentation-card";
@@ -74,7 +75,7 @@ interface Props {
   };
   currentUserRoles: string[];
   currentUserId: string;
-  reviewers: { id: string; name: string; email: string }[];
+  reviewers: { id: string; name: string; email: string; activeLoad?: number; completedLoad?: number }[];
   files: {
     id: string;
     originalName: string;
@@ -155,11 +156,98 @@ export function SubmissionDetail({
   const [overrideTarget, setOverrideTarget] = useState<string>("");
   const [overriding, setOverriding] = useState(false);
 
+  // Manuscript preview modal
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const manuscriptFile = files.find((f) => f.kind === "MANUSCRIPT");
+
   // Review form state
   const [reviewRecommendation, setReviewRecommendation] = useState("");
   const [reviewCommentsToAuthor, setReviewCommentsToAuthor] = useState("");
   const [reviewCommentsToChair, setReviewCommentsToChair] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
+
+  // Draft auto-save state
+  const draftStorageKey = `review-draft-${submission.id}-${currentUserId}`;
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alreadyCompleted = submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt);
+  const canWriteReview = isAssignedReviewer && !alreadyCompleted;
+
+  // Load saved draft once on mount
+  useEffect(() => {
+    if (!canWriteReview || draftLoaded) return;
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage.getItem(draftStorageKey) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          recommendation?: string;
+          commentsToAuthor?: string;
+          commentsToChair?: string;
+          savedAt?: number;
+        };
+        const hasContent =
+          (parsed.recommendation && parsed.recommendation.length > 0) ||
+          (parsed.commentsToAuthor && parsed.commentsToAuthor.length > 0) ||
+          (parsed.commentsToChair && parsed.commentsToChair.length > 0);
+        if (hasContent) {
+          setReviewRecommendation(parsed.recommendation || "");
+          setReviewCommentsToAuthor(parsed.commentsToAuthor || "");
+          setReviewCommentsToChair(parsed.commentsToChair || "");
+          setDraftSavedAt(parsed.savedAt || null);
+          setHasRestoredDraft(true);
+        }
+      }
+    } catch {
+      /* ignore corrupted draft */
+    }
+    setDraftLoaded(true);
+  }, [canWriteReview, draftLoaded, draftStorageKey]);
+
+  // Debounced save on changes
+  useEffect(() => {
+    if (!canWriteReview || !draftLoaded) return;
+    const hasAny =
+      reviewRecommendation.length > 0 ||
+      reviewCommentsToAuthor.length > 0 ||
+      reviewCommentsToChair.length > 0;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (!hasAny) {
+      try { window.localStorage.removeItem(draftStorageKey); } catch {}
+      setDraftSavedAt(null);
+      return;
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      try {
+        const now = Date.now();
+        window.localStorage.setItem(
+          draftStorageKey,
+          JSON.stringify({
+            recommendation: reviewRecommendation,
+            commentsToAuthor: reviewCommentsToAuthor,
+            commentsToChair: reviewCommentsToChair,
+            savedAt: now,
+          })
+        );
+        setDraftSavedAt(now);
+      } catch {
+        /* quota exceeded or disabled */
+      }
+    }, 500);
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [reviewRecommendation, reviewCommentsToAuthor, reviewCommentsToChair, canWriteReview, draftLoaded, draftStorageKey]);
+
+  function discardDraft() {
+    setReviewRecommendation("");
+    setReviewCommentsToAuthor("");
+    setReviewCommentsToChair("");
+    setHasRestoredDraft(false);
+    setDraftSavedAt(null);
+    try { window.localStorage.removeItem(draftStorageKey); } catch {}
+  }
 
   // Computed values for author view
   const hasManuscript = files.some((f) => f.kind === "MANUSCRIPT");
@@ -277,6 +365,9 @@ export function SubmissionDetail({
         setReviewRecommendation("");
         setReviewCommentsToAuthor("");
         setReviewCommentsToChair("");
+        try { window.localStorage.removeItem(draftStorageKey); } catch {}
+        setDraftSavedAt(null);
+        setHasRestoredDraft(false);
         router.refresh();
       } else {
         const data = await res.json();
@@ -767,22 +858,46 @@ export function SubmissionDetail({
         <Card id="section-review-form" accent="brand">
           <CardHeader>
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-                <Send className="h-4 w-4" />
-                {t("reviewForm.title")}
-              </h3>
-              {files.some((f) => f.kind === "MANUSCRIPT") && (
-                <a
-                  href="#section-files"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline"
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                  <Send className="h-4 w-4" />
+                  {t("reviewForm.title")}
+                </h3>
+                {isAdmin && (
+                  <Badge tone="info">{t("detail.modeReviewer")}</Badge>
+                )}
+              </div>
+              {manuscriptFile && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 hover:border-brand-300 transition-colors"
                 >
                   <Paperclip className="h-3.5 w-3.5" />
-                  {t("reviewForm.openManuscript")}
-                </a>
+                  {t("reviewForm.previewManuscript")}
+                </button>
               )}
             </div>
           </CardHeader>
           <CardBody className="space-y-3">
+            {hasRestoredDraft && (
+              <Alert tone="info">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm">
+                    <p className="font-medium">{t("reviewForm.draftRestoredTitle")}</p>
+                    <p className="text-xs text-ink-muted">
+                      {draftSavedAt
+                        ? t("reviewForm.draftRestoredAt", { time: new Date(draftSavedAt).toLocaleString() })
+                        : t("reviewForm.draftRestoredGeneric")}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={discardDraft}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {t("reviewForm.discardDraft")}
+                  </Button>
+                </div>
+              </Alert>
+            )}
             <Field label={t("reviewForm.recommendation")} htmlFor="reviewRecommendation" required>
               <Select id="reviewRecommendation" value={reviewRecommendation} onChange={(e) => setReviewRecommendation(e.target.value)}>
                 <option value="">{t("reviewForm.recommendationPlaceholder")}</option>
@@ -840,7 +955,17 @@ export function SubmissionDetail({
               })()}
             </div>
           </CardBody>
-          <CardFooter className="flex justify-end">
+          <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-ink-muted">
+              {draftSavedAt ? (
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                  {t("reviewForm.draftSavedAt", { time: new Date(draftSavedAt).toLocaleTimeString() })}
+                </span>
+              ) : (
+                <span className="text-ink-muted/70">{t("reviewForm.draftAutoSaveHint")}</span>
+              )}
+            </p>
             <Button
               onClick={handleSubmitReview}
               loading={submittingReview}
@@ -1084,6 +1209,21 @@ export function SubmissionDetail({
         />
       )}
 
+      {/* Chair-mode divider — only shown to dual-role users so they see a clear switch of context */}
+      {isAdmin && isAssignedReviewer && (
+        (["SUBMITTED", "UNDER_REVIEW"].includes(submission.status) ||
+          (submission.status === "UNDER_REVIEW" && submission.reviews.some((r) => r.completedAt))) && (
+          <div className="flex items-center gap-3 pt-2">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-300 to-amber-300" />
+            <div className="flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 border border-amber-200">
+              <Gavel className="h-3 w-3" />
+              {t("detail.chairActionsSection")}
+            </div>
+            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-300 to-amber-300" />
+          </div>
+        )
+      )}
+
       {/* Admin: Assign Reviewer */}
       {isAdmin && ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status) && (
         <AssignReviewerCard
@@ -1099,10 +1239,15 @@ export function SubmissionDetail({
       {isAdmin && submission.status === "UNDER_REVIEW" && submission.reviews.some((r) => r.completedAt) && (
         <Card id="section-decision" accent="brand">
           <CardHeader>
-            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <Gavel className="h-4 w-4" />
-              {t("detail.makeDecision")}
-            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <Gavel className="h-4 w-4" />
+                {t("detail.makeDecision")}
+              </h3>
+              {isAssignedReviewer && (
+                <Badge tone="warning">{t("detail.modeChair")}</Badge>
+              )}
+            </div>
           </CardHeader>
           <CardBody className="space-y-3">
             <Field label={t("detail.decisionOutcome")} htmlFor="decision" required>
@@ -1243,6 +1388,16 @@ export function SubmissionDetail({
           )}
         </aside>
       </div>
+
+      {manuscriptFile && (
+        <PdfPreviewModal
+          open={previewOpen}
+          submissionId={submission.id}
+          fileId={manuscriptFile.id}
+          fileName={manuscriptFile.originalName}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </div>
   );
 }

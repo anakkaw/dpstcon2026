@@ -419,3 +419,59 @@ export function reviewAssignmentEmail(data: {
     ].join("\n"),
   };
 }
+
+export function reviewReminderEmail(data: {
+  reviewerName: string;
+  paperTitle: string;
+  dueDate: string;
+  daysLeft: number; // negative = overdue
+  loginUrl: string;
+}) {
+  const safeUrl = escapeUrl(data.loginUrl);
+  const isOverdue = data.daysLeft < 0;
+  const accent = isOverdue ? "#ef4444" : "#f59e0b";
+  const subjectPrefix = isOverdue ? "[เลยกำหนดแล้ว]" : "[เตือนกำหนดรีวิว]";
+  const headline = isOverdue
+    ? `งานรีวิวเลยกำหนดส่งมาแล้ว ${Math.abs(data.daysLeft)} วัน`
+    : data.daysLeft === 0
+      ? "กำหนดส่งรีวิววันนี้"
+      : `เหลือเวลาอีก ${data.daysLeft} วันก่อนถึงกำหนดส่งรีวิว`;
+
+  return {
+    subject: `${subjectPrefix} ${data.paperTitle}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: ${accent};">DPSTCon — เตือนกำหนดส่งรีวิว</h2>
+        <p>เรียน ${escapeHtml(data.reviewerName)},</p>
+        <p>${escapeHtml(headline)}</p>
+        <p style="background: #f8fafc; padding: 12px; border-radius: 8px; border-left: 4px solid ${accent};">
+          <strong>${escapeHtml(data.paperTitle)}</strong><br/>
+          <span style="color: #64748b; font-size: 13px;">กำหนดส่ง: ${escapeHtml(data.dueDate)}</span>
+        </p>
+        <a href="${safeUrl}" style="display: inline-block; background: ${accent}; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+          เข้าสู่ระบบเพื่อส่งรีวิว
+        </a>
+        <p style="margin-top: 16px; font-size: 13px; color: #374151;">
+          หากพบปัญหา กรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (<a href="mailto:watcharaponga@nu.ac.th">watcharaponga@nu.ac.th</a>)
+        </p>
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
+          อีเมลนี้ส่งอัตโนมัติจากระบบ DPSTCon Conference Management System
+        </p>
+      </div>
+    `,
+    text: [
+      `เรียน ${data.reviewerName},`,
+      ``,
+      headline,
+      ``,
+      `บทความ: "${data.paperTitle}"`,
+      `กำหนดส่ง: ${data.dueDate}`,
+      ``,
+      `เข้าสู่ระบบเพื่อส่งรีวิว: ${safeUrl}`,
+      ``,
+      `หากพบปัญหา กรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (watcharaponga@nu.ac.th)`,
+      `---`,
+      `อีเมลนี้ส่งอัตโนมัติจากระบบ DPSTCon Conference Management System`,
+    ].join("\n"),
+  };
+}

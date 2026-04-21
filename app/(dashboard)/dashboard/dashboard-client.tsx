@@ -3,11 +3,26 @@
 import dynamic from "next/dynamic";
 import { getRoleLabels } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
+import { ClipboardCheck, LayoutDashboard, Star, FileText } from "lucide-react";
 
 const AuthorDashboard = dynamic(() => import("./author-dashboard"));
 const ReviewerDashboard = dynamic(() => import("./reviewer-dashboard"));
 const AdminDashboard = dynamic(() => import("./admin-dashboard"));
 const CommitteeDashboard = dynamic(() => import("./committee-dashboard"));
+
+function RoleSectionHeader({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-center gap-3 border-l-4 border-brand-500 pl-4 py-1">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+        {icon}
+      </div>
+      <div>
+        <h2 className="text-lg font-semibold text-ink leading-tight">{title}</h2>
+        <p className="text-xs text-ink-muted">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
 
 interface DashboardClientProps {
   primaryRole: string;
@@ -55,14 +70,67 @@ export function DashboardClient({
         </div>
       </section>
 
-      {visibleRoles.includes("AUTHOR") && (
-        <AuthorDashboard stats={statsByRole.AUTHOR || {}} />
-      )}
-      {visibleRoles.includes("REVIEWER") && (
-        <ReviewerDashboard stats={statsByRole.REVIEWER || {}} />
-      )}
-      {showManagerDashboard && <AdminDashboard stats={statsByRole.MANAGER || {}} roles={visibleRoles} />}
-      {visibleRoles.includes("COMMITTEE") && <CommitteeDashboard stats={statsByRole.COMMITTEE} />}
+      {(() => {
+        // Count distinct workspace contexts to decide whether to show section headers
+        const contextCount =
+          (visibleRoles.includes("AUTHOR") ? 1 : 0) +
+          (visibleRoles.includes("REVIEWER") ? 1 : 0) +
+          (showManagerDashboard ? 1 : 0) +
+          (visibleRoles.includes("COMMITTEE") ? 1 : 0);
+        const hasMultiple = contextCount > 1;
+        return (
+          <>
+            {visibleRoles.includes("AUTHOR") && (
+              <section className="space-y-4">
+                {hasMultiple && (
+                  <RoleSectionHeader
+                    icon={<FileText className="h-4.5 w-4.5" />}
+                    title={t("dashboard.roleSection.author")}
+                    subtitle={t("dashboard.roleSection.authorDesc")}
+                  />
+                )}
+                <AuthorDashboard stats={statsByRole.AUTHOR || {}} />
+              </section>
+            )}
+            {visibleRoles.includes("REVIEWER") && (
+              <section className="space-y-4">
+                {hasMultiple && (
+                  <RoleSectionHeader
+                    icon={<ClipboardCheck className="h-4.5 w-4.5" />}
+                    title={t("dashboard.roleSection.reviewer")}
+                    subtitle={t("dashboard.roleSection.reviewerDesc")}
+                  />
+                )}
+                <ReviewerDashboard stats={statsByRole.REVIEWER || {}} />
+              </section>
+            )}
+            {showManagerDashboard && (
+              <section className="space-y-4">
+                {hasMultiple && (
+                  <RoleSectionHeader
+                    icon={<LayoutDashboard className="h-4.5 w-4.5" />}
+                    title={visibleRoles.includes("ADMIN") ? t("dashboard.roleSection.admin") : t("dashboard.roleSection.chair")}
+                    subtitle={visibleRoles.includes("ADMIN") ? t("dashboard.roleSection.adminDesc") : t("dashboard.roleSection.chairDesc")}
+                  />
+                )}
+                <AdminDashboard stats={statsByRole.MANAGER || {}} roles={visibleRoles} />
+              </section>
+            )}
+            {visibleRoles.includes("COMMITTEE") && (
+              <section className="space-y-4">
+                {hasMultiple && (
+                  <RoleSectionHeader
+                    icon={<Star className="h-4.5 w-4.5" />}
+                    title={t("dashboard.roleSection.committee")}
+                    subtitle={t("dashboard.roleSection.committeeDesc")}
+                  />
+                )}
+                <CommitteeDashboard stats={statsByRole.COMMITTEE} />
+              </section>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }

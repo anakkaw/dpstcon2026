@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Download, Loader2, Trash2 } from "lucide-react";
+import { FileText, Download, Loader2, Trash2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { Alert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { PdfPreviewModal } from "@/components/ui/pdf-preview-modal";
 
 interface StoredFile {
   id: string;
@@ -51,7 +52,13 @@ export function FileList({
   const [downloading, setDownloading] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<StoredFile | null>(null);
+  const [previewFile, setPreviewFile] = useState<StoredFile | null>(null);
   const [error, setError] = useState("");
+
+  function isPreviewable(file: StoredFile) {
+    if (file.mimeType === "application/pdf") return true;
+    return file.originalName.toLowerCase().endsWith(".pdf");
+  }
 
   async function handleDownload(fileId: string) {
     setDownloading(fileId);
@@ -131,6 +138,19 @@ export function FileList({
             </div>
           </div>
           <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
+            {isPreviewable(file) && (
+              <button
+                type="button"
+                onClick={() => setPreviewFile(file)}
+                className={cn(
+                  "inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:w-auto sm:flex-none",
+                  "text-ink hover:bg-surface-alt active:bg-surface-hover"
+                )}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                {t("fileUpload.preview")}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleDownload(file.id)}
@@ -172,6 +192,15 @@ export function FileList({
           </div>
         </div>
       ))}
+      {previewFile && (
+        <PdfPreviewModal
+          open={!!previewFile}
+          submissionId={submissionId}
+          fileId={previewFile.id}
+          fileName={previewFile.originalName}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
     </div>
   );
 }

@@ -48,6 +48,8 @@ export interface ReviewerUser {
   id: string;
   name: string;
   email: string;
+  activeLoad?: number;
+  completedLoad?: number;
 }
 
 interface GroupedSubmission {
@@ -344,50 +346,85 @@ export function ReviewsPageClient({
     { key: "DECLINED", label: t("reviews.declined"), count: statusCounts.DECLINED || 0 },
   ].filter((tab) => tab.key === "ALL" || tab.count > 0);
 
+  const myTasks = roles.includes("REVIEWER")
+    ? assignments.filter((a) => a.reviewer?.id === currentUserId && a.status !== "COMPLETED")
+    : [];
+  const myOverdueCount = myTasks.filter((a) => a.status !== "DECLINED" && isOverdue(a.dueDate)).length;
+
   return (
     <div className="space-y-6">
-      <SectionTitle
-        title={t("reviews.management")}
-        subtitle={t("reviews.summary", { submissions: groups.length, assignments: totalAssignments })}
-      />
-
-      {/* Personal review tasks for PROGRAM_CHAIR who is also a reviewer */}
-      {roles.includes("REVIEWER") && (() => {
-        const myTasks = assignments.filter((a) => a.reviewer?.id === currentUserId && a.status !== "COMPLETED");
-        if (myTasks.length === 0) return null;
-        return (
-          <Card accent="info">
-            <CardHeader>
-              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-                <ClipboardCheck className="h-4 w-4" />
-                {t("reviews.myReviewTasks")} ({myTasks.length})
-              </h3>
-            </CardHeader>
+      {/* Personal review tasks — shown first for dual-role chairs so they don't lose their own work */}
+      {myTasks.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="space-y-0.5">
+              <h2 className="text-base font-semibold text-ink flex items-center gap-2">
+                <ClipboardCheck className="h-4 w-4 text-brand-600" />
+                {t("reviews.myReviewTasksHeading")}
+              </h2>
+              <p className="text-sm text-ink-muted">{t("reviews.myReviewTasksSubtitle", { n: myTasks.length })}</p>
+            </div>
+            {myOverdueCount > 0 && (
+              <Badge tone="danger">
+                <AlertTriangle className="h-3 w-3" />
+                {t("reviews.overdueCount", { n: myOverdueCount })}
+              </Badge>
+            )}
+          </div>
+          <Card accent="brand">
             <CardBody className="space-y-2">
-              {myTasks.map((assignment) => (
-                <Link key={assignment.id} href={`/submissions/${assignment.submission.id}`}>
-                  <div className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-alt transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-ink truncate block">{assignment.submission.title}</span>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-ink-muted">
+              {myTasks.map((assignment) => {
+                const overdue = assignment.status !== "DECLINED" && isOverdue(assignment.dueDate);
+                const dueSoon = !overdue && assignment.status !== "DECLINED" && isDueSoon(assignment.dueDate);
+                return (
+                  <div key={assignment.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-border-light bg-white p-3 hover:shadow-sm transition-all">
+                    <Link href={`/submissions/${assignment.submission.id}`} className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold text-ink line-clamp-2 block hover:text-brand-600">{assignment.submission.title}</span>
+                      <div className="mt-1.5 flex items-center gap-2 text-xs text-ink-muted flex-wrap">
                         {assignment.submission.track && <Badge tone="info">{assignment.submission.track.name}</Badge>}
+                        <Badge tone={STATUS_COLORS[assignment.status] || "neutral"} dot>
+                          {assignmentLabels[assignment.status] || assignment.status}
+                        </Badge>
                         {assignment.dueDate && (
-                          <span className={isOverdue(assignment.dueDate) ? "text-danger font-medium" : isDueSoon(assignment.dueDate) ? "text-amber-600 font-medium" : ""}>
+                          <span className={`inline-flex items-center gap-1 ${overdue ? "text-red-600 font-semibold" : dueSoon ? "text-amber-600 font-medium" : ""}`}>
+                            {overdue && <AlertTriangle className="h-3 w-3" />}
+                            {dueSoon && <Clock className="h-3 w-3" />}
                             {t("reviews.due")} {formatDate(assignment.dueDate, locale)}
                           </span>
                         )}
                       </div>
+                    </Link>
+                    <div className="flex gap-2 shrink-0">
+                      {assignment.status === "PENDING" && (
+                        <>
+                          <Button size="sm" onClick={() => handleRespond(assignment.id, "ACCEPTED")} loading={respondingId === assignment.id}>
+                            <CheckCircle className="h-3.5 w-3.5" />{t("reviews.accept")}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => handleRespond(assignment.id, "DECLINED")} loading={respondingId === assignment.id}>
+                            <XCircle className="h-3.5 w-3.5" />{t("reviews.decline")}
+                          </Button>
+                        </>
+                      )}
+                      {assignment.status === "ACCEPTED" && (
+                        <Link href={`/submissions/${assignment.submission.id}#section-review-form`}>
+                          <Button size="sm">
+                            <ExternalLink className="h-3.5 w-3.5" />{t("reviews.writeReview")}
+                          </Button>
+                        </Link>
+                      )}
                     </div>
-                    <Badge tone={STATUS_COLORS[assignment.status] || "neutral"}>
-                      {assignmentLabels[assignment.status] || assignment.status}
-                    </Badge>
                   </div>
-                </Link>
-              ))}
+                );
+              })}
             </CardBody>
           </Card>
-        );
-      })()}
+        </section>
+      )}
+
+      <SectionTitle
+        title={t("reviews.management")}
+        subtitle={t("reviews.managementSubtitleChair", { submissions: groups.length, assignments: totalAssignments })}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <SummaryStatCard label={t("reviews.submissions")} value={groups.length} icon={<ClipboardCheck className="h-5 w-5" />} color="blue" />
@@ -594,11 +631,19 @@ export function ReviewsPageClient({
                                   <option value="">{t("reviews.selectReviewer")}</option>
                                   {reviewerUsers
                                     .filter((reviewer) => !assignedReviewerIds.has(reviewer.id))
-                                    .map((reviewer) => (
-                                      <option key={reviewer.id} value={reviewer.id}>
-                                        {displayNameTh(reviewer)} ({reviewer.email})
-                                      </option>
-                                    ))}
+                                    .slice()
+                                    .sort((a, b) => (a.activeLoad || 0) - (b.activeLoad || 0))
+                                    .map((reviewer) => {
+                                      const load = reviewer.activeLoad ?? 0;
+                                      const suffix = load === 0
+                                        ? ` · ${t("reviews.workloadFree")}`
+                                        : ` · ${t("reviews.workloadActive", { n: load })}`;
+                                      return (
+                                        <option key={reviewer.id} value={reviewer.id}>
+                                          {displayNameTh(reviewer)} ({reviewer.email}){suffix}
+                                        </option>
+                                      );
+                                    })}
                                 </Select>
                               </Field>
                               <Field label={t("reviews.dueDate")}>
@@ -784,9 +829,17 @@ export function ReviewsPageClient({
                                         <option value="">{t("reviews.selectReviewer")}</option>
                                         {reviewerUsers
                                           .filter((reviewer) => !assignedReviewerIds.has(reviewer.id))
-                                          .map((reviewer) => (
-                                            <option key={reviewer.id} value={reviewer.id}>{displayNameTh(reviewer)} ({reviewer.email})</option>
-                                          ))}
+                                          .slice()
+                                          .sort((a, b) => (a.activeLoad || 0) - (b.activeLoad || 0))
+                                          .map((reviewer) => {
+                                            const load = reviewer.activeLoad ?? 0;
+                                            const suffix = load === 0
+                                              ? ` · ${t("reviews.workloadFree")}`
+                                              : ` · ${t("reviews.workloadActive", { n: load })}`;
+                                            return (
+                                              <option key={reviewer.id} value={reviewer.id}>{displayNameTh(reviewer)} ({reviewer.email}){suffix}</option>
+                                            );
+                                          })}
                                       </Select>
                                     </Field>
                                     <Field label={t("reviews.dueDate")} className="w-44">

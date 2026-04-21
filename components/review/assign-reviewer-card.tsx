@@ -18,6 +18,10 @@ interface Reviewer {
   prefixTh?: string | null;
   firstNameTh?: string | null;
   lastNameTh?: string | null;
+  /** Number of active (PENDING+ACCEPTED, not completed) assignments */
+  activeLoad?: number;
+  /** Number of completed reviews */
+  completedLoad?: number;
 }
 
 interface AssignReviewerCardProps {
@@ -98,13 +102,38 @@ export function AssignReviewerCard({
                 onChange={(e) => setSelectedReviewer(e.target.value)}
               >
                 <option value="">{t("reviews.selectReviewer")}</option>
-                {availableReviewers.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {displayNameTh(r)} ({r.email})
-                  </option>
-                ))}
+                {availableReviewers
+                  .slice()
+                  .sort((a, b) => (a.activeLoad || 0) - (b.activeLoad || 0))
+                  .map((r) => {
+                    const load = r.activeLoad ?? 0;
+                    const suffix =
+                      load === 0
+                        ? ` · ${t("reviews.workloadFree")}`
+                        : ` · ${t("reviews.workloadActive", { n: load })}`;
+                    return (
+                      <option key={r.id} value={r.id}>
+                        {displayNameTh(r)} ({r.email}){suffix}
+                      </option>
+                    );
+                  })}
               </Select>
             </Field>
+            {selectedReviewer && (() => {
+              const picked = availableReviewers.find((r) => r.id === selectedReviewer);
+              if (!picked || picked.activeLoad === undefined) return null;
+              const isHeavy = (picked.activeLoad ?? 0) >= 5;
+              return (
+                <p className={`mt-1 text-xs ${isHeavy ? "text-amber-700 font-medium" : "text-ink-muted"}`}>
+                  {isHeavy
+                    ? t("reviews.workloadHeavy", { n: picked.activeLoad })
+                    : t("reviews.workloadSummary", {
+                        active: picked.activeLoad ?? 0,
+                        done: picked.completedLoad ?? 0,
+                      })}
+                </p>
+              );
+            })()}
           </div>
           {showDueDate && (
             <div className="sm:w-40">

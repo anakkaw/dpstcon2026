@@ -316,6 +316,7 @@ export const reviewAssignments = pgTable(
     assignedAt: timestamp("assigned_at").defaultNow().notNull(),
     respondedAt: timestamp("responded_at"),
     dueDate: timestamp("due_date"),
+    lastReminderAt: timestamp("last_reminder_at"),
   },
   (table) => [
     index("review_assignments_submission_idx").on(table.submissionId),
