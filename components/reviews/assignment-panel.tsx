@@ -20,6 +20,7 @@ import {
   Send,
   Clock,
   AlertTriangle,
+  UserCheck,
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -63,6 +64,10 @@ interface AssignmentPanelProps {
   assignments: PanelAssignment[];
   reviewers: ReviewerOption[];
   currentUserId?: string;
+  /** Track the submission belongs to. Required if the viewer can self-assign. */
+  trackId?: string | null;
+  /** Viewer is a PC/Admin who can assign themselves as a reviewer on this track. */
+  canAssignSelf?: boolean;
   /** Called with a user-facing message after any mutation */
   onMessage?: (msg: string) => void;
 }
@@ -83,6 +88,8 @@ export function AssignmentPanel({
   assignments,
   reviewers,
   currentUserId,
+  trackId,
+  canAssignSelf = false,
   onMessage,
 }: AssignmentPanelProps) {
   const { t, locale } = useI18n();
@@ -94,6 +101,7 @@ export function AssignmentPanel({
   const [selectedReviewerId, setSelectedReviewerId] = useState("");
   const [assignDueDate, setAssignDueDate] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
+  const [selfAssigning, setSelfAssigning] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [assignmentToRemove, setAssignmentToRemove] = useState<PanelAssignment | null>(null);
 
@@ -101,6 +109,58 @@ export function AssignmentPanel({
     () => new Set(assignments.map((a) => a.reviewer?.id).filter(Boolean) as string[]),
     [assignments]
   );
+
+  const isSelfAlreadyAssigned = Boolean(
+    currentUserId && assignedReviewerIds.has(currentUserId)
+  );
+  const canShowSelfAssign =
+    canAssignSelf &&
+    Boolean(currentUserId) &&
+    Boolean(trackId) &&
+    !isSelfAlreadyAssigned;
+
+  async function handleAssignSelf() {
+    if (!currentUserId || !trackId) return;
+    setSelfAssigning(true);
+    try {
+      // Step 1: make sure the current user has a REVIEWER role on this track.
+      // A 409 from /track-members means "already a member" — that's fine.
+      const teamRes = await fetch(`/api/track-members/${trackId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUserId, role: "REVIEWER" }),
+      });
+      if (!teamRes.ok && teamRes.status !== 409) {
+        const data = await teamRes.json().catch(() => ({}));
+        onMessage?.(data.error || t("reviews.assignFailed"));
+        setSelfAssigning(false);
+        return;
+      }
+
+      // Step 2: assign the current user to this submission. Again tolerate 409
+      // if the viewer was somehow already assigned between renders.
+      const assignRes = await fetch("/api/reviews/assignments/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          reviewerId: currentUserId,
+        }),
+      });
+      if (!assignRes.ok && assignRes.status !== 409) {
+        const data = await assignRes.json().catch(() => ({}));
+        onMessage?.(data.error || t("reviews.assignFailed"));
+        setSelfAssigning(false);
+        return;
+      }
+
+      onMessage?.(t("reviews.selfAssignSuccess"));
+      router.refresh();
+    } catch {
+      onMessage?.(t("reviews.assignFailed"));
+    }
+    setSelfAssigning(false);
+  }
 
   async function handleAssign() {
     if (!selectedReviewerId) return;
@@ -269,14 +329,27 @@ export function AssignmentPanel({
       })}
 
       {!isAssigning && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setIsAssigning(true)}
-        >
-          <UserPlus className="h-4 w-4" />
-          {t("reviews.assignReviewer")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIsAssigning(true)}
+          >
+            <UserPlus className="h-4 w-4" />
+            {t("reviews.assignReviewer")}
+          </Button>
+          {canShowSelfAssign && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleAssignSelf}
+              loading={selfAssigning}
+            >
+              <UserCheck className="h-4 w-4" />
+              {t("reviews.assignSelf")}
+            </Button>
+          )}
+        </div>
       )}
 
       {isAssigning && (

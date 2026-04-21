@@ -883,6 +883,8 @@ export function SubmissionsPageClient({
                                     }))}
                                   reviewers={reviewerPool}
                                   currentUserId={currentUserId}
+                                  trackId={sub.track?.id ?? null}
+                                  canAssignSelf={isAdmin}
                                   onMessage={(msg) => { setMessage(msg); setMessageTone("success"); }}
                                 />
                               </div>

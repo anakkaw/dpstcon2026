@@ -367,6 +367,8 @@ const en: Record<TranslationKey, string> = {
   "reviews.workloadCompact": "reviewing {active} · awaiting {pending}",
   "reviews.youLabel": "You",
   "reviews.youAreReviewer": "You are a reviewer",
+  "reviews.assignSelf": "Assign myself as reviewer",
+  "reviews.selfAssignSuccess": "You're now a reviewer on this paper",
   "reviews.dueDate": "Due Date",
   "reviews.assign": "Assign",
   "reviews.assigned": "Assigned",

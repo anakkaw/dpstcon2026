@@ -357,6 +357,8 @@ const th = {
   "reviews.workloadCompact": "รีวิว {active} · รอรับ {pending}",
   "reviews.youLabel": "คุณ",
   "reviews.youAreReviewer": "คุณเป็นผู้รีวิว",
+  "reviews.assignSelf": "ตั้งตัวเองเป็นผู้รีวิว",
+  "reviews.selfAssignSuccess": "ตั้งตัวเองเป็นผู้รีวิวเรียบร้อยแล้ว",
   "reviews.dueDate": "กำหนดส่ง",
   "reviews.assign": "มอบหมาย",
   "reviews.assigned": "มอบหมายแล้ว",
