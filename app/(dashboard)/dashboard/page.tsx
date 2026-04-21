@@ -6,7 +6,10 @@ import { db } from "@/server/db";
 import {
   decisions,
   notifications,
+  posterSlotJudges,
   presentationAssignments,
+  presentationCommitteeAssignments,
+  presentationEvaluations,
   reviewAssignments,
   reviews,
   settings,
@@ -226,6 +229,95 @@ async function loadManagerStats(
   };
 }
 
+async function loadCommitteeStats(userId: string): Promise<DashboardStats> {
+  const [committeeRows, posterSlotRows] = await Promise.all([
+    db
+      .select({
+        presentationId: presentationCommitteeAssignments.presentationId,
+        type: presentationAssignments.type,
+        scheduledAt: presentationAssignments.scheduledAt,
+      })
+      .from(presentationCommitteeAssignments)
+      .innerJoin(
+        presentationAssignments,
+        eq(presentationCommitteeAssignments.presentationId, presentationAssignments.id)
+      )
+      .where(eq(presentationCommitteeAssignments.judgeId, userId)),
+    db
+      .select({
+        presentationId: presentationAssignments.id,
+        type: presentationAssignments.type,
+        scheduledAt: presentationAssignments.scheduledAt,
+      })
+      .from(posterSlotJudges)
+      .innerJoin(
+        presentationAssignments,
+        and(
+          eq(posterSlotJudges.submissionId, presentationAssignments.submissionId),
+          eq(presentationAssignments.type, "POSTER")
+        )
+      )
+      .where(eq(posterSlotJudges.judgeId, userId)),
+  ]);
+
+  const assignmentMap = new Map<
+    string,
+    { type: string; scheduledAt: Date | null }
+  >();
+  for (const row of committeeRows) {
+    assignmentMap.set(row.presentationId, {
+      type: row.type,
+      scheduledAt: row.scheduledAt,
+    });
+  }
+  for (const row of posterSlotRows) {
+    if (!assignmentMap.has(row.presentationId)) {
+      assignmentMap.set(row.presentationId, {
+        type: row.type,
+        scheduledAt: row.scheduledAt,
+      });
+    }
+  }
+
+  const presentationIds = Array.from(assignmentMap.keys());
+  const evaluatedIds = new Set<string>();
+  if (presentationIds.length > 0) {
+    const evaluations = await db
+      .select({ presentationId: presentationEvaluations.presentationId })
+      .from(presentationEvaluations)
+      .where(
+        and(
+          eq(presentationEvaluations.judgeId, userId),
+          inArray(presentationEvaluations.presentationId, presentationIds)
+        )
+      );
+    for (const ev of evaluations) evaluatedIds.add(ev.presentationId);
+  }
+
+  let oralCount = 0;
+  let posterCount = 0;
+  let scheduledCount = 0;
+  let pendingCount = 0;
+  let completedCount = 0;
+  const now = Date.now();
+
+  for (const [pid, info] of assignmentMap.entries()) {
+    if (info.type === "ORAL") oralCount++;
+    else if (info.type === "POSTER") posterCount++;
+    if (info.scheduledAt && info.scheduledAt.getTime() > now) scheduledCount++;
+    if (evaluatedIds.has(pid)) completedCount++;
+    else pendingCount++;
+  }
+
+  return {
+    oralCount,
+    posterCount,
+    scheduledCount,
+    pendingCount,
+    completedCount,
+  };
+}
+
 export default async function DashboardPage() {
   const authContext = await getServerAuthContext();
   if (!authContext?.user.isActive) redirect("/login");
@@ -257,6 +349,14 @@ export default async function DashboardPage() {
     loaders.push(
       loadManagerStats(currentUser).then((stats) => {
         statsByRole.MANAGER = stats;
+      })
+    );
+  }
+
+  if (hasRole(currentUser, "COMMITTEE")) {
+    loaders.push(
+      loadCommitteeStats(currentUser.id).then((stats) => {
+        statsByRole.COMMITTEE = stats;
       })
     );
   }

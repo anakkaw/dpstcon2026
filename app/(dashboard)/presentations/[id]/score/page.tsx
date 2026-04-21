@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasRole } from "@/lib/permissions";
 import { db } from "@/server/db";
@@ -84,6 +84,67 @@ export default async function ScorePresentationPage({
     }),
   ]);
 
+  // Find the next pending presentation for this judge (skip current one)
+  let nextPendingId: string | null = null;
+  if (!isAdmin) {
+    const [committeeRows, posterRows] = await Promise.all([
+      db
+        .select({ id: presentationCommitteeAssignments.presentationId })
+        .from(presentationCommitteeAssignments)
+        .where(eq(presentationCommitteeAssignments.judgeId, currentUser.id)),
+      db
+        .select({ id: presentationAssignments.id })
+        .from(posterSlotJudges)
+        .innerJoin(
+          presentationAssignments,
+          and(
+            eq(posterSlotJudges.submissionId, presentationAssignments.submissionId),
+            eq(presentationAssignments.type, "POSTER")
+          )
+        )
+        .where(eq(posterSlotJudges.judgeId, currentUser.id)),
+    ]);
+
+    const otherIds = Array.from(
+      new Set([
+        ...committeeRows.map((r) => r.id),
+        ...posterRows.map((r) => r.id),
+      ])
+    ).filter((pid) => pid !== id);
+
+    if (otherIds.length > 0) {
+      const [evaluatedRows, pendingDetails] = await Promise.all([
+        db
+          .select({ presentationId: presentationEvaluations.presentationId })
+          .from(presentationEvaluations)
+          .where(
+            and(
+              eq(presentationEvaluations.judgeId, currentUser.id),
+              inArray(presentationEvaluations.presentationId, otherIds)
+            )
+          ),
+        db
+          .select({
+            id: presentationAssignments.id,
+            scheduledAt: presentationAssignments.scheduledAt,
+          })
+          .from(presentationAssignments)
+          .where(inArray(presentationAssignments.id, otherIds)),
+      ]);
+
+      const evaluatedSet = new Set(evaluatedRows.map((e) => e.presentationId));
+      const pending = pendingDetails
+        .filter((row) => !evaluatedSet.has(row.id))
+        .sort((a, b) => {
+          const at = a.scheduledAt?.getTime() ?? Number.POSITIVE_INFINITY;
+          const bt = b.scheduledAt?.getTime() ?? Number.POSITIVE_INFINITY;
+          return at - bt;
+        });
+
+      nextPendingId = pending[0]?.id ?? null;
+    }
+  }
+
   return (
     <ScoreForm
       presentation={{
@@ -106,6 +167,7 @@ export default async function ScorePresentationPage({
       initialComments={existing?.comments ?? ""}
       hasExisting={Boolean(existing)}
       lastSavedAt={existing?.createdAt?.toISOString() ?? null}
+      nextPendingId={nextPendingId}
     />
   );
 }

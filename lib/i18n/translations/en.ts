@@ -466,6 +466,12 @@ const en: Record<TranslationKey, string> = {
   "scoring.viewPaper": "View full paper",
   "scoring.lastSaved": "Last saved: {date}",
   "scoring.readyToSubmit": "Ready to submit",
+  "scoring.next": "Next",
+  "dashboard.committeePendingHeadline": "{n} pending to score",
+  "dashboard.committeeAllDone": "All assignments scored",
+  "dashboard.committeeNoAssignments": "No assignments yet",
+  "dashboard.committeeStartScoring": "Start scoring",
+  "dashboard.committeeUpcomingCount": "{n} upcoming scheduled",
 
   // ─── Poster Planner ──────────────────────────────────
   "poster.plannerTitle": "Poster Group Planner",

@@ -1,13 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Collapsible } from "@/components/ui/collapsible";
 import { Alert } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
@@ -24,8 +22,9 @@ import {
   Sparkles,
   MessageSquare,
   ArrowLeft,
+  ArrowRight,
   Star,
-  FileText,
+  ExternalLink,
   History,
 } from "lucide-react";
 
@@ -60,6 +59,7 @@ interface ScoreFormProps {
   initialComments: string;
   hasExisting: boolean;
   lastSavedAt: string | null;
+  nextPendingId: string | null;
 }
 
 const LEVEL_COLORS: Record<number, { bg: string; border: string; text: string; dot: string }> = {
@@ -81,6 +81,7 @@ export function ScoreForm({
   initialComments,
   hasExisting,
   lastSavedAt,
+  nextPendingId,
 }: ScoreFormProps) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -258,12 +259,16 @@ export function ScoreForm({
           </div>
 
           <div className="flex flex-wrap gap-2 pt-2">
-            <Link href={`/submissions/${presentation.submission.id}`}>
+            <a
+              href={`/submissions/${presentation.submission.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Button size="sm" variant="secondary">
-                <FileText className="h-3.5 w-3.5" />
+                <ExternalLink className="h-3.5 w-3.5" />
                 {t("scoring.viewPaper")}
               </Button>
-            </Link>
+            </a>
           </div>
 
           {hasExisting && lastSavedAt && (
@@ -274,40 +279,6 @@ export function ScoreForm({
           )}
         </CardBody>
       </Card>
-
-      {/* ── Rubric reference ── */}
-      {criteria.length > 0 && (
-        <Collapsible title={t("scoring.rubricReference")} defaultOpen={false}>
-          <div className="space-y-2 p-1">
-            {criteria.map((criterion, index) => {
-              const name = locale === "en" ? criterion.nameEn : criterion.nameTh;
-              const description =
-                locale === "en" ? criterion.descriptionEn : criterion.descriptionTh;
-              return (
-                <div
-                  key={criterion.id}
-                  className="flex items-start gap-3 rounded-lg bg-surface-alt p-3"
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
-                    {index + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-ink">{name}</p>
-                      <span className="shrink-0 rounded bg-white px-2 py-0.5 text-xs font-semibold text-ink">
-                        {criterion.totalPoints}
-                      </span>
-                    </div>
-                    {description && (
-                      <p className="mt-1 text-xs text-ink-muted">{description}</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Collapsible>
-      )}
 
       {/* ── Score summary / progress ── */}
       <Card accent={allCompleted ? "success" : "info"}>
@@ -432,6 +403,16 @@ export function ScoreForm({
               <Save className="h-4 w-4" />
               {hasExisting ? t("scoring.update") : t("scoring.submit")}
             </Button>
+            {nextPendingId && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => router.push(`/presentations/${nextPendingId}/score`)}
+              >
+                {t("scoring.next")}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -465,11 +446,26 @@ function CriterionCard({
   const orderedLevels = criterion.levels;
 
   const handleKeyDown = (event: React.KeyboardEvent, currentLevel: number) => {
-    const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
-    if (!keys.includes(event.key)) return;
+    const navKeys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+    const visibleOrder = [...orderedLevels].sort((a, b) => a.level - b.level);
+
+    // Digit shortcut: 1-5 jumps straight to that level
+    if (/^[1-5]$/.test(event.key)) {
+      event.preventDefault();
+      const digit = Number(event.key) as 1 | 2 | 3 | 4 | 5;
+      onSelect(digit);
+      requestAnimationFrame(() => {
+        const nextButton = groupRef.current?.querySelector<HTMLButtonElement>(
+          `[data-level="${digit}"]`
+        );
+        nextButton?.focus();
+      });
+      return;
+    }
+
+    if (!navKeys.includes(event.key)) return;
     event.preventDefault();
 
-    const visibleOrder = [...orderedLevels].sort((a, b) => a.level - b.level); // 1,2,3,4,5 left-to-right
     const currentIndex = visibleOrder.findIndex((l) => l.level === currentLevel);
     let nextIndex = currentIndex;
     if (event.key === "ArrowRight" || event.key === "ArrowDown") {

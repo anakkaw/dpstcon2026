@@ -468,6 +468,12 @@ const th = {
   "scoring.viewPaper": "ดูบทความฉบับเต็ม",
   "scoring.lastSaved": "บันทึกล่าสุด: {date}",
   "scoring.readyToSubmit": "พร้อมส่งผลการประเมิน",
+  "scoring.next": "ถัดไป",
+  "dashboard.committeePendingHeadline": "มี {n} รายการรอประเมิน",
+  "dashboard.committeeAllDone": "ประเมินครบทุกรายการแล้ว",
+  "dashboard.committeeNoAssignments": "ยังไม่มีงานที่ได้รับมอบหมาย",
+  "dashboard.committeeStartScoring": "เริ่มให้คะแนน",
+  "dashboard.committeeUpcomingCount": "มี {n} รายการที่มีกำหนดการข้างหน้า",
 
   // ─── Poster Planner ──────────────────────────────────
   "poster.plannerTitle": "วางแผนจัดกลุ่มโปสเตอร์",
