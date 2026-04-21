@@ -8,6 +8,7 @@ import {
   presentationAssignments,
   presentationCommitteeAssignments,
   presentationEvaluations,
+  submissions,
 } from "@/server/db/schema";
 import { getPresentationRubric } from "@/server/presentation-rubrics";
 import { ScoreForm } from "./score-form";
@@ -127,14 +128,25 @@ export default async function ScorePresentationPage({
           .select({
             id: presentationAssignments.id,
             scheduledAt: presentationAssignments.scheduledAt,
+            submissionStatus: submissions.status,
           })
           .from(presentationAssignments)
+          .innerJoin(
+            submissions,
+            eq(presentationAssignments.submissionId, submissions.id)
+          )
           .where(inArray(presentationAssignments.id, otherIds)),
       ]);
 
       const evaluatedSet = new Set(evaluatedRows.map((e) => e.presentationId));
       const pending = pendingDetails
-        .filter((row) => !evaluatedSet.has(row.id))
+        .filter(
+          (row) =>
+            !evaluatedSet.has(row.id) &&
+            row.submissionStatus !== "WITHDRAWN" &&
+            row.submissionStatus !== "DESK_REJECTED" &&
+            row.submissionStatus !== "REJECTED"
+        )
         .sort((a, b) => {
           const at = a.scheduledAt?.getTime() ?? Number.POSITIVE_INFINITY;
           const bt = b.scheduledAt?.getTime() ?? Number.POSITIVE_INFINITY;
@@ -166,7 +178,11 @@ export default async function ScorePresentationPage({
       initialScores={(existing?.scores as Record<string, number> | null) ?? null}
       initialComments={existing?.comments ?? ""}
       hasExisting={Boolean(existing)}
-      lastSavedAt={existing?.createdAt?.toISOString() ?? null}
+      lastSavedAt={
+        existing
+          ? (existing.updatedAt ?? existing.createdAt)?.toISOString() ?? null
+          : null
+      }
       nextPendingId={nextPendingId}
     />
   );

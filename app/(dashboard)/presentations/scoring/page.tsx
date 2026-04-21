@@ -66,12 +66,12 @@ export default async function ScoringHubPage() {
     );
   }
 
-  const [presentations, evaluations, rubrics] = await Promise.all([
+  const [presentationsRaw, evaluations, rubrics] = await Promise.all([
     db.query.presentationAssignments.findMany({
       where: inArray(presentationAssignments.id, presentationIds),
       with: {
         submission: {
-          columns: { id: true, paperCode: true, title: true },
+          columns: { id: true, paperCode: true, title: true, status: true },
           with: {
             author: {
               columns: {
@@ -97,6 +97,14 @@ export default async function ScoringHubPage() {
     }),
     getPresentationRubrics(["ORAL", "POSTER"]),
   ]);
+
+  // Hide withdrawn/desk-rejected/rejected submissions from the judge's inbox
+  const presentations = presentationsRaw.filter(
+    (p) =>
+      p.submission.status !== "WITHDRAWN" &&
+      p.submission.status !== "DESK_REJECTED" &&
+      p.submission.status !== "REJECTED"
+  );
 
   const criteriaTotals = {
     ORAL: rubrics.ORAL.reduce((sum, c) => sum + c.totalPoints, 0),

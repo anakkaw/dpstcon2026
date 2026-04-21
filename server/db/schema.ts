@@ -573,6 +573,7 @@ export const presentationEvaluations = pgTable(
     scores: jsonb("scores"),
     comments: text("comments"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
     index("pres_evaluations_presentation_idx").on(table.presentationId),

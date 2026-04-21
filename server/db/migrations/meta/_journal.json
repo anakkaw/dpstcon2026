@@ -71,6 +71,13 @@
       "when": 1776384000000,
       "tag": "0009_advisor_auto_resend",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777000000000,
+      "tag": "0010_evaluations_updated_at",
+      "breakpoints": true
     }
   ]
 }

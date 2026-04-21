@@ -425,9 +425,15 @@ app.patch("/:id/committee", async (c) => {
 
   const presentation = await db.query.presentationAssignments.findFirst({
     where: eq(presentationAssignments.id, id),
-    columns: { submissionId: true },
+    columns: { submissionId: true, type: true },
   });
   if (!presentation) return c.json({ error: "Not found" }, 404);
+  if (presentation.type === "POSTER") {
+    return c.json(
+      { error: "Use the poster planner to assign judges to poster presentations" },
+      400
+    );
+  }
 
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, presentation.submissionId),
@@ -503,6 +509,31 @@ app.post("/poster-slots", async (c) => {
     return c.json({ error: "Invalid time range" }, 400);
   }
 
+  // Verify the judge actually has a COMMITTEE role (optionally scoped to the submission's track)
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, parsed.data.submissionId),
+    columns: { trackId: true },
+  });
+
+  const judgeRole = await db.query.userRoles.findFirst({
+    where: and(
+      eq(userRoles.userId, parsed.data.judgeId),
+      eq(userRoles.role, "COMMITTEE")
+    ),
+  });
+
+  if (!judgeRole) {
+    return c.json({ error: "Selected user is not a committee member" }, 400);
+  }
+  if (
+    !hasRole(currentUser, "ADMIN") &&
+    judgeRole.trackId &&
+    submission?.trackId &&
+    judgeRole.trackId !== submission.trackId
+  ) {
+    return c.json({ error: "Judge is scoped to a different track" }, 400);
+  }
+
   const [slot] = await db
     .insert(posterSlotJudges)
     .values({
@@ -536,6 +567,30 @@ app.patch("/poster-slots/:slotId", async (c) => {
   if (!existing) return c.json({ error: "Not found" }, 404);
   if (!(await canManageSubmissionPresentation(currentUser, existing.submissionId))) {
     return c.json({ error: "Forbidden" }, 403);
+  }
+
+  if (parsed.data.judgeId) {
+    const submission = await db.query.submissions.findFirst({
+      where: eq(submissions.id, existing.submissionId),
+      columns: { trackId: true },
+    });
+    const judgeRole = await db.query.userRoles.findFirst({
+      where: and(
+        eq(userRoles.userId, parsed.data.judgeId),
+        eq(userRoles.role, "COMMITTEE")
+      ),
+    });
+    if (!judgeRole) {
+      return c.json({ error: "Selected user is not a committee member" }, 400);
+    }
+    if (
+      !hasRole(currentUser, "ADMIN") &&
+      judgeRole.trackId &&
+      submission?.trackId &&
+      judgeRole.trackId !== submission.trackId
+    ) {
+      return c.json({ error: "Judge is scoped to a different track" }, 400);
+    }
   }
 
   const [updated] = await db
@@ -594,28 +649,31 @@ app.post("/:id/evaluations", async (c) => {
   const currentUser = c.get("user");
   const body = await c.req.json();
 
-  const schema = z.object({ scores: z.record(z.string(), z.number()), comments: z.string().optional() });
+  const schema = z.object({
+    scores: z.record(z.string(), z.number().finite()),
+    comments: z.string().optional(),
+  });
   const parsed = schema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
 
   const isAdmin = hasRole(currentUser, "ADMIN");
 
+  const presentation = await db.query.presentationAssignments.findFirst({
+    where: eq(presentationAssignments.id, id),
+    columns: { submissionId: true, type: true },
+  });
+  if (!presentation) return c.json({ error: "Not found" }, 404);
+
   if (!isAdmin) {
-    const [committeeAssignment, presentation] = await Promise.all([
-      db.query.presentationCommitteeAssignments.findFirst({
-        where: and(
-          eq(presentationCommitteeAssignments.presentationId, id),
-          eq(presentationCommitteeAssignments.judgeId, currentUser.id)
-        ),
-      }),
-      db.query.presentationAssignments.findFirst({
-        where: eq(presentationAssignments.id, id),
-        columns: { submissionId: true, type: true },
-      }),
-    ]);
+    const committeeAssignment = await db.query.presentationCommitteeAssignments.findFirst({
+      where: and(
+        eq(presentationCommitteeAssignments.presentationId, id),
+        eq(presentationCommitteeAssignments.judgeId, currentUser.id)
+      ),
+    });
 
     let posterSlotAssignment = null;
-    if (!committeeAssignment && presentation?.type === "POSTER") {
+    if (!committeeAssignment && presentation.type === "POSTER") {
       posterSlotAssignment = await db.query.posterSlotJudges.findFirst({
         where: and(
           eq(posterSlotJudges.submissionId, presentation.submissionId),
@@ -625,8 +683,29 @@ app.post("/:id/evaluations", async (c) => {
     }
 
     if (!committeeAssignment && !posterSlotAssignment) {
-      return c.json({ error: "คุณไม่ได้รับมอบหมายให้ประเมินการนำเสนอนี้" }, 403);
+      return c.json({ error: "NOT_ASSIGNED" }, 403);
     }
+  }
+
+  // Validate score keys and values against the rubric
+  const rubric = await getPresentationRubric(presentation.type as "ORAL" | "POSTER");
+  const rubricMap = new Map(rubric.map((c) => [c.id, c.totalPoints]));
+  for (const [criterionId, value] of Object.entries(parsed.data.scores)) {
+    const max = rubricMap.get(criterionId);
+    if (max === undefined) {
+      return c.json({ error: "UNKNOWN_CRITERION", criterionId }, 400);
+    }
+    if (value < 0 || value > max) {
+      return c.json({ error: "SCORE_OUT_OF_RANGE", criterionId, max }, 400);
+    }
+  }
+
+  const updates: { scores: Record<string, number>; comments?: string; updatedAt: Date } = {
+    scores: parsed.data.scores,
+    updatedAt: new Date(),
+  };
+  if (parsed.data.comments !== undefined) {
+    updates.comments = parsed.data.comments;
   }
 
   const existing = await db.query.presentationEvaluations.findFirst({
@@ -634,16 +713,31 @@ app.post("/:id/evaluations", async (c) => {
   });
 
   if (existing) {
-    await db.update(presentationEvaluations).set({ scores: parsed.data.scores, comments: parsed.data.comments }).where(eq(presentationEvaluations.id, existing.id));
+    await db
+      .update(presentationEvaluations)
+      .set(updates)
+      .where(eq(presentationEvaluations.id, existing.id));
     return c.json({ ok: true, updated: true });
   }
 
-  const [evaluation] = await db
-    .insert(presentationEvaluations)
-    .values({ presentationId: id, judgeId: currentUser.id, scores: parsed.data.scores, comments: parsed.data.comments })
-    .returning();
-
-  return c.json({ evaluation }, 201);
+  try {
+    const [evaluation] = await db
+      .insert(presentationEvaluations)
+      .values({
+        presentationId: id,
+        judgeId: currentUser.id,
+        scores: parsed.data.scores,
+        comments: parsed.data.comments,
+      })
+      .returning();
+    return c.json({ evaluation }, 201);
+  } catch (error) {
+    const message = (error as { message?: string })?.message ?? "";
+    if (message.includes("pres_evaluations_presentation_judge_unique")) {
+      return c.json({ error: "ALREADY_SUBMITTED" }, 409);
+    }
+    throw error;
+  }
 });
 
 app.get("/scoring-dashboard", async (c) => {
@@ -682,7 +776,7 @@ app.get("/scoring-dashboard", async (c) => {
     },
   });
   const presentationIds = presentations.map((presentation) => presentation.id);
-  const [evaluations, criteria] = await Promise.all([
+  const [evaluations, oralCriteria, posterCriteria] = await Promise.all([
     presentationIds.length > 0
       ? db.query.presentationEvaluations.findMany({
           where: inArray(presentationEvaluations.presentationId, presentationIds),
@@ -690,6 +784,7 @@ app.get("/scoring-dashboard", async (c) => {
         })
       : Promise.resolve([]),
     getPresentationRubric("ORAL"),
+    getPresentationRubric("POSTER"),
   ]);
 
   const scoresByPresentation: Record<string, (typeof evaluations)[number][]> = {};
@@ -700,7 +795,8 @@ app.get("/scoring-dashboard", async (c) => {
 
   return c.json({
     presentations: presentations.map((p) => ({ ...p, evaluations: scoresByPresentation[p.id] || [] })),
-    criteria,
+    criteria: oralCriteria, // kept for backward compatibility
+    criteriaByType: { ORAL: oralCriteria, POSTER: posterCriteria },
   });
 });
 

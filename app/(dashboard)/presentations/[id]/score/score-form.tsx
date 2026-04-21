@@ -174,7 +174,15 @@ export function ScoreForm({
         router.refresh();
       } else {
         const data = await response.json().catch(() => null);
-        setMessage({ tone: "danger", text: data?.error || t("scoring.saveError") });
+        const errorMap: Record<string, string> = {
+          NOT_ASSIGNED: t("scoring.errNotAssigned"),
+          UNKNOWN_CRITERION: t("scoring.errUnknownCriterion"),
+          SCORE_OUT_OF_RANGE: t("scoring.errScoreRange"),
+          ALREADY_SUBMITTED: t("scoring.errAlreadySubmitted"),
+        };
+        const text =
+          (data?.error && errorMap[data.error]) || data?.error || t("scoring.saveError");
+        setMessage({ tone: "danger", text });
       }
     } catch {
       setMessage({ tone: "danger", text: t("scoring.saveError") });
@@ -324,6 +332,12 @@ export function ScoreForm({
       </Card>
 
       {message && <Alert tone={message.tone}>{message.text}</Alert>}
+
+      {criteria.length === 0 && (
+        <Alert tone="warning">
+          {t("scoring.noCriteriaConfigured")}
+        </Alert>
+      )}
 
       {/* ── Criteria ── */}
       <div className="space-y-4">
