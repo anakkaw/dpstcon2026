@@ -54,6 +54,7 @@ const th = {
   "nav.userManagement": "จัดการผู้ใช้",
   "nav.trackManagement": "จัดการสาขาวิชา",
   "nav.trackTeam": "ทีมสาขาวิชา",
+  "nav.scoring": "ให้คะแนน",
 
   // ─── Landing Page ─────────────────────────────────────
   "landing.title": "DPST Science and Technology",
@@ -455,6 +456,13 @@ const th = {
   "scoring.submitted": "ส่งแล้ว",
   "scoring.giveScore": "ให้คะแนน",
   "scoring.viewScore": "ดูคะแนน",
+  "scoring.hubTitle": "รายการให้คะแนน",
+  "scoring.hubSubtitle": "การนำเสนอที่คุณได้รับมอบหมายให้ประเมิน ({n} รายการ)",
+  "scoring.tabPending": "รอประเมิน",
+  "scoring.tabDone": "ประเมินแล้ว",
+  "scoring.emptyTitle": "ยังไม่มีรายการให้ประเมิน",
+  "scoring.emptyBody": "เมื่อผู้จัดงานมอบหมายการนำเสนอให้คุณ จะปรากฏที่นี่",
+  "scoring.emptyFilteredTitle": "ไม่พบรายการในหมวดนี้",
 
   // ─── Poster Planner ──────────────────────────────────
   "poster.plannerTitle": "วางแผนจัดกลุ่มโปสเตอร์",

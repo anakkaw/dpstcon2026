@@ -56,6 +56,7 @@ const en: Record<TranslationKey, string> = {
   "nav.userManagement": "User Management",
   "nav.trackManagement": "Track Management",
   "nav.trackTeam": "Track Team",
+  "nav.scoring": "Scoring",
 
   // ─── Landing Page ─────────────────────────────────────
   "landing.title": "DPST Science and Technology",
@@ -453,6 +454,13 @@ const en: Record<TranslationKey, string> = {
   "scoring.submitted": "Submitted",
   "scoring.giveScore": "Score",
   "scoring.viewScore": "View score",
+  "scoring.hubTitle": "Scoring Inbox",
+  "scoring.hubSubtitle": "Presentations assigned for you to score ({n} items)",
+  "scoring.tabPending": "Pending",
+  "scoring.tabDone": "Scored",
+  "scoring.emptyTitle": "No scoring tasks yet",
+  "scoring.emptyBody": "Presentations assigned to you will appear here.",
+  "scoring.emptyFilteredTitle": "Nothing matches this filter",
 
   // ─── Poster Planner ──────────────────────────────────
   "poster.plannerTitle": "Poster Group Planner",
