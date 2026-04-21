@@ -457,6 +457,7 @@ const th = {
   "presentations.appoint": "แต่งตั้ง",
   "presentations.scheduleSaved": "บันทึกกำหนดการเรียบร้อยแล้ว",
   "presentations.scheduleSaveError": "ไม่สามารถบันทึกกำหนดการได้",
+  "presentations.scoringLoadError": "โหลดข้อมูลคะแนนไม่สำเร็จ กรุณาลองใหม่",
   "presentations.criteriaSaved": "บันทึกเกณฑ์การประเมินเรียบร้อยแล้ว",
   "presentations.criteriaSaveError": "ไม่สามารถบันทึกเกณฑ์การประเมินได้",
   "presentations.committeeAssigned": "บันทึกคณะกรรมการเรียบร้อยแล้ว",
@@ -1054,6 +1055,7 @@ const th = {
   "submissions.copied": "คัดลอกแล้ว",
   "submissions.resendAdvisor": "ส่งเมลซ้ำ",
   "submissions.openPdf": "เปิดไฟล์ PDF",
+  "submissions.previewPdf": "ดูตัวอย่างบทความ",
   "submissions.daysAgo": "{n} วันที่แล้ว",
   "submissions.new.continueDisabledHint": "กรุณาอัพโหลดไฟล์ต้นฉบับก่อนดำเนินการต่อ",
 

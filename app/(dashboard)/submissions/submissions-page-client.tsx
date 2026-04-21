@@ -28,6 +28,7 @@ import { getNextAction } from "@/lib/author-utils";
 import { MyReviewTasksCard, type MyReviewTask } from "@/components/reviews/my-review-tasks-card";
 import { AssignmentPanel, type ReviewerOption } from "@/components/reviews/assignment-panel";
 import { ReviewProgressMini, type ProgressAssignment } from "@/components/reviews/review-progress-mini";
+import { PdfPreviewModal } from "@/components/ui/pdf-preview-modal";
 
 export interface SubmissionAssignment {
   id: string;
@@ -60,7 +61,10 @@ export interface SubmissionData {
   advisorEmail?: string | null;
   advisorApprovalAt?: string | null;
   submittedAt?: string | null;
+  /** @deprecated legacy column from pre-R2 storage — no longer populated by the app. */
   fileUrl?: string | null;
+  /** Latest MANUSCRIPT file for 1-click preview from the workbench row. */
+  manuscriptFile?: { id: string; originalName: string; mimeType: string } | null;
 }
 
 const NEEDS_ACTION_STATUSES = new Set([
@@ -162,6 +166,12 @@ export function SubmissionsPageClient({
   const [page, setPage] = useState(1);
   const [actionsOpenId, setActionsOpenId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [previewFor, setPreviewFor] = useState<{
+    submissionId: string;
+    fileId: string;
+    fileName: string;
+    mimeType: string;
+  } | null>(null);
 
   const PAGE_SIZE = 25;
 
@@ -780,17 +790,24 @@ export function SubmissionsPageClient({
                                   </span>
                                 </p>
                               </Link>
-                              {sub.fileUrl && (
-                                <a
-                                  href={sub.fileUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                              {sub.manuscriptFile && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewFor({
+                                      submissionId: sub.id,
+                                      fileId: sub.manuscriptFile!.id,
+                                      fileName: sub.manuscriptFile!.originalName,
+                                      mimeType: sub.manuscriptFile!.mimeType,
+                                    });
+                                  }}
                                   className="shrink-0 text-ink-muted hover:text-brand-600 transition-colors"
-                                  title={t("submissions.openPdf")}
-                                  aria-label={t("submissions.openPdf")}
+                                  title={t("submissions.previewPdf")}
+                                  aria-label={t("submissions.previewPdf")}
                                 >
-                                  <FileDown className="h-4 w-4" />
-                                </a>
+                                  <Eye className="h-4 w-4" />
+                                </button>
                               )}
                             </div>
                           </td>
@@ -936,6 +953,17 @@ export function SubmissionsPageClient({
         <p className="text-xs text-ink-muted text-center">
           {t("submissions.showingCount", { shown: filtered.length, total: totalFiltered })}
         </p>
+      )}
+
+      {previewFor && (
+        <PdfPreviewModal
+          open={!!previewFor}
+          submissionId={previewFor.submissionId}
+          fileId={previewFor.fileId}
+          fileName={previewFor.fileName}
+          mimeType={previewFor.mimeType}
+          onClose={() => setPreviewFor(null)}
+        />
       )}
     </div>
   );

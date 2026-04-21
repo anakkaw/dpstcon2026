@@ -80,6 +80,14 @@ export function ReviewsPageClient({
   const canManageReviews = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
 
   const [assignments, setAssignments] = useState<AssignmentData[]>(initialAssignments);
+
+  // Keep the table in sync when server data is re-fetched via router.refresh()
+  // (e.g. the embedded MyReviewTasksCard responds to an assignment). Without
+  // this, React keeps the initial prop and the table looks stale after the
+  // server data changes.
+  useEffect(() => {
+    setAssignments(initialAssignments);
+  }, [initialAssignments]);
   const [reviewerUsers] = useState<ReviewerUser[]>(initialReviewerUsers);
   const [trackFilter, setTrackFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");

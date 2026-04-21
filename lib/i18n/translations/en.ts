@@ -467,6 +467,7 @@ const en: Record<TranslationKey, string> = {
   "presentations.appoint": "Appoint",
   "presentations.scheduleSaved": "Schedule saved successfully",
   "presentations.scheduleSaveError": "Unable to save the schedule",
+  "presentations.scoringLoadError": "Couldn't load the scoring data. Please try again.",
   "presentations.criteriaSaved": "Evaluation criteria saved successfully",
   "presentations.criteriaSaveError": "Unable to save the evaluation criteria",
   "presentations.committeeAssigned": "Committee assignments saved successfully",
@@ -1053,6 +1054,7 @@ const en: Record<TranslationKey, string> = {
   "submissions.copied": "Copied",
   "submissions.resendAdvisor": "Resend",
   "submissions.openPdf": "Open PDF",
+  "submissions.previewPdf": "Preview paper",
   "submissions.daysAgo": "{n} days ago",
 
   "presentations.committeeLabel": "Committee",

@@ -257,12 +257,22 @@ export function PresentationsClient({
     if (tab === "scoring" && !scoringLoaded) {
       setScoringLoaded(true);
       fetch("/api/presentations/scoring-dashboard")
-        .then((r) => r.json())
+        .then(async (r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
         .then((res) => {
           const all: ScoringPresentation[] = res.presentations || [];
           setScoringData(all.filter((presentation) => presentation.type === type));
         })
-        .catch(() => {});
+        .catch(() => {
+          // Let the user retry via the tab button; reset scoringLoaded so a
+          // click on "Scoring" again re-issues the fetch instead of silently
+          // showing an empty board.
+          setScoringLoaded(false);
+          setMessageTone("danger");
+          setMessage(t("presentations.scoringLoadError"));
+        });
     }
   }
 

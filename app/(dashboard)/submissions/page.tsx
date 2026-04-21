@@ -3,9 +3,49 @@ import { desc, eq, sql } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
-import { reviewAssignments, submissions } from "@/server/db/schema";
+import { reviewAssignments, storedFiles, submissions } from "@/server/db/schema";
 import { loadReviewerPool } from "@/server/reviewer-pool";
 import { SubmissionsPageClient, type SubmissionData } from "./submissions-page-client";
+
+/**
+ * For each submission, fetch the latest MANUSCRIPT file so the workbench can
+ * offer a 1-click PDF preview. Returns a map of submissionId → { id, originalName, mimeType }.
+ */
+async function loadLatestManuscripts(submissionIds: string[]) {
+  if (submissionIds.length === 0) return new Map<string, { id: string; originalName: string; mimeType: string }>();
+  const rows = await db
+    .select({
+      id: storedFiles.id,
+      submissionId: storedFiles.submissionId,
+      originalName: storedFiles.originalName,
+      mimeType: storedFiles.mimeType,
+      uploadedAt: storedFiles.uploadedAt,
+    })
+    .from(storedFiles)
+    .where(
+      sql`${storedFiles.kind} = 'MANUSCRIPT' AND ${storedFiles.submissionId} IN ${submissionIds}`
+    );
+  // Keep only the newest MANUSCRIPT per submission
+  const map = new Map<string, { id: string; originalName: string; mimeType: string; uploadedAt: Date }>();
+  for (const row of rows) {
+    if (!row.submissionId) continue;
+    const existing = map.get(row.submissionId);
+    if (!existing || row.uploadedAt > existing.uploadedAt) {
+      map.set(row.submissionId, {
+        id: row.id,
+        originalName: row.originalName,
+        mimeType: row.mimeType,
+        uploadedAt: row.uploadedAt,
+      });
+    }
+  }
+  return new Map(
+    Array.from(map.entries()).map(([subId, f]) => [
+      subId,
+      { id: f.id, originalName: f.originalName, mimeType: f.mimeType },
+    ])
+  );
+}
 
 async function loadInitialSubmissions(
   currentUser: NonNullable<Awaited<ReturnType<typeof getServerAuthContext>>>["user"]
@@ -79,19 +119,25 @@ async function loadInitialSubmissions(
       orderBy: [desc(submissions.createdAt)],
     });
 
-    return results.map((submission) => ({
-      ...submission,
-      createdAt: submission.createdAt.toISOString(),
-      submittedAt: submission.submittedAt?.toISOString() || null,
-      advisorApprovalAt: submission.advisorApprovalAt?.toISOString() || null,
-      reviews: submission.reviews.map((review) => ({
-        ...review,
-        completedAt: review.completedAt?.toISOString() || null,
-      })),
-      reviewAssignments: submission.reviewAssignments.map((a) =>
-        serializeAssignment(a as unknown as RawAssignment)
-      ),
-    }));
+    const manuscripts = await loadLatestManuscripts(results.map((s) => s.id));
+
+    return results.map((submission) => {
+      const manuscript = manuscripts.get(submission.id) ?? null;
+      return {
+        ...submission,
+        createdAt: submission.createdAt.toISOString(),
+        submittedAt: submission.submittedAt?.toISOString() || null,
+        advisorApprovalAt: submission.advisorApprovalAt?.toISOString() || null,
+        manuscriptFile: manuscript,
+        reviews: submission.reviews.map((review) => ({
+          ...review,
+          completedAt: review.completedAt?.toISOString() || null,
+        })),
+        reviewAssignments: submission.reviewAssignments.map((a) =>
+          serializeAssignment(a as unknown as RawAssignment)
+        ),
+      };
+    });
   }
 
   const submissionIds = new Set<string>();
@@ -144,24 +190,30 @@ async function loadInitialSubmissions(
   const isAuthorOnly =
     !hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR", "REVIEWER");
 
-  return results.map((submission) => ({
-    ...submission,
-    createdAt: submission.createdAt.toISOString(),
-    submittedAt: submission.submittedAt?.toISOString() || null,
-    advisorApprovalAt: submission.advisorApprovalAt?.toISOString() || null,
-    reviews: submission.reviews.map((review) => ({
-      ...review,
-      completedAt: review.completedAt?.toISOString() || null,
-    })),
-    reviewAssignments: submission.reviewAssignments.map((a) => {
-      const serialized = serializeAssignment(a as unknown as RawAssignment);
-      if (isAuthorOnly) {
-        // strip reviewer identity but keep the counts so progress bars still work
-        return { id: serialized.id, status: serialized.status };
-      }
-      return serialized;
-    }),
-  }));
+  const manuscripts = await loadLatestManuscripts(results.map((s) => s.id));
+
+  return results.map((submission) => {
+    const manuscript = manuscripts.get(submission.id) ?? null;
+    return {
+      ...submission,
+      createdAt: submission.createdAt.toISOString(),
+      submittedAt: submission.submittedAt?.toISOString() || null,
+      advisorApprovalAt: submission.advisorApprovalAt?.toISOString() || null,
+      manuscriptFile: manuscript,
+      reviews: submission.reviews.map((review) => ({
+        ...review,
+        completedAt: review.completedAt?.toISOString() || null,
+      })),
+      reviewAssignments: submission.reviewAssignments.map((a) => {
+        const serialized = serializeAssignment(a as unknown as RawAssignment);
+        if (isAuthorOnly) {
+          // strip reviewer identity but keep the counts so progress bars still work
+          return { id: serialized.id, status: serialized.status };
+        }
+        return serialized;
+      }),
+    };
+  });
 }
 
 export default async function SubmissionsPage() {
