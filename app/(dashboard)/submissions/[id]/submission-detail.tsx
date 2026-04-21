@@ -26,6 +26,7 @@ import { submitPaper, withdrawPaper, resubmitPaper } from "@/server/actions/subm
 import { FileUpload } from "@/components/ui/file-upload";
 import { FileList } from "@/components/ui/file-list";
 import { PdfPreviewModal } from "@/components/ui/pdf-preview-modal";
+import { RecommendationPicker } from "@/components/review/recommendation-picker";
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { ReviewProgress } from "@/components/author/review-progress";
 import { PresentationCard } from "@/components/author/presentation-card";
@@ -37,8 +38,44 @@ import { AssignReviewerCard } from "@/components/review/assign-reviewer-card";
 import {
   Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
-  Trash2, Pencil, Mail, UserCheck, MessageSquare,
+  Trash2, Pencil, Mail, UserCheck, MessageSquare, AlertCircle,
 } from "lucide-react";
+
+function StepHeader({
+  number,
+  done,
+  title,
+  hint,
+  tone,
+}: {
+  number: number;
+  done: boolean;
+  title: string;
+  hint: string;
+  tone: "required" | "optional";
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-2.5">
+        <div
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
+            done ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
+          }`}
+        >
+          {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : number}
+        </div>
+        <h4 className="text-sm font-semibold text-ink">{title}</h4>
+      </div>
+      <span
+        className={`text-[11px] font-medium ${
+          tone === "required" ? "text-red-500" : "text-ink-muted"
+        }`}
+      >
+        {hint}
+      </span>
+    </div>
+  );
+}
 
 interface Props {
   submission: {
@@ -159,6 +196,37 @@ export function SubmissionDetail({
   // Manuscript preview modal
   const [previewOpen, setPreviewOpen] = useState(false);
   const manuscriptFile = files.find((f) => f.kind === "MANUSCRIPT");
+
+  // Focus mode — split-pane review with PDF on the left
+  const [focusMode, setFocusMode] = useState(false);
+  const [focusPdfUrl, setFocusPdfUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusMode || !manuscriptFile) {
+      setFocusPdfUrl(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/submissions/${submission.id}/download/${manuscriptFile.id}`);
+        if (!r.ok) return;
+        const data = (await r.json()) as { url?: string };
+        if (!cancelled && data.url) setFocusPdfUrl(data.url);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [focusMode, manuscriptFile, submission.id]);
+  useEffect(() => {
+    if (!focusMode) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFocusMode(false); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = original;
+    };
+  }, [focusMode]);
 
   // Review form state
   const [reviewRecommendation, setReviewRecommendation] = useState("");
@@ -854,32 +922,19 @@ export function SubmissionDetail({
       })()}
 
       {/* Review Submission Form — for assigned reviewers (shown prominently before paper info) */}
-      {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (
-        <Card id="section-review-form" accent="brand">
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-                  <Send className="h-4 w-4" />
-                  {t("reviewForm.title")}
-                </h3>
-                {isAdmin && (
-                  <Badge tone="info">{t("detail.modeReviewer")}</Badge>
-                )}
-              </div>
-              {manuscriptFile && (
-                <button
-                  type="button"
-                  onClick={() => setPreviewOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 hover:border-brand-300 transition-colors"
-                >
-                  <Paperclip className="h-3.5 w-3.5" />
-                  {t("reviewForm.previewManuscript")}
-                </button>
-              )}
-            </div>
-          </CardHeader>
-          <CardBody className="space-y-3">
+      {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (() => {
+        const myAttachments = files.filter(
+          (f) => f.kind === "REVIEW_ATTACHMENT" && f.uploadedById === currentUserId
+        );
+        const MIN_COMMENTS = 50;
+        const authorChars = reviewCommentsToAuthor.length;
+        const chairChars = reviewCommentsToChair.length;
+        const ready = Boolean(reviewRecommendation) && reviewCommentsToAuthor.trim().length >= MIN_COMMENTS;
+        const step1Done = Boolean(reviewRecommendation);
+        const step2Done = reviewCommentsToAuthor.trim().length >= MIN_COMMENTS;
+
+        const formContent = (
+          <>
             {hasRestoredDraft && (
               <Alert tone="info">
                 <div className="flex items-center justify-between gap-3">
@@ -898,85 +953,223 @@ export function SubmissionDetail({
                 </div>
               </Alert>
             )}
-            <Field label={t("reviewForm.recommendation")} htmlFor="reviewRecommendation" required>
-              <Select id="reviewRecommendation" value={reviewRecommendation} onChange={(e) => setReviewRecommendation(e.target.value)}>
-                <option value="">{t("reviewForm.recommendationPlaceholder")}</option>
-                {Object.entries(RECOMMENDATION_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={t("reviewForm.commentsToAuthor")} htmlFor="reviewCommentsToAuthor" required hint={t("reviewForm.commentsToAuthorHint")}>
+
+            {/* Step 1 — Recommendation */}
+            <section className="space-y-2">
+              <StepHeader
+                number={1}
+                done={step1Done}
+                title={t("reviewForm.step1")}
+                hint={t("reviewForm.step1Required")}
+                tone="required"
+              />
+              <RecommendationPicker
+                value={reviewRecommendation as "" | "ACCEPT" | "REVISE" | "REJECT"}
+                onChange={(v) => setReviewRecommendation(v)}
+              />
+            </section>
+
+            {/* Step 2 — Comments to author */}
+            <section className="space-y-2">
+              <StepHeader
+                number={2}
+                done={step2Done}
+                title={t("reviewForm.step2")}
+                hint={t("reviewForm.step1Required")}
+                tone="required"
+              />
+              <p className="text-xs text-ink-muted">{t("reviewForm.commentsToAuthorExamples")}</p>
               <Textarea
                 id="reviewCommentsToAuthor"
                 value={reviewCommentsToAuthor}
                 onChange={(e) => setReviewCommentsToAuthor(e.target.value)}
                 placeholder={t("reviewForm.commentsToAuthorPlaceholder")}
-                rows={5}
+                rows={focusMode ? 10 : 6}
               />
-            </Field>
-            <Field label={t("reviewForm.commentsToChair")} htmlFor="reviewCommentsToChair">
+              <p className={`text-[11px] text-right ${authorChars > 0 && authorChars < MIN_COMMENTS ? "text-amber-600" : "text-ink-muted"}`}>
+                {authorChars < MIN_COMMENTS && authorChars > 0
+                  ? t("reviewForm.charCountMin", { n: authorChars, min: MIN_COMMENTS })
+                  : t("reviewForm.charCount", { n: authorChars })}
+              </p>
+            </section>
+
+            {/* Step 3 — Comments to chair */}
+            <section className="space-y-2">
+              <StepHeader
+                number={3}
+                done={chairChars > 0}
+                title={t("reviewForm.step3")}
+                hint={t("reviewForm.step3Optional")}
+                tone="optional"
+              />
+              <p className="text-xs text-ink-muted">{t("reviewForm.commentsToChairExamples")}</p>
               <Textarea
                 id="reviewCommentsToChair"
                 value={reviewCommentsToChair}
                 onChange={(e) => setReviewCommentsToChair(e.target.value)}
                 placeholder={t("reviewForm.commentsToChairPlaceholder")}
-                rows={3}
+                rows={focusMode ? 5 : 3}
               />
-            </Field>
+              <p className="text-[11px] text-right text-ink-muted">
+                {t("reviewForm.charCount", { n: chairChars })}
+              </p>
+            </section>
 
-            {/* Reviewer attachment upload */}
-            <div className="space-y-2">
-              {(() => {
-                const myAttachments = files.filter(
-                  (f) => f.kind === "REVIEW_ATTACHMENT" && f.uploadedById === currentUserId
-                );
-                return (
-                  <>
-                    {myAttachments.length > 0 && (
-                      <FileList
-                        submissionId={submission.id}
-                        files={myAttachments}
-                        canDelete={false}
-                        currentUserId={currentUserId}
-                        onDeleteComplete={() => router.refresh()}
-                      />
-                    )}
-                    <FileUpload
-                      submissionId={submission.id}
-                      kind="REVIEW_ATTACHMENT"
-                      label={t("fileUpload.reviewAttachLabel")}
-                      hint={t("fileUpload.reviewAttachHint")}
-                      accept=".pdf,.doc,.docx,.zip"
-                      onUploadComplete={() => router.refresh()}
-                    />
-                  </>
-                );
-              })()}
-            </div>
-          </CardBody>
-          <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-ink-muted">
+            {/* Step 4 — Attachments */}
+            <section className="space-y-2">
+              <StepHeader
+                number={4}
+                done={myAttachments.length > 0}
+                title={t("reviewForm.step4")}
+                hint={t("reviewForm.step4Optional")}
+                tone="optional"
+              />
+              {myAttachments.length > 0 && (
+                <FileList
+                  submissionId={submission.id}
+                  files={myAttachments}
+                  canDelete={false}
+                  currentUserId={currentUserId}
+                  onDeleteComplete={() => router.refresh()}
+                />
+              )}
+              <FileUpload
+                submissionId={submission.id}
+                kind="REVIEW_ATTACHMENT"
+                label={t("fileUpload.reviewAttachLabel")}
+                hint={t("fileUpload.reviewAttachHint")}
+                accept=".pdf,.doc,.docx,.zip"
+                onUploadComplete={() => router.refresh()}
+              />
+            </section>
+          </>
+        );
+
+        const actionBar = (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-xs">
+              {ready ? (
+                <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {t("reviewForm.summaryReady")}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-amber-600">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {t("reviewForm.summaryIncomplete")}
+                </span>
+              )}
+              <span className="text-ink-muted/60">·</span>
               {draftSavedAt ? (
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 text-ink-muted">
                   <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                   {t("reviewForm.draftSavedAt", { time: new Date(draftSavedAt).toLocaleTimeString() })}
                 </span>
               ) : (
                 <span className="text-ink-muted/70">{t("reviewForm.draftAutoSaveHint")}</span>
               )}
-            </p>
+            </div>
             <Button
               onClick={handleSubmitReview}
               loading={submittingReview}
-              disabled={!reviewRecommendation || !reviewCommentsToAuthor.trim()}
+              disabled={!ready}
             >
               <Send className="h-3.5 w-3.5" />
               {t("reviewForm.submit")}
             </Button>
-          </CardFooter>
-        </Card>
-      )}
+          </div>
+        );
+
+        const headerControls = (
+          <div className="flex items-center gap-2 flex-wrap">
+            {manuscriptFile && !focusMode && (
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-brand-600 border border-brand-200 hover:bg-brand-50 hover:border-brand-300 transition-colors"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                {t("reviewForm.previewManuscript")}
+              </button>
+            )}
+            {manuscriptFile && (
+              <button
+                type="button"
+                onClick={() => setFocusMode((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium border transition-colors ${
+                  focusMode
+                    ? "bg-brand-500 text-white border-brand-500 hover:bg-brand-600"
+                    : "bg-white text-brand-600 border-brand-200 hover:bg-brand-50 hover:border-brand-300"
+                }`}
+              >
+                {focusMode ? t("reviewForm.exitFocusMode") : t("reviewForm.focusMode")}
+              </button>
+            )}
+          </div>
+        );
+
+        if (focusMode) {
+          return (
+            <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/70 backdrop-blur-sm p-2 sm:p-3">
+              <div className="flex flex-1 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                {/* Focus header */}
+                <div className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] uppercase tracking-wider text-ink-muted">
+                      {t("reviewForm.focusMode")}
+                    </p>
+                    <h2 className="truncate text-sm font-semibold text-ink sm:text-base">
+                      {submission.title}
+                    </h2>
+                  </div>
+                  {headerControls}
+                </div>
+                {/* Body — split pane */}
+                <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[55%_45%]">
+                  {/* PDF left */}
+                  <div className="relative min-h-[40vh] bg-slate-100 lg:min-h-0">
+                    {focusPdfUrl ? (
+                      <iframe src={focusPdfUrl} title={manuscriptFile?.originalName || ""} className="h-full w-full border-0" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-ink-muted text-sm">
+                        {t("pdfPreview.loading")}
+                      </div>
+                    )}
+                  </div>
+                  {/* Form right */}
+                  <div id="section-review-form" className="flex flex-col overflow-hidden border-t border-border lg:border-t-0 lg:border-l">
+                    <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                      {formContent}
+                    </div>
+                    <div className="border-t border-border bg-surface-alt px-4 py-3">
+                      {actionBar}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <Card id="section-review-form" accent="brand">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                    <Send className="h-4 w-4" />
+                    {t("reviewForm.title")}
+                  </h3>
+                  {isAdmin && <Badge tone="info">{t("detail.modeReviewer")}</Badge>}
+                </div>
+                {headerControls}
+              </div>
+            </CardHeader>
+            <CardBody className="space-y-5">{formContent}</CardBody>
+            <CardFooter>{actionBar}</CardFooter>
+          </Card>
+        );
+      })()}
 
       {/* Paper Info */}
       <div id="section-paper-info">
