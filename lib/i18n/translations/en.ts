@@ -369,6 +369,7 @@ const en: Record<TranslationKey, string> = {
   "reviews.youAreReviewer": "You are a reviewer",
   "reviews.assignSelf": "Assign myself as reviewer",
   "reviews.selfAssignSuccess": "You're now a reviewer on this paper",
+  "reviews.selfAssignPartial": "Added as reviewer, but couldn't auto-accept — please accept manually",
   "reviews.dueDate": "Due Date",
   "reviews.assign": "Assign",
   "reviews.assigned": "Assigned",

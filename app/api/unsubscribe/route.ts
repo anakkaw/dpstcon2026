@@ -1,4 +1,5 @@
 import { logger } from "@/server/logger";
+import { ADMIN_CONTACT_EMAIL } from "@/lib/constants";
 
 const HTML_PAGE = (email: string) => `<!doctype html>
 <html lang="th">
@@ -19,7 +20,7 @@ const HTML_PAGE = (email: string) => `<!doctype html>
   <div class="box">
     <p style="margin: 0;">หมายเหตุ: อีเมลของระบบ DPSTCon เป็นอีเมลแจ้งสถานะบทความและคำเชิญรับรองที่จำเป็น
     หากท่านเป็นอาจารย์ที่ปรึกษาที่ยังมีนิสิต/นักศึกษาในระบบ การยกเลิกอาจทำให้ท่านพลาดคำขอรับรองสำคัญ</p>
-    <p style="margin: 0.5rem 0 0;">หากต้องการความช่วยเหลือ กรุณาติดต่อ <a href="mailto:watcharaponga@nu.ac.th">watcharaponga@nu.ac.th</a></p>
+    <p style="margin: 0.5rem 0 0;">หากต้องการความช่วยเหลือ กรุณาติดต่อ <a href="mailto:${ADMIN_CONTACT_EMAIL}">${ADMIN_CONTACT_EMAIL}</a></p>
   </div>
 </body>
 </html>`;

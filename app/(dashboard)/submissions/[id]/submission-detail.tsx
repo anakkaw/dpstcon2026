@@ -341,8 +341,8 @@ export function SubmissionDetail({
           })
         );
         setDraftSavedAt(now);
-      } catch {
-        /* quota exceeded or disabled */
+      } catch (err) {
+        console.warn("[review-draft] failed to persist draft to localStorage", err);
       }
     }, 500);
     return () => {
@@ -1476,7 +1476,7 @@ export function SubmissionDetail({
       <Collapsible title={t("detail.paperInfo")} defaultOpen={submission.status === "DRAFT"}>
         <div className="space-y-4">
           <div>
-            <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">Author</h3>
+            <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">{t("detail.authorLabel")}</h3>
             <p className="text-sm text-ink">
               {displayNameTh(submission.author)}
               {submission.author.affiliation && <span className="text-ink-muted"> ({submission.author.affiliation})</span>}
@@ -1486,7 +1486,7 @@ export function SubmissionDetail({
 
           {submission.coAuthors.length > 0 && (
             <div>
-              <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">Co-Authors</h3>
+              <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">{t("detail.coAuthorsLabel")}</h3>
               {submission.coAuthors.map((ca) => (
                 <p key={ca.id} className="text-sm text-ink">
                   {ca.name}{ca.affiliation && <span className="text-ink-muted"> ({ca.affiliation})</span>}

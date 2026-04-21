@@ -2,6 +2,19 @@ export const APP_NAME = "DPSTCon";
 export const APP_DESCRIPTION = "ระบบบริหารการส่งและพิจารณาบทความ";
 export const APP_VERSION = "1.0.1";
 
+export const CONFERENCE_TITLE_TH =
+  "การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569";
+export const CONFERENCE_HOST_TH = "คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร";
+export const CONFERENCE_COMMITTEE_TH = "คณะกรรมการฝ่ายวิชาการ";
+export const EMAIL_SYSTEM_SIGNATURE = "DPSTCon Conference Management System";
+
+export const ADMIN_CONTACT_NAME_TH = "ผศ.ดร.วัชรพงษ์ อนรรฆเมธี";
+export const ADMIN_CONTACT_EMAIL =
+  process.env.ADMIN_CONTACT_EMAIL || "watcharaponga@nu.ac.th";
+export const EMAIL_FROM =
+  process.env.EMAIL_FROM || "DPSTCon Academic <academic@acadscinu.org>";
+export const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO || ADMIN_CONTACT_EMAIL;
+
 /** Number of days an advisor approval token remains valid after submission */
 export const ADVISOR_TOKEN_EXPIRY_DAYS = 14;
 

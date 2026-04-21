@@ -359,6 +359,7 @@ const th = {
   "reviews.youAreReviewer": "คุณเป็นผู้รีวิว",
   "reviews.assignSelf": "ตั้งตัวเองเป็นผู้รีวิว",
   "reviews.selfAssignSuccess": "ตั้งตัวเองเป็นผู้รีวิวเรียบร้อยแล้ว",
+  "reviews.selfAssignPartial": "เพิ่มเป็นผู้รีวิวแล้ว แต่ยังยืนยันรับงานไม่สำเร็จ โปรดกดรับอีกครั้ง",
   "reviews.dueDate": "กำหนดส่ง",
   "reviews.assign": "มอบหมาย",
   "reviews.assigned": "มอบหมายแล้ว",

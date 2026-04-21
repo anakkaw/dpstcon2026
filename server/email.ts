@@ -3,11 +3,50 @@ import { db } from "@/server/db";
 import { outgoingEmails } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "@/server/logger";
+import {
+  ADMIN_CONTACT_EMAIL,
+  ADMIN_CONTACT_NAME_TH,
+  CONFERENCE_COMMITTEE_TH,
+  CONFERENCE_HOST_TH,
+  CONFERENCE_TITLE_TH,
+  EMAIL_FROM,
+  EMAIL_REPLY_TO,
+  EMAIL_SYSTEM_SIGNATURE,
+} from "@/lib/constants";
 
 // ─── Email Provider (Resend) ─────────────────────────────
 
-const FROM = "DPSTCon Academic <academic@acadscinu.org>";
-const REPLY_TO = "watcharaponga@nu.ac.th";
+const FROM = EMAIL_FROM;
+const REPLY_TO = EMAIL_REPLY_TO;
+
+// ─── Shared template fragments ───────────────────────────
+
+const CONTACT_LINE_HTML = `ติดต่อ ${ADMIN_CONTACT_NAME_TH} (<a href="mailto:${ADMIN_CONTACT_EMAIL}">${ADMIN_CONTACT_EMAIL}</a>)`;
+const CONTACT_LINE_TEXT = `ติดต่อ ${ADMIN_CONTACT_NAME_TH} (${ADMIN_CONTACT_EMAIL})`;
+
+function footerHtml(opts: { auto?: boolean } = {}) {
+  const prefix = opts.auto ? "อีเมลนี้ส่งอัตโนมัติจากระบบ" : "อีเมลนี้ส่งจากระบบ";
+  return `
+        <div style="margin-top: 16px; font-size: 13px; color: #374151; line-height: 1.6;">
+          <p style="margin: 0; font-weight: bold;">${CONFERENCE_COMMITTEE_TH}</p>
+          <p style="margin: 0;">${CONFERENCE_TITLE_TH}</p>
+          <p style="margin: 0;">${CONFERENCE_HOST_TH}</p>
+        </div>
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
+          ${prefix} ${EMAIL_SYSTEM_SIGNATURE}
+        </p>`;
+}
+
+function footerText(opts: { auto?: boolean } = {}) {
+  const prefix = opts.auto ? "อีเมลนี้ส่งอัตโนมัติจากระบบ" : "อีเมลนี้ส่งจากระบบ";
+  return [
+    CONFERENCE_COMMITTEE_TH,
+    CONFERENCE_TITLE_TH,
+    CONFERENCE_HOST_TH,
+    "---",
+    `${prefix} ${EMAIL_SYSTEM_SIGNATURE}`,
+  ].join("\n");
+}
 
 function getResend() {
   if (!process.env.RESEND_API_KEY) return null;
@@ -154,20 +193,27 @@ export function advisorApprovalEmail(data: {
           ดำเนินการรับรอง
         </a>
         <p style="margin-top: 16px; font-size: 13px; color: #374151;">
-          ทั้งนี้หากท่านพบปัญหาในการใช้งานกรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (<a href="mailto:watcharaponga@nu.ac.th">watcharaponga@nu.ac.th</a>)
+          ทั้งนี้หากท่านพบปัญหาในการใช้งานกรุณา${CONTACT_LINE_HTML}
         </p>
         <p style="margin-top: 8px; font-size: 13px; color: #374151;">ขอแสดงความนับถือ</p>
-        <div style="margin-top: 8px; font-size: 13px; color: #374151; line-height: 1.6;">
-          <p style="margin: 0; font-weight: bold;">คณะกรรมการฝ่ายวิชาการ</p>
-          <p style="margin: 0;">การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569</p>
-          <p style="margin: 0;">คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร</p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-          อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System
-        </p>
+        ${footerHtml()}
       </div>
     `,
-    text: `เรียน ${data.advisorName},\n\nตามที่ ${data.studentName} นิสิต/นักศึกษาทุน พสวท. ที่อยู่ในความดูแลของท่าน ได้ทำการส่งบทคัดย่อ การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569 เพื่อความถูกต้องและสมบูรณ์ คณะกรรมการฯจึงขอความอนุเคราะห์ท่านรับรองบทความ:\n"${data.paperTitle}"\n\nกรุณาดำเนินการรับรองที่:\n${safeUrl}\n\nทั้งนี้หากท่านพบปัญหาในการใช้งานกรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (watcharaponga@nu.ac.th)\n\nขอแสดงความนับถือ\n\nคณะกรรมการฝ่ายวิชาการ\nการประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569\nคณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร\n---\nอีเมลนี้ส่งจากระบบ DPSTCon Conference Management System`,
+    text: [
+      `เรียน ${data.advisorName},`,
+      ``,
+      `ตามที่ ${data.studentName} นิสิต/นักศึกษาทุน พสวท. ที่อยู่ในความดูแลของท่าน ได้ทำการส่งบทคัดย่อ ${CONFERENCE_TITLE_TH} เพื่อความถูกต้องและสมบูรณ์ คณะกรรมการฯจึงขอความอนุเคราะห์ท่านรับรองบทความ:`,
+      `"${data.paperTitle}"`,
+      ``,
+      `กรุณาดำเนินการรับรองที่:`,
+      safeUrl,
+      ``,
+      `ทั้งนี้หากท่านพบปัญหาในการใช้งานกรุณา${CONTACT_LINE_TEXT}`,
+      ``,
+      `ขอแสดงความนับถือ`,
+      ``,
+      footerText(),
+    ].join("\n"),
   };
 }
 
@@ -215,14 +261,7 @@ export function advisorResponseEmail(data: {
           </a>
         </p>
         ` : ""}
-        <div style="margin-top: 16px; font-size: 13px; color: #374151; line-height: 1.6;">
-          <p style="margin: 0; font-weight: bold;">คณะกรรมการฝ่ายวิชาการ</p>
-          <p style="margin: 0;">การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569</p>
-          <p style="margin: 0;">คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร</p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-          อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System
-        </p>
+        ${footerHtml()}
       </div>
     `,
     text: [
@@ -239,11 +278,7 @@ export function advisorResponseEmail(data: {
         : "กรุณาแก้ไขบทความตามคำแนะนำของอาจารย์ที่ปรึกษา แล้วส่งใหม่อีกครั้ง",
       safeUrl ? `\nดูรายละเอียด: ${safeUrl}` : "",
       ``,
-      `คณะกรรมการฝ่ายวิชาการ`,
-      `การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569`,
-      `คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร`,
-      `---`,
-      `อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System`,
+      footerText(),
     ].join("\n"),
   };
 }
@@ -297,14 +332,7 @@ export function decisionEmail(data: {
           </a>
         </p>
         ` : ""}
-        <div style="margin-top: 16px; font-size: 13px; color: #374151; line-height: 1.6;">
-          <p style="margin: 0; font-weight: bold;">คณะกรรมการฝ่ายวิชาการ</p>
-          <p style="margin: 0;">การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569</p>
-          <p style="margin: 0;">คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร</p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-          อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System
-        </p>
+        ${footerHtml()}
       </div>
     `,
     text: [
@@ -317,11 +345,7 @@ export function decisionEmail(data: {
       data.comments ? `\nความคิดเห็นจาก Committee:\n${data.comments}` : "",
       safeUrl ? `\nดูรายละเอียดและส่งบทความแก้ไข: ${safeUrl}` : "",
       ``,
-      `คณะกรรมการฝ่ายวิชาการ`,
-      `การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569`,
-      `คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร`,
-      `---`,
-      `อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System`,
+      footerText(),
     ].join("\n"),
   };
 }
@@ -347,19 +371,25 @@ export function inviteEmail(data: {
           ลิงก์นี้จะหมดอายุใน ${data.expiresInHours} ชั่วโมง
         </p>
         <p style="margin-top: 16px; font-size: 13px; color: #374151;">
-          ทั้งนี้หากพบปัญหาในการใช้งานกรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (<a href="mailto:watcharaponga@nu.ac.th">watcharaponga@nu.ac.th</a>)
+          ทั้งนี้หากพบปัญหาในการใช้งานกรุณา${CONTACT_LINE_HTML}
         </p>
-        <div style="margin-top: 8px; font-size: 13px; color: #374151; line-height: 1.6;">
-          <p style="margin: 0; font-weight: bold;">คณะกรรมการฝ่ายวิชาการ</p>
-          <p style="margin: 0;">การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569</p>
-          <p style="margin: 0;">คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร</p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-          อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System
-        </p>
+        ${footerHtml()}
       </div>
     `,
-    text: `เรียน ${data.userName},\n\nคุณได้รับเชิญให้เข้าร่วมระบบ DPSTCon Conference Management System\n\nกรุณาตั้งรหัสผ่านและเปิดใช้งานบัญชีที่:\n${safeUrl}\n\nลิงก์นี้จะหมดอายุใน ${data.expiresInHours} ชั่วโมง\n\nทั้งนี้หากพบปัญหาในการใช้งานกรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (watcharaponga@nu.ac.th)\n\nคณะกรรมการฝ่ายวิชาการ\nการประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569\nคณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร\n---\nอีเมลนี้ส่งจากระบบ DPSTCon Conference Management System`,
+    text: [
+      `เรียน ${data.userName},`,
+      ``,
+      `คุณได้รับเชิญให้เข้าร่วมระบบ ${EMAIL_SYSTEM_SIGNATURE}`,
+      ``,
+      `กรุณาตั้งรหัสผ่านและเปิดใช้งานบัญชีที่:`,
+      safeUrl,
+      ``,
+      `ลิงก์นี้จะหมดอายุใน ${data.expiresInHours} ชั่วโมง`,
+      ``,
+      `ทั้งนี้หากพบปัญหาในการใช้งานกรุณา${CONTACT_LINE_TEXT}`,
+      ``,
+      footerText(),
+    ].join("\n"),
   };
 }
 
@@ -385,17 +415,10 @@ export function reviewAssignmentEmail(data: {
           เข้าสู่ระบบเพื่อรีวิว
         </a>
         <p style="margin-top: 16px; font-size: 13px; color: #374151;">
-          ทั้งนี้หากท่านพบปัญหาในการใช้งานกรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (<a href="mailto:watcharaponga@nu.ac.th">watcharaponga@nu.ac.th</a>)
+          ทั้งนี้หากท่านพบปัญหาในการใช้งานกรุณา${CONTACT_LINE_HTML}
         </p>
         <p style="margin-top: 8px; font-size: 13px; color: #374151;">ขอแสดงความนับถือ</p>
-        <div style="margin-top: 8px; font-size: 13px; color: #374151; line-height: 1.6;">
-          <p style="margin: 0; font-weight: bold;">คณะกรรมการฝ่ายวิชาการ</p>
-          <p style="margin: 0;">การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569</p>
-          <p style="margin: 0;">คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร</p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-          อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System
-        </p>
+        ${footerHtml()}
       </div>
     `,
     text: [
@@ -407,15 +430,11 @@ export function reviewAssignmentEmail(data: {
       ``,
       `เข้าสู่ระบบเพื่อรีวิว: ${safeUrl}`,
       ``,
-      `ทั้งนี้หากท่านพบปัญหาในการใช้งานกรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (watcharaponga@nu.ac.th)`,
+      `ทั้งนี้หากท่านพบปัญหาในการใช้งานกรุณา${CONTACT_LINE_TEXT}`,
       ``,
       `ขอแสดงความนับถือ`,
       ``,
-      `คณะกรรมการฝ่ายวิชาการ`,
-      `การประชุมวิชาการวิทยาศาสตร์และเทคโนโลยี นักเรียนทุน พสวท. ประจำปี 2569`,
-      `คณะวิทยาศาสตร์ มหาวิทยาลัยนเรศวร`,
-      `---`,
-      `อีเมลนี้ส่งจากระบบ DPSTCon Conference Management System`,
+      footerText(),
     ].join("\n"),
   };
 }
@@ -452,10 +471,10 @@ export function reviewReminderEmail(data: {
           เข้าสู่ระบบเพื่อส่งรีวิว
         </a>
         <p style="margin-top: 16px; font-size: 13px; color: #374151;">
-          หากพบปัญหา กรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (<a href="mailto:watcharaponga@nu.ac.th">watcharaponga@nu.ac.th</a>)
+          หากพบปัญหา กรุณา${CONTACT_LINE_HTML}
         </p>
         <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-          อีเมลนี้ส่งอัตโนมัติจากระบบ DPSTCon Conference Management System
+          อีเมลนี้ส่งอัตโนมัติจากระบบ ${EMAIL_SYSTEM_SIGNATURE}
         </p>
       </div>
     `,
@@ -469,9 +488,9 @@ export function reviewReminderEmail(data: {
       ``,
       `เข้าสู่ระบบเพื่อส่งรีวิว: ${safeUrl}`,
       ``,
-      `หากพบปัญหา กรุณาติดต่อ ผศ.ดร.วัชรพงษ์ อนรรฆเมธี (watcharaponga@nu.ac.th)`,
+      `หากพบปัญหา กรุณา${CONTACT_LINE_TEXT}`,
       `---`,
-      `อีเมลนี้ส่งอัตโนมัติจากระบบ DPSTCon Conference Management System`,
+      `อีเมลนี้ส่งอัตโนมัติจากระบบ ${EMAIL_SYSTEM_SIGNATURE}`,
     ].join("\n"),
   };
 }

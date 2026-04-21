@@ -154,6 +154,35 @@ export function AssignmentPanel({
         return;
       }
 
+      // Step 3: auto-accept the assignment on behalf of the current user.
+      // Clicking "assign myself" is an explicit opt-in — no need to also ask
+      // them to tick accept/decline. The respond endpoint only allows the
+      // reviewer themselves to respond, which is the case here.
+      const newAssignment = assignRes.ok
+        ? ((await assignRes.json().catch(() => null)) as {
+            assignment?: { id: string };
+          } | null)
+        : null;
+      const assignmentId = newAssignment?.assignment?.id;
+      if (assignmentId) {
+        const acceptRes = await fetch(
+          `/api/reviews/assignments/${assignmentId}/respond`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ response: "ACCEPTED" }),
+          }
+        );
+        if (!acceptRes.ok && acceptRes.status !== 409) {
+          // Non-fatal: PC is now a reviewer, just still in PENDING. They can
+          // accept manually. Don't block the success path.
+          onMessage?.(t("reviews.selfAssignPartial"));
+          router.refresh();
+          setSelfAssigning(false);
+          return;
+        }
+      }
+
       onMessage?.(t("reviews.selfAssignSuccess"));
       router.refresh();
     } catch {
