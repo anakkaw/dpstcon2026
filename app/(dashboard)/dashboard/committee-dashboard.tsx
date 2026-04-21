@@ -4,7 +4,7 @@ import Link from "next/link";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
-import { Mic, Image as ImageIcon, ArrowRight, Calendar, LayoutGrid } from "lucide-react";
+import { Mic, Image as ImageIcon, ArrowRight, Calendar, LayoutGrid, Star } from "lucide-react";
 
 interface CommitteeStats {
   oralCount?: number;
@@ -39,16 +39,10 @@ export default function CommitteeDashboard({ stats }: { stats?: Record<string, u
               <p className="text-sm text-ink-muted">{t("dashboard.committeeOverviewDesc")}</p>
             </div>
             <div className="flex gap-2">
-              <Link href="/presentations/oral">
-                <Button variant="secondary" size="sm">
-                  <Mic className="h-3.5 w-3.5" />
-                  {t("dashboard.oralPresentation")}
-                </Button>
-              </Link>
-              <Link href="/presentations/poster">
-                <Button variant="secondary" size="sm">
-                  <ImageIcon className="h-3.5 w-3.5" />
-                  {t("dashboard.poster")}
+              <Link href="/presentations/scoring">
+                <Button variant="primary" size="sm">
+                  <Star className="h-3.5 w-3.5" />
+                  {t("nav.scoring")}
                 </Button>
               </Link>
             </div>
@@ -61,7 +55,7 @@ export default function CommitteeDashboard({ stats }: { stats?: Record<string, u
               <h2 className="text-base font-semibold text-ink">{t("dashboard.committeeUpcoming")}</h2>
               <p className="text-sm text-ink-muted">{t("dashboard.committeeUpcomingDesc")}</p>
             </div>
-            <Link href="/presentations/oral">
+            <Link href="/presentations/scoring">
               <Button variant="ghost" size="sm">
                 {t("common.viewAll")} <ArrowRight className="h-3.5 w-3.5" />
               </Button>

@@ -41,8 +41,6 @@ export const NAV_ITEMS = {
   COMMITTEE: [
     { href: "/dashboard", label: "nav.dashboard", icon: "LayoutDashboard" },
     { href: "/presentations/scoring", label: "nav.scoring", icon: "Star" },
-    { href: "/presentations/oral", label: "nav.oralPresentation", icon: "Mic" },
-    { href: "/presentations/poster", label: "nav.posterPresentation", icon: "Image" },
     { href: "/deadlines", label: "nav.scheduleAndDocs", icon: "Calendar" },
   ],
   AUTHOR: [

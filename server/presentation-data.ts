@@ -3,6 +3,7 @@ import { hasRole } from "@/lib/permissions";
 import type { ServerAuthUser } from "@/server/auth-helpers";
 import { db } from "@/server/db";
 import {
+  posterSlotJudges,
   presentationAssignments,
   presentationCommitteeAssignments,
   submissions,
@@ -81,6 +82,21 @@ async function getManagedPresentationIds(currentUser: ServerAuthUser, type: Pres
       .where(and(eq(presentationCommitteeAssignments.judgeId, currentUser.id), eq(presentationAssignments.type, type)));
 
     assignedRows.forEach((row) => presentationIds.add(row.id));
+
+    if (type === "POSTER") {
+      const posterRows = await db
+        .select({ id: presentationAssignments.id })
+        .from(posterSlotJudges)
+        .innerJoin(
+          presentationAssignments,
+          and(
+            eq(posterSlotJudges.submissionId, presentationAssignments.submissionId),
+            eq(presentationAssignments.type, "POSTER")
+          )
+        )
+        .where(eq(posterSlotJudges.judgeId, currentUser.id));
+      posterRows.forEach((row) => presentationIds.add(row.id));
+    }
   }
 
   if (hasRole(currentUser, "AUTHOR")) {

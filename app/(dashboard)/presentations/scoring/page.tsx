@@ -4,6 +4,7 @@ import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasRole } from "@/lib/permissions";
 import { db } from "@/server/db";
 import {
+  posterSlotJudges,
   presentationAssignments,
   presentationCommitteeAssignments,
   presentationEvaluations,
@@ -22,16 +23,39 @@ export default async function ScoringHubPage() {
 
   const isAdmin = hasRole(currentUser, "ADMIN");
 
-  const assignments = isAdmin
-    ? await db
-        .select({ presentationId: presentationAssignments.id })
-        .from(presentationAssignments)
-    : await db
+  let presentationIds: string[] = [];
+
+  if (isAdmin) {
+    const rows = await db
+      .select({ presentationId: presentationAssignments.id })
+      .from(presentationAssignments);
+    presentationIds = rows.map((r) => r.presentationId);
+  } else {
+    const [committeeRows, posterSlotRows] = await Promise.all([
+      db
         .select({ presentationId: presentationCommitteeAssignments.presentationId })
         .from(presentationCommitteeAssignments)
-        .where(eq(presentationCommitteeAssignments.judgeId, currentUser.id));
-
-  const presentationIds = Array.from(new Set(assignments.map((a) => a.presentationId)));
+        .where(eq(presentationCommitteeAssignments.judgeId, currentUser.id)),
+      db
+        .select({ presentationId: presentationAssignments.id })
+        .from(posterSlotJudges)
+        .innerJoin(
+          presentationAssignments,
+          and(
+            eq(posterSlotJudges.submissionId, presentationAssignments.submissionId),
+            eq(presentationAssignments.type, "POSTER")
+          )
+        )
+        .where(eq(posterSlotJudges.judgeId, currentUser.id)),
+    ]);
+    presentationIds = Array.from(
+      new Set([
+        ...committeeRows.map((r) => r.presentationId),
+        ...posterSlotRows.map((r) => r.presentationId),
+      ])
+    );
+  }
+  presentationIds = Array.from(new Set(presentationIds));
 
   if (presentationIds.length === 0) {
     return (

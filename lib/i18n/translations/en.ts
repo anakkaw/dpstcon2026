@@ -461,6 +461,11 @@ const en: Record<TranslationKey, string> = {
   "scoring.emptyTitle": "No scoring tasks yet",
   "scoring.emptyBody": "Presentations assigned to you will appear here.",
   "scoring.emptyFilteredTitle": "Nothing matches this filter",
+  "scoring.searchPlaceholder": "Search paper code, title, author...",
+  "scoring.rubricReference": "Scoring rubric (click to view)",
+  "scoring.viewPaper": "View full paper",
+  "scoring.lastSaved": "Last saved: {date}",
+  "scoring.readyToSubmit": "Ready to submit",
 
   // ─── Poster Planner ──────────────────────────────────
   "poster.plannerTitle": "Poster Group Planner",

@@ -598,17 +598,35 @@ app.post("/:id/evaluations", async (c) => {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
 
-  // Verify user is assigned as committee judge for this presentation
-  const isAssignedJudge = await db.query.presentationCommitteeAssignments.findFirst({
-    where: and(
-      eq(presentationCommitteeAssignments.presentationId, id),
-      eq(presentationCommitteeAssignments.judgeId, currentUser.id)
-    ),
-  });
-
   const isAdmin = hasRole(currentUser, "ADMIN");
-  if (!isAssignedJudge && !isAdmin) {
-    return c.json({ error: "คุณไม่ได้รับมอบหมายให้ประเมินการนำเสนอนี้" }, 403);
+
+  if (!isAdmin) {
+    const [committeeAssignment, presentation] = await Promise.all([
+      db.query.presentationCommitteeAssignments.findFirst({
+        where: and(
+          eq(presentationCommitteeAssignments.presentationId, id),
+          eq(presentationCommitteeAssignments.judgeId, currentUser.id)
+        ),
+      }),
+      db.query.presentationAssignments.findFirst({
+        where: eq(presentationAssignments.id, id),
+        columns: { submissionId: true, type: true },
+      }),
+    ]);
+
+    let posterSlotAssignment = null;
+    if (!committeeAssignment && presentation?.type === "POSTER") {
+      posterSlotAssignment = await db.query.posterSlotJudges.findFirst({
+        where: and(
+          eq(posterSlotJudges.submissionId, presentation.submissionId),
+          eq(posterSlotJudges.judgeId, currentUser.id)
+        ),
+      });
+    }
+
+    if (!committeeAssignment && !posterSlotAssignment) {
+      return c.json({ error: "คุณไม่ได้รับมอบหมายให้ประเมินการนำเสนอนี้" }, 403);
+    }
   }
 
   const existing = await db.query.presentationEvaluations.findFirst({

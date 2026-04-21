@@ -4,6 +4,7 @@ import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasRole } from "@/lib/permissions";
 import { db } from "@/server/db";
 import {
+  posterSlotJudges,
   presentationAssignments,
   presentationCommitteeAssignments,
   presentationEvaluations,
@@ -47,17 +48,30 @@ export default async function ScorePresentationPage({
   if (!presentation) notFound();
 
   const isAdmin = hasRole(currentUser, "ADMIN");
-  const assignment = await db.query.presentationCommitteeAssignments.findFirst({
-    where: and(
-      eq(presentationCommitteeAssignments.presentationId, id),
-      eq(presentationCommitteeAssignments.judgeId, currentUser.id)
-    ),
-  });
+  let assigned = isAdmin;
 
-  if (!assignment && !isAdmin) {
-    redirect(
-      presentation.type === "POSTER" ? "/presentations/poster" : "/presentations/oral"
-    );
+  if (!assigned) {
+    const committeeAssignment = await db.query.presentationCommitteeAssignments.findFirst({
+      where: and(
+        eq(presentationCommitteeAssignments.presentationId, id),
+        eq(presentationCommitteeAssignments.judgeId, currentUser.id)
+      ),
+    });
+    assigned = Boolean(committeeAssignment);
+
+    if (!assigned && presentation.type === "POSTER") {
+      const posterSlot = await db.query.posterSlotJudges.findFirst({
+        where: and(
+          eq(posterSlotJudges.submissionId, presentation.submission.id),
+          eq(posterSlotJudges.judgeId, currentUser.id)
+        ),
+      });
+      assigned = Boolean(posterSlot);
+    }
+  }
+
+  if (!assigned) {
+    redirect("/presentations/scoring");
   }
 
   const [criteria, existing] = await Promise.all([
@@ -91,6 +105,7 @@ export default async function ScorePresentationPage({
       initialScores={(existing?.scores as Record<string, number> | null) ?? null}
       initialComments={existing?.comments ?? ""}
       hasExisting={Boolean(existing)}
+      lastSavedAt={existing?.createdAt?.toISOString() ?? null}
     />
   );
 }

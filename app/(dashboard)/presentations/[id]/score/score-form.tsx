@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Collapsible } from "@/components/ui/collapsible";
 import { Alert } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
@@ -23,6 +25,8 @@ import {
   MessageSquare,
   ArrowLeft,
   Star,
+  FileText,
+  History,
 } from "lucide-react";
 
 interface PresentationProps {
@@ -55,6 +59,7 @@ interface ScoreFormProps {
   initialScores: Record<string, number> | null;
   initialComments: string;
   hasExisting: boolean;
+  lastSavedAt: string | null;
 }
 
 const LEVEL_COLORS: Record<number, { bg: string; border: string; text: string; dot: string }> = {
@@ -71,13 +76,20 @@ function earnedPoints(level: number, totalPoints: number): number {
 
 export function ScoreForm({
   presentation,
-  criteria,
+  criteria: rawCriteria,
   initialScores,
   initialComments,
   hasExisting,
+  lastSavedAt,
 }: ScoreFormProps) {
   const { t, locale } = useI18n();
   const router = useRouter();
+
+  // Filter out zero-point criteria (not applicable)
+  const criteria = useMemo(
+    () => rawCriteria.filter((c) => c.totalPoints > 0),
+    [rawCriteria]
+  );
 
   const initialLevels: Record<string, number> = useMemo(() => {
     const map: Record<string, number> = {};
@@ -98,6 +110,7 @@ export function ScoreForm({
   const [comments, setComments] = useState(initialComments);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   const totalMax = useMemo(
     () => criteria.reduce((sum, c) => sum + c.totalPoints, 0),
@@ -117,6 +130,22 @@ export function ScoreForm({
   );
   const allCompleted = completedCount === criteria.length && criteria.length > 0;
   const progressPct = criteria.length > 0 ? Math.round((completedCount / criteria.length) * 100) : 0;
+
+  // Warn on unload when there are unsaved changes
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  const setLevel = useCallback((criterionId: string, level: number) => {
+    setLevels((prev) => ({ ...prev, [criterionId]: level }));
+    setDirty(true);
+  }, []);
 
   async function handleSubmit() {
     if (!allCompleted) return;
@@ -140,6 +169,7 @@ export function ScoreForm({
 
       if (response.ok) {
         setMessage({ tone: "success", text: t("scoring.saved") });
+        setDirty(false);
         router.refresh();
       } else {
         const data = await response.json().catch(() => null);
@@ -161,20 +191,14 @@ export function ScoreForm({
           ? "text-amber-600"
           : "text-red-600";
 
-  const backHref =
-    presentation.type === "POSTER" ? "/presentations/poster" : "/presentations/oral";
   const TypeIcon = presentation.type === "ORAL" ? Mic : ImageIcon;
 
   return (
-    <div className="space-y-6 pb-32">
+    <div className="space-y-6 pb-36 lg:pb-32">
       <Breadcrumb
         items={[
           { label: t("nav.dashboard"), href: "/dashboard" },
-          {
-            label:
-              presentation.type === "ORAL" ? t("presentations.oral") : t("presentations.poster"),
-            href: backHref,
-          },
+          { label: t("scoring.hubTitle"), href: "/presentations/scoring" },
           { label: t("scoring.title") },
         ]}
       />
@@ -232,8 +256,58 @@ export function ScoreForm({
               </div>
             )}
           </div>
+
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Link href={`/submissions/${presentation.submission.id}`}>
+              <Button size="sm" variant="secondary">
+                <FileText className="h-3.5 w-3.5" />
+                {t("scoring.viewPaper")}
+              </Button>
+            </Link>
+          </div>
+
+          {hasExisting && lastSavedAt && (
+            <p className="flex items-center gap-1.5 text-xs text-ink-muted">
+              <History className="h-3 w-3" />
+              {t("scoring.lastSaved", { date: formatDateTime(lastSavedAt) })}
+            </p>
+          )}
         </CardBody>
       </Card>
+
+      {/* ── Rubric reference ── */}
+      {criteria.length > 0 && (
+        <Collapsible title={t("scoring.rubricReference")} defaultOpen={false}>
+          <div className="space-y-2 p-1">
+            {criteria.map((criterion, index) => {
+              const name = locale === "en" ? criterion.nameEn : criterion.nameTh;
+              const description =
+                locale === "en" ? criterion.descriptionEn : criterion.descriptionTh;
+              return (
+                <div
+                  key={criterion.id}
+                  className="flex items-start gap-3 rounded-lg bg-surface-alt p-3"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-ink">{name}</p>
+                      <span className="shrink-0 rounded bg-white px-2 py-0.5 text-xs font-semibold text-ink">
+                        {criterion.totalPoints}
+                      </span>
+                    </div>
+                    {description && (
+                      <p className="mt-1 text-xs text-ink-muted">{description}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Collapsible>
+      )}
 
       {/* ── Score summary / progress ── */}
       <Card accent={allCompleted ? "success" : "info"}>
@@ -250,7 +324,7 @@ export function ScoreForm({
                 <span className="text-lg text-ink-muted">/ {totalMax}</span>
                 <span className={`text-sm font-medium ${scoreTone}`}>({scorePercent}%)</span>
               </div>
-              <p className="text-xs text-ink-muted">
+              <p className="text-xs text-ink-muted" aria-live="polite">
                 {t("scoring.completedCount", { n: completedCount, total: criteria.length })}
               </p>
             </div>
@@ -259,7 +333,13 @@ export function ScoreForm({
                 <span>{t("scoring.progress")}</span>
                 <span className="font-medium tabular-nums">{progressPct}%</span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-2 overflow-hidden rounded-full bg-gray-100"
+                role="progressbar"
+                aria-valuenow={progressPct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${
                     allCompleted ? "bg-emerald-500" : "bg-blue-500"
@@ -276,112 +356,18 @@ export function ScoreForm({
 
       {/* ── Criteria ── */}
       <div className="space-y-4">
-        {criteria.map((criterion, index) => {
-          const name = locale === "en" ? criterion.nameEn : criterion.nameTh;
-          const description =
-            locale === "en" ? criterion.descriptionEn : criterion.descriptionTh;
-          const selectedLevel = levels[criterion.id];
-          const earned = selectedLevel ? earnedPoints(selectedLevel, criterion.totalPoints) : 0;
-
-          return (
-            <Card key={criterion.id}>
-              <CardHeader>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                        selectedLevel
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-gray-100 text-ink-muted"
-                      }`}
-                    >
-                      {selectedLevel ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-base font-semibold text-ink">{name}</h3>
-                      {description && (
-                        <p className="mt-1 text-sm text-ink-muted">{description}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
-                    <div className="rounded-lg bg-surface-alt px-3 py-1.5 text-xs">
-                      <span className="text-ink-muted">{t("scoring.maxPoints")} </span>
-                      <span className="font-semibold text-ink">{criterion.totalPoints}</span>
-                    </div>
-                    {selectedLevel && (
-                      <div
-                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${LEVEL_COLORS[selectedLevel].bg} ${LEVEL_COLORS[selectedLevel].text}`}
-                      >
-                        {earned}/{criterion.totalPoints}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardBody>
-                <div
-                  role="radiogroup"
-                  aria-label={name}
-                  className="grid grid-cols-1 gap-2 sm:grid-cols-5"
-                >
-                  {criterion.levels.map((level) => {
-                    const selected = selectedLevel === level.level;
-                    const colors = LEVEL_COLORS[level.level];
-                    const title = locale === "en" ? level.titleEn : level.titleTh;
-                    const desc =
-                      locale === "en" ? level.descriptionEn : level.descriptionTh;
-                    const levelEarned = earnedPoints(level.level, criterion.totalPoints);
-
-                    return (
-                      <button
-                        key={level.level}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() =>
-                          setLevels((prev) => ({ ...prev, [criterion.id]: level.level }))
-                        }
-                        className={`group relative flex flex-col gap-2 rounded-xl border-2 p-3 text-left transition-all ${
-                          selected
-                            ? `${colors.border} ${colors.bg} shadow-sm`
-                            : "border-gray-200 bg-white hover:border-gray-300 hover:bg-surface-alt"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <div
-                              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white ${colors.dot}`}
-                            >
-                              {level.level}
-                            </div>
-                            <span className={`text-xs font-semibold ${selected ? colors.text : "text-ink"}`}>
-                              {title}
-                            </span>
-                          </div>
-                          {selected && (
-                            <CheckCircle2 className={`h-4 w-4 ${colors.text}`} />
-                          )}
-                        </div>
-                        <p className="text-xs leading-relaxed text-ink-muted line-clamp-3 group-hover:line-clamp-none">
-                          {desc}
-                        </p>
-                        <div className="mt-auto flex items-center gap-1 pt-1 text-[11px]">
-                          <Star className={`h-3 w-3 ${selected ? colors.text : "text-ink-muted"}`} />
-                          <span
-                            className={`font-semibold tabular-nums ${selected ? colors.text : "text-ink-muted"}`}
-                          >
-                            {levelEarned} {t("scoring.points")}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </CardBody>
-            </Card>
-          );
-        })}
+        {criteria.map((criterion, index) => (
+          <CriterionCard
+            key={criterion.id}
+            criterion={criterion}
+            index={index}
+            locale={locale}
+            selectedLevel={levels[criterion.id]}
+            onSelect={(level) => setLevel(criterion.id, level)}
+            labelMax={t("scoring.maxPoints")}
+            labelPoints={t("scoring.points")}
+          />
+        ))}
       </div>
 
       {/* ── Comments ── */}
@@ -396,7 +382,10 @@ export function ScoreForm({
         <CardBody>
           <Textarea
             value={comments}
-            onChange={(e) => setComments(e.target.value)}
+            onChange={(e) => {
+              setComments(e.target.value);
+              setDirty(true);
+            }}
             placeholder={t("scoring.commentsPlaceholder")}
             rows={5}
           />
@@ -404,29 +393,33 @@ export function ScoreForm({
       </Card>
 
       {/* ── Sticky footer ── */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/60 bg-white/95 px-4 py-3 shadow-elev-2 backdrop-blur lg:ml-60">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-white/95 px-4 py-3 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur lg:ml-60">
         <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-brand-100 to-brand-200 text-brand-700">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-100 to-brand-200 text-brand-700">
               <Star className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-ink-muted">{t("scoring.totalScore")}</p>
+              <p className="text-xs font-medium text-ink-muted">
+                {allCompleted
+                  ? t("scoring.readyToSubmit")
+                  : t("scoring.completeAll", { n: criteria.length - completedCount })}
+              </p>
               <p className={`text-lg font-bold tabular-nums leading-tight ${scoreTone}`}>
                 {totalEarned}
                 <span className="text-sm font-normal text-ink-muted"> / {totalMax}</span>
-              </p>
-            </div>
-            <div className="hidden h-8 w-px bg-border/60 sm:block" />
-            <div className="hidden sm:block">
-              <p className="text-xs font-medium text-ink-muted">{t("scoring.progress")}</p>
-              <p className="text-sm font-semibold text-ink">
-                {completedCount}/{criteria.length} {t("scoring.criteriaShort")}
+                <span className="ml-2 text-xs font-medium text-ink-muted">
+                  ({completedCount}/{criteria.length})
+                </span>
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => router.push(backHref)} size="sm">
+            <Button
+              variant="ghost"
+              onClick={() => router.push("/presentations/scoring")}
+              size="sm"
+            >
               <ArrowLeft className="h-4 w-4" />
               {t("common.back")}
             </Button>
@@ -441,12 +434,169 @@ export function ScoreForm({
             </Button>
           </div>
         </div>
-        {!allCompleted && (
-          <p className="mx-auto mt-2 max-w-5xl text-center text-xs text-amber-600 sm:text-left">
-            {t("scoring.completeAll", { n: criteria.length - completedCount })}
-          </p>
-        )}
       </div>
     </div>
+  );
+}
+
+function CriterionCard({
+  criterion,
+  index,
+  locale,
+  selectedLevel,
+  onSelect,
+  labelMax,
+  labelPoints,
+}: {
+  criterion: PresentationRubricCriterion;
+  index: number;
+  locale: string;
+  selectedLevel: number | undefined;
+  onSelect: (level: number) => void;
+  labelMax: string;
+  labelPoints: string;
+}) {
+  const groupRef = useRef<HTMLDivElement>(null);
+  const name = locale === "en" ? criterion.nameEn : criterion.nameTh;
+  const description = locale === "en" ? criterion.descriptionEn : criterion.descriptionTh;
+  const earned = selectedLevel ? earnedPoints(selectedLevel, criterion.totalPoints) : 0;
+
+  // Levels are ordered 5,4,3,2,1 in the rubric source
+  const orderedLevels = criterion.levels;
+
+  const handleKeyDown = (event: React.KeyboardEvent, currentLevel: number) => {
+    const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+
+    const visibleOrder = [...orderedLevels].sort((a, b) => a.level - b.level); // 1,2,3,4,5 left-to-right
+    const currentIndex = visibleOrder.findIndex((l) => l.level === currentLevel);
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = Math.min(visibleOrder.length - 1, currentIndex + 1);
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = Math.max(0, currentIndex - 1);
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = visibleOrder.length - 1;
+    }
+
+    const nextLevel = visibleOrder[nextIndex].level;
+    onSelect(nextLevel);
+
+    requestAnimationFrame(() => {
+      const nextButton = groupRef.current?.querySelector<HTMLButtonElement>(
+        `[data-level="${nextLevel}"]`
+      );
+      nextButton?.focus();
+    });
+  };
+
+  const focusableLevel = selectedLevel ?? 3; // center-level default
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                selectedLevel
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-100 text-ink-muted"
+              }`}
+            >
+              {selectedLevel ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-ink">{name}</h3>
+              {description && (
+                <p className="mt-1 text-sm text-ink-muted">{description}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+            <div className="rounded-lg bg-surface-alt px-3 py-1.5 text-xs">
+              <span className="text-ink-muted">{labelMax} </span>
+              <span className="font-semibold text-ink">{criterion.totalPoints}</span>
+            </div>
+            {selectedLevel && (
+              <div
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${LEVEL_COLORS[selectedLevel].bg} ${LEVEL_COLORS[selectedLevel].text}`}
+              >
+                {earned}/{criterion.totalPoints}
+              </div>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardBody>
+        <div
+          ref={groupRef}
+          role="radiogroup"
+          aria-label={name}
+          className="grid grid-cols-1 gap-2 sm:grid-cols-5"
+        >
+          {[...orderedLevels]
+            .sort((a, b) => a.level - b.level)
+            .map((level) => {
+              const selected = selectedLevel === level.level;
+              const colors = LEVEL_COLORS[level.level];
+              const title = locale === "en" ? level.titleEn : level.titleTh;
+              const desc = locale === "en" ? level.descriptionEn : level.descriptionTh;
+              const levelEarned = earnedPoints(level.level, criterion.totalPoints);
+              const isTabStop = selected || (!selectedLevel && level.level === focusableLevel);
+
+              return (
+                <button
+                  key={level.level}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  tabIndex={isTabStop ? 0 : -1}
+                  data-level={level.level}
+                  onClick={() => onSelect(level.level)}
+                  onKeyDown={(event) => handleKeyDown(event, level.level)}
+                  className={`group relative flex flex-col gap-2 rounded-xl border-2 p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2 ${
+                    selected
+                      ? `${colors.border} ${colors.bg} shadow-sm`
+                      : "border-gray-200 bg-white hover:border-gray-300 hover:bg-surface-alt"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white ${colors.dot}`}
+                      >
+                        {level.level}
+                      </div>
+                      <span
+                        className={`text-xs font-semibold ${selected ? colors.text : "text-ink"}`}
+                      >
+                        {title}
+                      </span>
+                    </div>
+                    {selected && <CheckCircle2 className={`h-4 w-4 ${colors.text}`} />}
+                  </div>
+                  <p className="text-xs leading-relaxed text-ink-muted line-clamp-3 group-hover:line-clamp-none">
+                    {desc}
+                  </p>
+                  <div className="mt-auto flex items-center gap-1 pt-1 text-[11px]">
+                    <Star
+                      className={`h-3 w-3 ${selected ? colors.text : "text-ink-muted"}`}
+                    />
+                    <span
+                      className={`font-semibold tabular-nums ${selected ? colors.text : "text-ink-muted"}`}
+                    >
+                      {levelEarned} {labelPoints}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+        </div>
+      </CardBody>
+    </Card>
   );
 }

@@ -463,6 +463,11 @@ const th = {
   "scoring.emptyTitle": "ยังไม่มีรายการให้ประเมิน",
   "scoring.emptyBody": "เมื่อผู้จัดงานมอบหมายการนำเสนอให้คุณ จะปรากฏที่นี่",
   "scoring.emptyFilteredTitle": "ไม่พบรายการในหมวดนี้",
+  "scoring.searchPlaceholder": "ค้นหา paper code, ชื่อบทความ, ผู้เขียน...",
+  "scoring.rubricReference": "เกณฑ์การให้คะแนน (คลิกเพื่อดู)",
+  "scoring.viewPaper": "ดูบทความฉบับเต็ม",
+  "scoring.lastSaved": "บันทึกล่าสุด: {date}",
+  "scoring.readyToSubmit": "พร้อมส่งผลการประเมิน",
 
   // ─── Poster Planner ──────────────────────────────────
   "poster.plannerTitle": "วางแผนจัดกลุ่มโปสเตอร์",
