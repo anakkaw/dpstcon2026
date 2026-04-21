@@ -144,6 +144,8 @@ interface Props {
   deadlines?: Record<string, string>;
   isAssignedReviewer?: boolean;
   reviewerAssignmentId?: string | null;
+  reviewerAssignmentStatus?: string | null;
+  reviewerAssignmentAssignedAt?: string | null;
   lastAdvisorEmail?: {
     status: "PENDING" | "SENT" | "FAILED";
     sentAt: string | null;
@@ -155,7 +157,7 @@ interface Props {
 export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
   reviewCounts, decision, presentations, criteriaByType, deadlines,
-  isAssignedReviewer, reviewerAssignmentId, lastAdvisorEmail,
+  isAssignedReviewer, reviewerAssignmentId, reviewerAssignmentStatus, reviewerAssignmentAssignedAt, lastAdvisorEmail,
 }: Props) {
   const router = useRouter();
   const { t } = useI18n();
@@ -245,6 +247,19 @@ export function SubmissionDetail({
     ? Date.now() - new Date(myCompletedReview.completedAt as unknown as string | Date).getTime() < EDIT_WINDOW_MS
     : false;
 
+  // Round 2 detection: author resubmitted → assignment re-opened to ACCEPTED with
+  // assignedAt bumped past the existing review.completedAt. Reviewer should get
+  // a fresh form to review the revised manuscript.
+  const isRound2Active = (() => {
+    if (!isAssignedReviewer || !myCompletedReview?.completedAt) return false;
+    if (reviewerAssignmentStatus !== "ACCEPTED") return false;
+    if (!reviewerAssignmentAssignedAt) return false;
+    return (
+      new Date(reviewerAssignmentAssignedAt).getTime() >
+      new Date(myCompletedReview.completedAt as unknown as string | Date).getTime()
+    );
+  })();
+
   function startEditReview() {
     if (!myCompletedReview) return;
     setReviewRecommendation(myCompletedReview.recommendation || "");
@@ -266,8 +281,9 @@ export function SubmissionDetail({
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const alreadyCompleted = submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt);
-  const canWriteReview = isAssignedReviewer && !alreadyCompleted;
+  // Draft autosave is active whenever the user is an assigned reviewer
+  // (covers round 1, round 2 after resubmit, and the 24h edit window).
+  const canWriteReview = isAssignedReviewer;
 
   // Load saved draft once on mount
   useEffect(() => {
@@ -755,18 +771,27 @@ export function SubmissionDetail({
       )}
 
       {/* Workflow hint — shown to the common dual-role case (PC who's also reviewing).
-          Sequential flow: write your review → then make the chair decision. */}
+          Sequential flow: write your review → then make the chair decision.
+          After a REVISE cycle, reverts to step 1 for round 2. */}
       {isAdmin && isAssignedReviewer && !isOwner && (
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-alt px-4 py-2.5 text-sm">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 font-bold text-xs">
-            {myCompletedReview ? 2 : 1}
+            {myCompletedReview && !isRound2Active ? 2 : 1}
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-medium text-ink">
-              {myCompletedReview ? t("detail.workflowStep2Title") : t("detail.workflowStep1Title")}
+              {isRound2Active
+                ? t("detail.workflowRound2Title")
+                : myCompletedReview
+                  ? t("detail.workflowStep2Title")
+                  : t("detail.workflowStep1Title")}
             </p>
             <p className="text-xs text-ink-muted">
-              {myCompletedReview ? t("detail.workflowStep2Desc") : t("detail.workflowStep1Desc")}
+              {isRound2Active
+                ? t("detail.workflowRound2Desc")
+                : myCompletedReview
+                  ? t("detail.workflowStep2Desc")
+                  : t("detail.workflowStep1Desc")}
             </p>
           </div>
         </div>
@@ -785,8 +810,9 @@ export function SubmissionDetail({
         </Card>
       )}
 
-      {/* Decision Display — hidden from reviewers while they're writing their review to avoid bias */}
-      {decision && !(isAssignedReviewer && !isOwner && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt)) && (
+      {/* Decision Display — hidden from reviewers while they're writing their review to avoid bias.
+          Hides during round 1 (before first submit) AND during active round 2 (after resubmit). */}
+      {decision && !(isAssignedReviewer && !isOwner && (!submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) || isRound2Active)) && (
         <Card accent={decision.outcome === "ACCEPT" || decision.outcome === "CONDITIONAL_ACCEPT" ? "success" : "danger"}>
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
@@ -1008,8 +1034,9 @@ export function SubmissionDetail({
         </Card>
       )}
 
-      {/* Review confirmation — shown after reviewer already submitted (hidden while editing) */}
-      {isAssignedReviewer && myCompletedReview && !editReviewMode && (
+      {/* Review confirmation — shown after reviewer already submitted
+          (hidden while editing OR during an active round 2) */}
+      {isAssignedReviewer && myCompletedReview && !editReviewMode && !isRound2Active && (
         <Alert tone="success">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="flex items-start gap-2">
@@ -1160,9 +1187,24 @@ export function SubmissionDetail({
         );
       })()}
 
-      {/* Review Submission Form — for assigned reviewers (shown prominently before paper info);
-          also shown when they chose to edit within the 24h window */}
-      {isAssignedReviewer && (!myCompletedReview || editReviewMode) && (() => {
+      {/* Round 2 banner — prompts reviewer to re-evaluate the revised manuscript */}
+      {isRound2Active && !editReviewMode && (
+        <Alert tone="info">
+          <div className="flex items-start gap-2">
+            <RotateCcw className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-semibold">{t("reviewForm.round2Title")}</p>
+              <p className="mt-0.5 text-xs">{t("reviewForm.round2Desc")}</p>
+            </div>
+          </div>
+        </Alert>
+      )}
+
+      {/* Review Submission Form — shown when:
+          - reviewer hasn't submitted yet (round 1), OR
+          - reviewer is editing within 24h window, OR
+          - round 2 is active (author resubmitted after REVISE) */}
+      {isAssignedReviewer && (!myCompletedReview || editReviewMode || isRound2Active) && (() => {
         const myAttachments = files.filter(
           (f) => f.kind === "REVIEW_ATTACHMENT" && f.uploadedById === currentUserId
         );

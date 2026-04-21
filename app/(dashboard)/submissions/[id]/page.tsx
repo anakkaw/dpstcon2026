@@ -55,16 +55,20 @@ export default async function SubmissionDetailPage({
 
   // Check reviewer assignment independently of access chain
   // so PROGRAM_CHAIR who is also a reviewer gets isAssignedReviewer set correctly
+  let reviewerAssignmentStatus: string | null = null;
+  let reviewerAssignmentAssignedAt: string | null = null;
   if (hasRole(currentUser, "REVIEWER")) {
     const reviewerAssignment = await db.query.reviewAssignments.findFirst({
       where: and(
         eq(reviewAssignments.submissionId, id),
         eq(reviewAssignments.reviewerId, currentUser.id)
       ),
-      columns: { id: true },
+      columns: { id: true, status: true, assignedAt: true },
     });
     isAssignedReviewer = !!reviewerAssignment;
     reviewerAssignmentId = reviewerAssignment?.id ?? null;
+    reviewerAssignmentStatus = reviewerAssignment?.status ?? null;
+    reviewerAssignmentAssignedAt = reviewerAssignment?.assignedAt?.toISOString() ?? null;
   }
 
   let hasAccess = hasRole(currentUser, "ADMIN");
@@ -327,6 +331,8 @@ export default async function SubmissionDetailPage({
       deadlines={deadlineMap}
       isAssignedReviewer={isAssignedReviewer}
       reviewerAssignmentId={reviewerAssignmentId}
+      reviewerAssignmentStatus={reviewerAssignmentStatus}
+      reviewerAssignmentAssignedAt={reviewerAssignmentAssignedAt}
       lastAdvisorEmail={
         lastAdvisorEmailRows[0]
           ? {

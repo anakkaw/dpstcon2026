@@ -1,11 +1,11 @@
 "use server";
 
 import { db } from "@/server/db";
-import { submissions, reviewAssignments } from "@/server/db/schema";
-import { eq, and } from "drizzle-orm";
+import { submissions, reviewAssignments, user as userTable } from "@/server/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireActiveServerAuthContext } from "@/server/auth-helpers";
-import { advisorApprovalEmail, queueEmail } from "@/server/email";
+import { advisorApprovalEmail, queueEmail, reviewAssignmentEmail } from "@/server/email";
 import { hasRole } from "@/lib/permissions";
 import { canAuthorEditSubmission, getSubmissionValidationError } from "@/server/submission-workflow";
 
@@ -174,25 +174,60 @@ export async function resubmitPaper(id: string) {
   if (submission.authorId !== session.user.id) throw new Error("Forbidden");
   if (submission.status !== "REVISION_REQUIRED") throw new Error("Can only resubmit from REVISION_REQUIRED");
 
-  // Reset review assignments (COMPLETED → ACCEPTED) so the same reviewer reviews again
-  await db
+  // Reset review assignments (COMPLETED → ACCEPTED) so the same reviewer reviews again.
+  // Also bump assignedAt + clear lastReminderAt so the UI can detect "round 2".
+  const now = new Date();
+  const reopened = await db
     .update(reviewAssignments)
-    .set({ status: "ACCEPTED", respondedAt: null })
+    .set({
+      status: "ACCEPTED",
+      respondedAt: null,
+      assignedAt: now,
+      lastReminderAt: null,
+    })
     .where(
       and(
         eq(reviewAssignments.submissionId, id),
         eq(reviewAssignments.status, "COMPLETED")
       )
-    );
+    )
+    .returning({ id: reviewAssignments.id, reviewerId: reviewAssignments.reviewerId, dueDate: reviewAssignments.dueDate });
 
   const [updated] = await db
     .update(submissions)
     .set({
       status: "UNDER_REVIEW",
-      updatedAt: new Date(),
+      updatedAt: now,
     })
     .where(eq(submissions.id, id))
     .returning();
+
+  // Notify reviewers that a revised manuscript is ready for round-2 review
+  if (reopened.length > 0) {
+    const reviewerIds = reopened.map((r) => r.reviewerId);
+    const reviewerRows = await db
+      .select({ id: userTable.id, name: userTable.name, email: userTable.email })
+      .from(userTable)
+      .where(inArray(userTable.id, reviewerIds));
+
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    for (const reviewer of reviewerRows) {
+      if (!reviewer.email) continue;
+      const dueDate = reopened.find((r) => r.reviewerId === reviewer.id)?.dueDate;
+      const email = reviewAssignmentEmail({
+        reviewerName: reviewer.name,
+        paperTitle: submission.title,
+        dueDate: dueDate ? dueDate.toISOString().slice(0, 10) : undefined,
+        loginUrl: `${appUrl}/submissions/${id}#section-review-form`,
+      });
+      await queueEmail({
+        to: reviewer.email,
+        subject: `[ฉบับแก้ไข] ${email.subject}`,
+        html: email.html,
+        text: email.text,
+      }).catch(() => { /* non-blocking */ });
+    }
+  }
 
   revalidatePath("/submissions");
   revalidatePath(`/submissions/${id}`);
