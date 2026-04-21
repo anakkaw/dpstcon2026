@@ -229,6 +229,10 @@ const th = {
   // ─── Submission Detail ────────────────────────────────
   "detail.papers": "บทความ",
   "detail.paperInfo": "ข้อมูลบทความ",
+  "detail.paperDetails": "รายละเอียดบทความ",
+  "detail.authorLabel": "ผู้เขียน",
+  "detail.coAuthorsLabel": "ผู้เขียนร่วม",
+  "detail.trackLabel": "สาขาวิชา",
   "detail.abstract": "บทคัดย่อ",
   "detail.keywords": "คำสำคัญ",
   "detail.createdAt": "สร้างเมื่อ",

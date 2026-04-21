@@ -714,8 +714,8 @@ export function SubmissionDetail({
         </Card>
       )}
 
-      {/* Advisor Endorsement Card */}
-      {(isAdmin || isOwner) && submission.advisorName && (
+      {/* Advisor Endorsement Card — hidden while actively reviewing (focus on paper, not advisor) */}
+      {(isAdmin || isOwner) && !(isAssignedReviewer && !isOwner) && submission.advisorName && (
         <Card id="section-advisor">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -920,6 +920,84 @@ export function SubmissionDetail({
           </Alert>
         );
       })()}
+
+      {/* Paper details for reviewers — shown prominently above the review form so reviewer
+          can reference the paper while writing */}
+      {isAssignedReviewer && !isOwner && (
+        <Card id="section-paper-details" accent="info">
+          <CardHeader>
+            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              {t("detail.paperDetails")}
+            </h3>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
+                  {t("detail.authorLabel")}
+                </p>
+                <p className="text-sm text-ink">
+                  {displayNameTh(submission.author)}
+                  {submission.author.affiliation && (
+                    <span className="text-ink-muted"> ({submission.author.affiliation})</span>
+                  )}
+                </p>
+              </div>
+              {submission.track && (
+                <div>
+                  <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
+                    {t("detail.trackLabel")}
+                  </p>
+                  <Badge tone="info">{submission.track.name}</Badge>
+                </div>
+              )}
+            </div>
+
+            {submission.coAuthors.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1">
+                  {t("detail.coAuthorsLabel")}
+                </p>
+                <p className="text-sm text-ink">
+                  {submission.coAuthors
+                    .map((ca) => `${ca.name}${ca.affiliation ? ` (${ca.affiliation})` : ""}`)
+                    .join(", ")}
+                </p>
+              </div>
+            )}
+
+            {submission.abstract && (
+              <div>
+                <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
+                  {t("detail.abstract")}
+                </p>
+                <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
+                  {submission.abstract}
+                </p>
+              </div>
+            )}
+
+            {submission.keywords && (
+              <div>
+                <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
+                  {t("detail.keywords")}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {submission.keywords.split(",").map((kw, i) => (
+                    <span
+                      key={i}
+                      className="text-xs bg-white border border-border text-ink-light px-2.5 py-1 rounded-md"
+                    >
+                      {kw.trim()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {/* Review Submission Form — for assigned reviewers (shown prominently before paper info) */}
       {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (() => {
@@ -1171,7 +1249,8 @@ export function SubmissionDetail({
         );
       })()}
 
-      {/* Paper Info */}
+      {/* Paper Info — hidden for reviewers because they see the prominent PaperDetails card above */}
+      {!(isAssignedReviewer && !isOwner) && (
       <div id="section-paper-info">
       <Collapsible title={t("detail.paperInfo")} defaultOpen={submission.status === "DRAFT"}>
         <div className="space-y-4">
@@ -1223,6 +1302,7 @@ export function SubmissionDetail({
         </div>
       </Collapsible>
       </div>
+      )}
 
       {/* Files Section */}
       <Card id="section-files">
@@ -1530,13 +1610,17 @@ export function SubmissionDetail({
                   <Send className="h-3.5 w-3.5 shrink-0" />{t("reviewForm.title")}
                 </a>
               )}
-              <a href="#section-paper-info" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
-                <FileText className="h-3.5 w-3.5 shrink-0" />{t("detail.paperInfo")}
+              <a
+                href={isAssignedReviewer && !isOwner ? "#section-paper-details" : "#section-paper-info"}
+                className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors"
+              >
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                {isAssignedReviewer && !isOwner ? t("detail.paperDetails") : t("detail.paperInfo")}
               </a>
               <a href="#section-files" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
                 <Paperclip className="h-3.5 w-3.5 shrink-0" />{t("detail.files")}
               </a>
-              {(isAdmin || isOwner) && submission.advisorName && (
+              {(isAdmin || isOwner) && !(isAssignedReviewer && !isOwner) && submission.advisorName && (
                 <a href="#section-advisor" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
                   <UserCheck className="h-3.5 w-3.5 shrink-0" />{t("advisor.sectionTitle")}
                 </a>

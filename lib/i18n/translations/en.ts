@@ -239,6 +239,10 @@ const en: Record<TranslationKey, string> = {
   // ─── Submission Detail ────────────────────────────────
   "detail.papers": "Papers",
   "detail.paperInfo": "Paper Information",
+  "detail.paperDetails": "Paper Details",
+  "detail.authorLabel": "Author",
+  "detail.coAuthorsLabel": "Co-Authors",
+  "detail.trackLabel": "Track",
   "detail.abstract": "Abstract",
   "detail.keywords": "Keywords",
   "detail.createdAt": "Created",
