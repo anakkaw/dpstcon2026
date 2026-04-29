@@ -665,6 +665,9 @@ app.post("/:id/resend-invite", requireRole("ADMIN"), async (c) => {
 });
 
 // POST /api/users/:id/reset-password — reset password (ADMIN)
+// If the target user is not yet active (e.g. judge couldn't click invite email),
+// this also activates the account in the same operation so admin can hand the
+// password to them through another channel (LINE, phone) — bypassing email.
 app.post("/:id/reset-password", requireRole("ADMIN"), async (c) => {
   const { id } = c.req.param();
   const body = await c.req.json();
@@ -676,6 +679,13 @@ app.post("/:id/reset-password", requireRole("ADMIN"), async (c) => {
   const parsed = schema.safeParse(body);
   if (!parsed.success)
     return c.json({ error: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" }, 400);
+
+  const targetUser = await db.query.user.findFirst({
+    where: eq(user.id, id),
+    columns: { id: true, isActive: true },
+  });
+
+  if (!targetUser) return c.json({ error: "ไม่พบผู้ใช้" }, 404);
 
   const { auth } = await import("@/server/auth");
 
@@ -695,7 +705,27 @@ app.post("/:id/reset-password", requireRole("ADMIN"), async (c) => {
 
   if (!updated) return c.json({ error: "ไม่พบบัญชีของผู้ใช้นี้" }, 404);
 
-  return c.json({ ok: true, message: "รีเซ็ตรหัสผ่านสำเร็จ" });
+  let activated = false;
+  if (!targetUser.isActive) {
+    await db
+      .update(user)
+      .set({
+        isActive: true,
+        inviteToken: null,
+        inviteExpiresAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(user.id, id));
+    activated = true;
+  }
+
+  return c.json({
+    ok: true,
+    activated,
+    message: activated
+      ? "เปิดใช้งานบัญชีและตั้งรหัสผ่านสำเร็จ"
+      : "รีเซ็ตรหัสผ่านสำเร็จ",
+  });
 });
 
 // DELETE /api/users/:id — delete user (ADMIN)

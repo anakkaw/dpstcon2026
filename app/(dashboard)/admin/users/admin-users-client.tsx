@@ -275,8 +275,16 @@ export function AdminUsersClient({
       });
       const data = await res.json();
       if (res.ok) {
-        showMsg(t("users.passwordResetSuccess"));
+        showMsg(
+          data.activated
+            ? t("users.activateAndSetPasswordSuccess")
+            : t("users.passwordResetSuccess")
+        );
         closeModal();
+        if (data.activated) {
+          void refreshUsers();
+          void refreshRegStats();
+        }
       } else {
         showMsg(data.error || t("users.resetFailed"), "danger");
       }
@@ -742,8 +750,24 @@ export function AdminUsersClient({
       )}
 
       {modalMode === "password" && selectedUser && (
-        <ModalShell open title={t("users.passwordTitle")} description={`${displayNameTh(selectedUser)} — ${selectedUser.email}`} onClose={closeModal} footer={<div className="flex justify-end gap-2"><Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button><Button size="sm" onClick={resetPassword} loading={saving} disabled={!resetPw || resetPw.length < 8}>{t("users.resetPassword")}</Button></div>}>
+        <ModalShell
+          open
+          title={selectedUser.isActive ? t("users.passwordTitle") : t("users.activateAndSetPassword")}
+          description={`${displayNameTh(selectedUser)} — ${selectedUser.email}`}
+          onClose={closeModal}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={closeModal}>{t("common.cancel")}</Button>
+              <Button size="sm" onClick={resetPassword} loading={saving} disabled={!resetPw || resetPw.length < 8}>
+                {selectedUser.isActive ? t("users.resetPassword") : t("users.activateAndSetPasswordButton")}
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
+            {!selectedUser.isActive && (
+              <Alert tone="warning">{t("users.activateAndSetPasswordHint")}</Alert>
+            )}
             <Field label={t("users.newPassword")} hint={t("users.minPasswordLength")} required>
               <div className="relative">
                 <Input type={showPw ? "text" : "password"} value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder={t("users.newPasswordPlaceholder")} autoFocus className="pr-10" />
