@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   canAuthorEditSubmission,
   canAuthorUploadSubmissionFile,
+  getDecisionSubmissionStatus,
   getSubmissionValidationError,
 } from "@/server/submission-workflow";
 
@@ -21,6 +22,17 @@ test("author upload permissions follow workflow state", () => {
     canAuthorUploadSubmissionFile("CAMERA_READY_PENDING", "CAMERA_READY"),
     true
   );
+  assert.equal(canAuthorUploadSubmissionFile("ACCEPTED", "CAMERA_READY"), true);
+});
+
+test("chair decisions map to the expected submission status", () => {
+  assert.equal(getDecisionSubmissionStatus("ACCEPT"), "ACCEPTED");
+  assert.equal(getDecisionSubmissionStatus("REJECT"), "REJECTED");
+  assert.equal(
+    getDecisionSubmissionStatus("CONDITIONAL_ACCEPT"),
+    "REVISION_REQUIRED"
+  );
+  assert.equal(getDecisionSubmissionStatus("DESK_REJECT"), "DESK_REJECTED");
 });
 
 test("submission validation requires all mandatory metadata before submission", () => {

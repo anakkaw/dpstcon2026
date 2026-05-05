@@ -13,6 +13,7 @@ import { z } from "zod";
 import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import { isDuplicateReviewRound } from "@/server/access-policies";
 import { ensureSubmissionPaperCode } from "@/server/paper-code-service";
+import { getDecisionSubmissionStatus } from "@/server/submission-workflow";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -245,7 +246,7 @@ app.patch("/assignments/:id/respond", async (c) => {
 
   const assignment = await db.query.reviewAssignments.findFirst({
     where: eq(reviewAssignments.id, id),
-    columns: { id: true, reviewerId: true, status: true },
+    columns: { id: true, reviewerId: true, status: true, submissionId: true },
   });
 
   if (!assignment) return c.json({ error: "Assignment not found" }, 404);
@@ -264,6 +265,18 @@ app.patch("/assignments/:id/respond", async (c) => {
     })
     .where(eq(reviewAssignments.id, id))
     .returning();
+
+  if (parsed.data.response === "ACCEPTED") {
+    await db
+      .update(submissions)
+      .set({ status: "UNDER_REVIEW", updatedAt: new Date() })
+      .where(
+        and(
+          eq(submissions.id, assignment.submissionId),
+          eq(submissions.status, "SUBMITTED")
+        )
+      );
+  }
 
   return c.json({ assignment: updated });
 });
@@ -457,38 +470,14 @@ app.post("/decisions", async (c) => {
     })
     .returning();
 
-  const statusMap: Record<string, string> = {
-    ACCEPT: "CAMERA_READY_PENDING",
-    REJECT: "REJECTED",
-    CONDITIONAL_ACCEPT: "REVISION_REQUIRED",
-    DESK_REJECT: "DESK_REJECTED",
-  };
-
-  let newStatus = statusMap[data.outcome];
-
-  // Auto-promote to CAMERA_READY_SUBMITTED if a manuscript file already exists
-  // (this conference is abstract-based — any uploaded PDF counts as the final version)
-  if (newStatus === "CAMERA_READY_PENDING") {
-    const { storedFiles } = await import("@/server/db/schema");
-    const existingManuscript = await db.query.storedFiles.findFirst({
-      where: and(
-        eq(storedFiles.submissionId, data.submissionId),
-        eq(storedFiles.kind, "MANUSCRIPT")
-      ),
-      columns: { id: true },
-    });
-
-    if (existingManuscript) {
-      newStatus = "CAMERA_READY_SUBMITTED";
-    }
-  }
+  const newStatus = getDecisionSubmissionStatus(data.outcome);
 
   await db
     .update(submissions)
-    .set({ status: newStatus as typeof submissions.$inferInsert.status, updatedAt: new Date() })
+    .set({ status: newStatus, updatedAt: new Date() })
     .where(eq(submissions.id, data.submissionId));
 
-  if (newStatus === "CAMERA_READY_PENDING" || newStatus === "CAMERA_READY_SUBMITTED") {
+  if (newStatus === "ACCEPTED") {
     await ensureSubmissionPaperCode(data.submissionId);
   }
 

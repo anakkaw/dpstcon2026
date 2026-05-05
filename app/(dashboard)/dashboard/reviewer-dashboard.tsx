@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { StatCard } from "@/components/ui/stat-card";
 import { Alert } from "@/components/ui/alert";
@@ -28,7 +29,7 @@ export default function ReviewerDashboard({ stats }: { stats: Record<string, unk
   const completedCount = (stats.completed as number) || 0;
   const remainingCount = Math.max(totalAssignments - completedCount, 0);
   const topPending = (stats.topPending as TopPendingItem[]) || [];
-  const now = Date.now();
+  const [now] = useState(() => Date.now());
 
   function isOverdue(dueDate: string | null) {
     if (!dueDate) return false;

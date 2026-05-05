@@ -190,15 +190,15 @@ export function PosterPlannerClient({
   }, [initialCommitteeUsers, posterSubmissions]);
 
   // ── API helpers ──
-  async function refreshPlanner() {
+  const refreshPlanner = useCallback(async () => {
     const response = await fetch("/api/presentations/poster-planner");
     const data = await response.json();
     setSessionSettings(data.sessionSettings || { room: "", slotTemplates: [] });
     setSessionDraft(data.sessionSettings || { room: "", slotTemplates: [] });
     setPosterSubmissions(data.posterSubmissions || []);
-  }
+  }, []);
 
-  async function runAction(key: string, action: () => Promise<void>) {
+  const runAction = useCallback(async (key: string, action: () => Promise<void>) => {
     setSavingKey(key);
     setMessage("");
     try {
@@ -210,7 +210,7 @@ export function PosterPlannerClient({
     } finally {
       setSavingKey(null);
     }
-  }
+  }, [t]);
 
   async function handleSaveCriteria(nextCriteria: CriterionData[]) {
     const response = await fetch("/api/presentations/criteria", {
@@ -344,7 +344,7 @@ export function PosterPlannerClient({
         setMessage(t("poster.judgeSaved"));
       });
     },
-    [sessionSettings.slotTemplates, t]
+    [refreshPlanner, runAction, sessionSettings.slotTemplates, t]
   );
 
   const sessionRoomId = `${plannerId}-session-room`;
@@ -375,7 +375,7 @@ export function PosterPlannerClient({
                   <p className="text-sm text-ink-muted">{t("poster.noSlots")}</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {slot.slotJudges.map((sj, i) => (
+                    {slot.slotJudges.map((sj) => (
                       <div key={`${sj.startsAt}-${sj.judgeName}`} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-alt px-3 py-2">
                         <span className="text-sm font-medium text-ink">
                           {formatTime(sj.startsAt)} - {formatTime(sj.endsAt)}

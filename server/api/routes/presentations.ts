@@ -7,7 +7,6 @@ import {
   posterSlotJudges,
   settings,
   submissions,
-  user,
   userRoles,
 } from "@/server/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
@@ -62,14 +61,6 @@ async function canManagePresentation(
 
   if (!presentation) return false;
   return canManageSubmissionPresentation(currentUser, presentation.submissionId);
-}
-
-async function canManageTrack(
-  currentUser: AuthEnv["Variables"]["user"],
-  trackId: string
-) {
-  if (hasRole(currentUser, "ADMIN")) return true;
-  return hasTrackRole(currentUser, trackId, "PROGRAM_CHAIR");
 }
 
 function parseScheduledAt(value: string | null | undefined) {

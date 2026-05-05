@@ -21,7 +21,7 @@ import {
   Plus, FileText, Download, ChevronUp, ChevronDown, ArrowUpDown,
   ExternalLink, Users, Search, X, CheckCircle2, XCircle, Clock,
   Eye, Trash2, MoreHorizontal, Pencil, AlertCircle, Copy, Check,
-  Send, FileDown,
+  Send,
 } from "lucide-react";
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { getNextAction } from "@/lib/author-utils";
@@ -74,8 +74,8 @@ const NEEDS_ACTION_STATUSES = new Set([
   "CAMERA_READY_PENDING",
 ]);
 
-function daysSince(iso: string): number {
-  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+function daysSince(iso: string, now: number): number {
+  return Math.floor((now - new Date(iso).getTime()) / 86400000);
 }
 
 type SortKey = "title" | "author" | "track" | "status" | "createdAt" | "reviews";
@@ -92,6 +92,7 @@ export function SubmissionsPageClient({
   const { roles, id: currentUserId } = useDashboardAuth();
   const isAdmin = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
   const canCreateSubmission = roles.includes("AUTHOR");
+  const [now] = useState(() => Date.now());
 
   const [submissions, setSubmissions] = useState<SubmissionData[]>(initialSubmissions);
 
@@ -323,7 +324,7 @@ export function SubmissionsPageClient({
         if (quickFilter === "needs_action" && !NEEDS_ACTION_STATUSES.has(s.status)) return false;
         if (quickFilter === "advisor_stalled") {
           if (s.status !== "ADVISOR_APPROVAL_PENDING") return false;
-          if (!s.submittedAt || daysSince(s.submittedAt) < 7) return false;
+          if (!s.submittedAt || daysSince(s.submittedAt, now) < 7) return false;
         }
         if (debouncedSearch) {
           const q = debouncedSearch.toLowerCase();
@@ -352,10 +353,49 @@ export function SubmissionsPageClient({
           default: return 0;
         }
       }),
-    [submissions, trackFilter, statusFilter, debouncedSearch, sortKey, sortDir, statusLabels, quickFilter]);
+    [submissions, trackFilter, statusFilter, debouncedSearch, sortKey, sortDir, statusLabels, quickFilter, now]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pagedFiltered = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const needsActionCount = useMemo(
+    () => submissions.filter((s) => (!trackFilter || s.track?.id === trackFilter) && NEEDS_ACTION_STATUSES.has(s.status)).length,
+    [submissions, trackFilter]
+  );
+
+  // Derive "my review tasks" — the logged-in user's own pending/accepted assignments
+  // across any paper visible in the workbench. Powers the top card for dual-role PCs.
+  const myReviewTasks = useMemo<MyReviewTask[]>(() => {
+    if (!roles.includes("REVIEWER") || !currentUserId) return [];
+    const out: MyReviewTask[] = [];
+    for (const s of submissions) {
+      for (const a of s.reviewAssignments || []) {
+        if (!a.reviewer || a.reviewer.id !== currentUserId) continue;
+        if (a.status === "COMPLETED") continue;
+        out.push({
+          id: a.id,
+          status: a.status,
+          dueDate: a.dueDate ?? null,
+          submission: {
+            id: s.id,
+            title: s.title,
+            track: s.track,
+          },
+        });
+      }
+    }
+    return out;
+  }, [submissions, roles, currentUserId]);
+
+  const advisorStalledCount = useMemo(
+    () => submissions.filter((s) =>
+      (!trackFilter || s.track?.id === trackFilter) &&
+      s.status === "ADVISOR_APPROVAL_PENDING" &&
+      s.submittedAt &&
+      daysSince(s.submittedAt, now) >= 7
+    ).length,
+    [submissions, trackFilter, now]
+  );
 
   if (!isAdmin) {
     return (
@@ -414,45 +454,6 @@ export function SubmissionsPageClient({
   const submitted = (statusCounts.SUBMITTED || 0) + (statusCounts.UNDER_REVIEW || 0);
   const accepted = (statusCounts.ACCEPTED || 0) + (statusCounts.CAMERA_READY_PENDING || 0) + (statusCounts.CAMERA_READY_SUBMITTED || 0);
   const rejected = (statusCounts.REJECTED || 0) + (statusCounts.DESK_REJECTED || 0);
-  const pending = (statusCounts.DRAFT || 0) + (statusCounts.ADVISOR_APPROVAL_PENDING || 0);
-
-  const needsActionCount = useMemo(
-    () => submissions.filter((s) => (!trackFilter || s.track?.id === trackFilter) && NEEDS_ACTION_STATUSES.has(s.status)).length,
-    [submissions, trackFilter]
-  );
-
-  // Derive "my review tasks" — the logged-in user's own pending/accepted assignments
-  // across any paper visible in the workbench. Powers the top card for dual-role PCs.
-  const myReviewTasks = useMemo<MyReviewTask[]>(() => {
-    if (!roles.includes("REVIEWER") || !currentUserId) return [];
-    const out: MyReviewTask[] = [];
-    for (const s of submissions) {
-      for (const a of s.reviewAssignments || []) {
-        if (!a.reviewer || a.reviewer.id !== currentUserId) continue;
-        if (a.status === "COMPLETED") continue;
-        out.push({
-          id: a.id,
-          status: a.status,
-          dueDate: a.dueDate ?? null,
-          submission: {
-            id: s.id,
-            title: s.title,
-            track: s.track,
-          },
-        });
-      }
-    }
-    return out;
-  }, [submissions, roles, currentUserId]);
-  const advisorStalledCount = useMemo(
-    () => submissions.filter((s) =>
-      (!trackFilter || s.track?.id === trackFilter) &&
-      s.status === "ADVISOR_APPROVAL_PENDING" &&
-      s.submittedAt &&
-      daysSince(s.submittedAt) >= 7
-    ).length,
-    [submissions, trackFilter]
-  );
 
   return (
     <div className="space-y-6">
@@ -785,8 +786,8 @@ export function SubmissionsPageClient({
                                 <p className="mt-0.5 text-[11px] text-ink-muted">
                                   {displayNameTh(sub.author)} · {formatDate(sub.createdAt, locale)}
                                   <span className="mx-1 text-ink-muted/60">·</span>
-                                  <span className={daysSince(sub.createdAt) >= 14 ? "text-amber-600 font-medium" : ""}>
-                                    {t("submissions.ageDays", { n: daysSince(sub.createdAt) })}
+                                  <span className={daysSince(sub.createdAt, now) >= 14 ? "text-amber-600 font-medium" : ""}>
+                                    {t("submissions.ageDays", { n: daysSince(sub.createdAt, now) })}
                                   </span>
                                 </p>
                               </Link>
@@ -979,8 +980,9 @@ function AdvisorCell({
   resending: boolean;
   labels: { copyEmail: string; copied: string; resend: string; daysAgo: (n: number) => string };
 }) {
+  const [now] = useState(() => Date.now());
   const canResend = sub.status === "ADVISOR_APPROVAL_PENDING" && sub.advisorApprovalStatus === "PENDING" && !!sub.advisorEmail;
-  const pendingDays = sub.submittedAt && sub.advisorApprovalStatus === "PENDING" ? daysSince(sub.submittedAt) : null;
+  const pendingDays = sub.submittedAt && sub.advisorApprovalStatus === "PENDING" ? daysSince(sub.submittedAt, now) : null;
   const stalled = pendingDays !== null && pendingDays >= 7;
   const StatusIcon =
     sub.advisorApprovalStatus === "APPROVED" ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> :

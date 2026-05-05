@@ -95,7 +95,7 @@ export function AssignmentPanel({
   const { t, locale } = useI18n();
   const router = useRouter();
   const assignmentLabels = getAssignmentStatusLabels(t);
-  const now = Date.now();
+  const [now] = useState(() => Date.now());
 
   const [isAssigning, setIsAssigning] = useState(false);
   const [selectedReviewerId, setSelectedReviewerId] = useState("");

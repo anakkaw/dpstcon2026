@@ -53,6 +53,7 @@ export function getNextAction(status: string, hasFile: boolean, t: TFn = _defaul
         : { label: t("action.uploadAndSubmit"), description: t("action.uploadAndSubmitDesc"), urgency: "normal" };
     case "REVISION_REQUIRED":
       return { label: t("action.reviseAndResubmit"), description: t("action.reviseAndResubmitDesc"), urgency: "warning" };
+    case "ACCEPTED":
     case "CAMERA_READY_PENDING":
       return { label: t("action.uploadCameraReady"), description: t("action.uploadCameraReadyDesc"), urgency: "urgent" };
     default:
@@ -81,6 +82,7 @@ export function getRelevantDeadlineKey(status: string): string | null {
     case "DRAFT":
     case "ADVISOR_APPROVAL_PENDING":
       return "submissionDeadline";
+    case "ACCEPTED":
     case "CAMERA_READY_PENDING":
       return "cameraReadyDeadline";
     default:

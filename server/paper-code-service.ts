@@ -1,7 +1,7 @@
 import { eq, isNotNull } from "drizzle-orm";
 import { formatPaperCode, getTrackPaperCode, parsePaperCodeSequence } from "@/lib/paper-codes";
 import { db } from "@/server/db";
-import { submissions, tracks } from "@/server/db/schema";
+import { submissions } from "@/server/db/schema";
 
 /**
  * Load all existing paper codes and compute next sequence per prefix.

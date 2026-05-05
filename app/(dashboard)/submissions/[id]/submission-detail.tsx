@@ -38,7 +38,7 @@ import { AssignReviewerCard } from "@/components/review/assign-reviewer-card";
 import {
   Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
-  Trash2, Pencil, Mail, UserCheck, MessageSquare, AlertCircle, AlertTriangle,
+  Trash2, Pencil, Mail, UserCheck, MessageSquare, AlertCircle,
 } from "lucide-react";
 
 function StepHeader({
@@ -1554,7 +1554,7 @@ export function SubmissionDetail({
             />
           )}
 
-          {canManageOwnSubmission && submission.status === "CAMERA_READY_PENDING" && (
+          {canManageOwnSubmission && ["ACCEPTED", "CAMERA_READY_PENDING"].includes(submission.status) && (
             <FileUpload
               submissionId={submission.id}
               kind="CAMERA_READY"

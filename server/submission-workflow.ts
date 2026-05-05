@@ -17,6 +17,12 @@ export type SubmissionWorkflowFileKind =
   | "SUPPLEMENTARY"
   | "CAMERA_READY";
 
+export type DecisionOutcome =
+  | "ACCEPT"
+  | "REJECT"
+  | "CONDITIONAL_ACCEPT"
+  | "DESK_REJECT";
+
 export interface SubmissionReadinessInput {
   title: string | null | undefined;
   titleEn: string | null | undefined;
@@ -124,10 +130,23 @@ export function canAuthorUploadSubmissionFile(
   kind: SubmissionWorkflowFileKind
 ) {
   if (kind === "CAMERA_READY") {
-    return status === "CAMERA_READY_PENDING";
+    return status === "ACCEPTED" || status === "CAMERA_READY_PENDING";
   }
 
   return status === "DRAFT" || status === "REVISION_REQUIRED";
+}
+
+export function getDecisionSubmissionStatus(
+  outcome: DecisionOutcome
+): SubmissionWorkflowStatus {
+  const statusMap: Record<DecisionOutcome, SubmissionWorkflowStatus> = {
+    ACCEPT: "ACCEPTED",
+    REJECT: "REJECTED",
+    CONDITIONAL_ACCEPT: "REVISION_REQUIRED",
+    DESK_REJECT: "DESK_REJECTED",
+  };
+
+  return statusMap[outcome];
 }
 
 export function getSubmissionValidationError(input: SubmissionReadinessInput) {

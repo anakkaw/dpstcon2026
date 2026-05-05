@@ -945,7 +945,10 @@ app.post("/:id/upload-url", async (c) => {
     if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
       return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
     }
-    if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
+    if (
+      kind === "CAMERA_READY" &&
+      !["ACCEPTED", "CAMERA_READY_PENDING"].includes(submission.status)
+    ) {
       return c.json({ error: "Camera-ready upload is not available for this submission" }, 400);
     }
   }
@@ -1039,7 +1042,10 @@ app.post("/:id/confirm-upload", async (c) => {
       return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
     }
 
-    if (kind === "CAMERA_READY" && submission.status !== "CAMERA_READY_PENDING") {
+    if (
+      kind === "CAMERA_READY" &&
+      !["ACCEPTED", "CAMERA_READY_PENDING"].includes(submission.status)
+    ) {
       return c.json({ error: "Camera-ready upload is not allowed in the current status" }, 400);
     }
   }
