@@ -23,6 +23,8 @@ export type DecisionOutcome =
   | "CONDITIONAL_ACCEPT"
   | "DESK_REJECT";
 
+export const DECIDABLE_SUBMISSION_STATUSES = ["SUBMITTED", "UNDER_REVIEW"] as const;
+
 export interface SubmissionReadinessInput {
   title: string | null | undefined;
   titleEn: string | null | undefined;
@@ -147,6 +149,24 @@ export function getDecisionSubmissionStatus(
   };
 
   return statusMap[outcome];
+}
+
+export function canMakeSubmissionDecision(input: {
+  status: string;
+  currentCompletedReviews: number;
+  hasDecision: boolean;
+}) {
+  return (
+    !input.hasDecision &&
+    DECIDABLE_SUBMISSION_STATUSES.includes(
+      input.status as (typeof DECIDABLE_SUBMISSION_STATUSES)[number]
+    ) &&
+    input.currentCompletedReviews > 0
+  );
+}
+
+export function canSubmitReviewForAssignment(status: string | null | undefined) {
+  return status === "ACCEPTED";
 }
 
 export function getSubmissionValidationError(input: SubmissionReadinessInput) {

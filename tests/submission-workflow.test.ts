@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  canMakeSubmissionDecision,
   canAuthorEditSubmission,
   canAuthorUploadSubmissionFile,
+  canSubmitReviewForAssignment,
   getDecisionSubmissionStatus,
   getSubmissionValidationError,
 } from "@/server/submission-workflow";
@@ -33,6 +35,48 @@ test("chair decisions map to the expected submission status", () => {
     "REVISION_REQUIRED"
   );
   assert.equal(getDecisionSubmissionStatus("DESK_REJECT"), "DESK_REJECTED");
+});
+
+test("decision eligibility uses current completed reviews only", () => {
+  assert.equal(
+    canMakeSubmissionDecision({
+      status: "UNDER_REVIEW",
+      currentCompletedReviews: 1,
+      hasDecision: false,
+    }),
+    true
+  );
+  assert.equal(
+    canMakeSubmissionDecision({
+      status: "UNDER_REVIEW",
+      currentCompletedReviews: 0,
+      hasDecision: false,
+    }),
+    false
+  );
+  assert.equal(
+    canMakeSubmissionDecision({
+      status: "REVISION_REQUIRED",
+      currentCompletedReviews: 1,
+      hasDecision: false,
+    }),
+    false
+  );
+  assert.equal(
+    canMakeSubmissionDecision({
+      status: "UNDER_REVIEW",
+      currentCompletedReviews: 1,
+      hasDecision: true,
+    }),
+    false
+  );
+});
+
+test("reviews can only be submitted for accepted assignments", () => {
+  assert.equal(canSubmitReviewForAssignment("ACCEPTED"), true);
+  assert.equal(canSubmitReviewForAssignment("PENDING"), false);
+  assert.equal(canSubmitReviewForAssignment("DECLINED"), false);
+  assert.equal(canSubmitReviewForAssignment("COMPLETED"), false);
 });
 
 test("submission validation requires all mandatory metadata before submission", () => {

@@ -5,15 +5,21 @@ import {
   reviewAssignments,
   submissions,
   decisions,
+  presentationAssignments,
 } from "@/server/db/schema";
-import { eq, and, inArray, ne } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import { isDuplicateReviewRound } from "@/server/access-policies";
-import { ensureSubmissionPaperCode } from "@/server/paper-code-service";
-import { getDecisionSubmissionStatus } from "@/server/submission-workflow";
+import { ensureSubmissionPaperCodeInTransaction } from "@/server/paper-code-service";
+import {
+  canMakeSubmissionDecision,
+  canSubmitReviewForAssignment,
+  getDecisionSubmissionStatus,
+} from "@/server/submission-workflow";
+import { logger } from "@/server/logger";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -301,16 +307,31 @@ app.post("/reviews", async (c) => {
 
   const data = parsed.data;
 
-  // Verify reviewer has an assignment for this submission
+  // Verify reviewer has an assignment for this submission. If the client
+  // supplies assignmentId, it must still belong to the current reviewer.
   const assignment = await db.query.reviewAssignments.findFirst({
-    where: and(
-      eq(reviewAssignments.submissionId, data.submissionId),
-      eq(reviewAssignments.reviewerId, currentUser.id)
-    ),
+    where: data.assignmentId
+      ? and(
+          eq(reviewAssignments.id, data.assignmentId),
+          eq(reviewAssignments.submissionId, data.submissionId),
+          eq(reviewAssignments.reviewerId, currentUser.id)
+        )
+      : and(
+          eq(reviewAssignments.submissionId, data.submissionId),
+          eq(reviewAssignments.reviewerId, currentUser.id)
+        ),
   });
 
   if (!assignment && !hasRole(currentUser, "ADMIN")) {
     return c.json({ error: "คุณไม่ได้รับมอบหมายให้รีวิวบทความนี้" }, 403);
+  }
+
+  if (data.assignmentId && !assignment) {
+    return c.json({ error: "Assignment not found for this reviewer" }, 403);
+  }
+
+  if (assignment && !canSubmitReviewForAssignment(assignment.status)) {
+    return c.json({ error: "กรุณารับมอบหมายรีวิวก่อนส่งผลการพิจารณา" }, 409);
   }
 
   const assignmentIdToComplete = data.assignmentId || assignment?.id;
@@ -362,7 +383,7 @@ app.post("/reviews", async (c) => {
       .where(
         and(
           eq(reviewAssignments.id, assignmentIdToComplete),
-          ne(reviewAssignments.status, "COMPLETED")
+          eq(reviewAssignments.status, "ACCEPTED")
         )
       )
       .returning({ id: reviewAssignments.id });
@@ -433,12 +454,22 @@ app.post("/decisions", async (c) => {
   const currentUser = c.get("user");
   const body = await c.req.json();
 
-  const schema = z.object({
-    submissionId: z.string().uuid(),
-    outcome: z.enum(["ACCEPT", "REJECT", "CONDITIONAL_ACCEPT", "DESK_REJECT"]),
-    comments: z.string().optional(),
-    conditions: z.string().optional(),
-  });
+  const schema = z
+    .object({
+      submissionId: z.string().uuid(),
+      outcome: z.enum(["ACCEPT", "REJECT", "CONDITIONAL_ACCEPT", "DESK_REJECT"]),
+      comments: z.string().optional(),
+      conditions: z.string().optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (data.outcome === "CONDITIONAL_ACCEPT" && !data.conditions?.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["conditions"],
+          message: "Revision conditions are required for conditional accept",
+        });
+      }
+    });
 
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -451,85 +482,121 @@ app.post("/decisions", async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  // Check if decision already exists for this submission
-  const existingDecision = await db.query.decisions.findFirst({
-    where: eq(decisions.submissionId, data.submissionId),
-  });
-  if (existingDecision) {
-    return c.json({ error: "บทความนี้มีการตัดสินแล้ว" }, 409);
-  }
-
-  const [decision] = await db
-    .insert(decisions)
-    .values({
-      submissionId: data.submissionId,
-      decidedBy: currentUser.id,
-      outcome: data.outcome,
-      comments: data.comments,
-      conditions: data.conditions,
-    })
-    .returning();
-
-  const newStatus = getDecisionSubmissionStatus(data.outcome);
-
-  await db
-    .update(submissions)
-    .set({ status: newStatus, updatedAt: new Date() })
-    .where(eq(submissions.id, data.submissionId));
-
-  if (newStatus === "ACCEPTED") {
-    await ensureSubmissionPaperCode(data.submissionId);
-  }
-
-  // Auto-create presentations when accepted
-  if (data.outcome === "ACCEPT" || data.outcome === "CONDITIONAL_ACCEPT") {
-    const { presentationAssignments } = await import("@/server/db/schema");
-    const existingPresentations = await db.query.presentationAssignments.findMany({
-      where: eq(presentationAssignments.submissionId, data.submissionId),
-      columns: { type: true },
+  const result = await db.transaction(async (tx) => {
+    const submission = await tx.query.submissions.findFirst({
+      where: eq(submissions.id, data.submissionId),
+      columns: { id: true, status: true, title: true },
+      with: { author: { columns: { name: true, email: true } } },
     });
-    const existingTypes = new Set(existingPresentations.map((row) => row.type));
-    const missingTypes = ["POSTER", "ORAL"].filter(
-      (type) => !existingTypes.has(type as "POSTER" | "ORAL")
-    );
 
-    if (missingTypes.length > 0) {
-      await db.insert(presentationAssignments).values(
-        missingTypes.map((type) => ({
-          submissionId: data.submissionId,
-          type: type as "POSTER" | "ORAL",
-          status: "PENDING" as const,
-        }))
-      );
+    if (!submission) {
+      return { error: "Not found", status: 404 as const };
     }
-  }
 
-  // Send decision email
-  const submission = await db.query.submissions.findFirst({
-    where: eq(submissions.id, data.submissionId),
-    with: { author: { columns: { name: true, email: true } } },
+    const existingDecision = await tx.query.decisions.findFirst({
+      where: eq(decisions.submissionId, data.submissionId),
+      columns: { id: true },
+    });
+    if (existingDecision) {
+      return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
+    }
+
+    const completedAssignments = await tx.query.reviewAssignments.findMany({
+      where: and(
+        eq(reviewAssignments.submissionId, data.submissionId),
+        eq(reviewAssignments.status, "COMPLETED")
+      ),
+      columns: { id: true },
+    });
+
+    if (
+      !canMakeSubmissionDecision({
+        status: submission.status,
+        currentCompletedReviews: completedAssignments.length,
+        hasDecision: false,
+      })
+    ) {
+      return { error: "บทความนี้ไม่อยู่ในสถานะที่ตัดสินได้ หรือยังไม่มีรีวิวที่เสร็จสมบูรณ์", status: 400 as const };
+    }
+
+    const [decision] = await tx
+      .insert(decisions)
+      .values({
+        submissionId: data.submissionId,
+        decidedBy: currentUser.id,
+        outcome: data.outcome,
+        comments: data.comments,
+        conditions: data.outcome === "CONDITIONAL_ACCEPT" ? data.conditions : undefined,
+      })
+      .onConflictDoNothing({ target: decisions.submissionId })
+      .returning();
+
+    if (!decision) {
+      return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
+    }
+
+    const newStatus = getDecisionSubmissionStatus(data.outcome);
+
+    await tx
+      .update(submissions)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(eq(submissions.id, data.submissionId));
+
+    if (newStatus === "ACCEPTED") {
+      await ensureSubmissionPaperCodeInTransaction(tx, data.submissionId);
+
+      const existingPresentations = await tx.query.presentationAssignments.findMany({
+        where: eq(presentationAssignments.submissionId, data.submissionId),
+        columns: { type: true },
+      });
+      const existingTypes = new Set(existingPresentations.map((row) => row.type));
+      const missingTypes = ["POSTER", "ORAL"].filter(
+        (type) => !existingTypes.has(type as "POSTER" | "ORAL")
+      );
+
+      if (missingTypes.length > 0) {
+        await tx.insert(presentationAssignments).values(
+          missingTypes.map((type) => ({
+            submissionId: data.submissionId,
+            type: type as "POSTER" | "ORAL",
+            status: "PENDING" as const,
+          }))
+        );
+      }
+    }
+
+    return { decision, submission, status: 201 as const };
   });
 
-  if (submission) {
+  if ("error" in result) {
+    return c.json({ error: result.error }, result.status);
+  }
+
+  try {
     const { queueEmail, decisionEmail } = await import("@/server/email");
     const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const emailContent = decisionEmail({
-      authorName: submission.author.name,
-      paperTitle: submission.title,
+      authorName: result.submission.author.name,
+      paperTitle: result.submission.title,
       decision: data.outcome,
       comments: data.comments,
-      conditions: data.conditions,
+      conditions: data.outcome === "CONDITIONAL_ACCEPT" ? data.conditions : undefined,
       submissionUrl: `${appUrl}/submissions/${data.submissionId}`,
     });
     await queueEmail({
-      to: submission.author.email,
+      to: result.submission.author.email,
       subject: emailContent.subject,
       html: emailContent.html,
       text: emailContent.text,
     });
+  } catch (err) {
+    logger.error("Decision email queue failed", {
+      submissionId: data.submissionId,
+      error: err instanceof Error ? err.message : "Unknown error",
+    });
   }
 
-  return c.json({ decision }, 201);
+  return c.json({ decision: result.decision }, 201);
 });
 
 export { app as reviewRoutes };

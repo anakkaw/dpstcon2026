@@ -757,9 +757,16 @@ app.post("/:id/resubmit", async (c) => {
   }
   if (submission.status !== "REVISION_REQUIRED") return c.json({ error: "Can only resubmit from REVISION_REQUIRED" }, 400);
 
+  const now = new Date();
+
   await db
     .update(reviewAssignments)
-    .set({ status: "ACCEPTED", respondedAt: null })
+    .set({
+      status: "ACCEPTED",
+      respondedAt: null,
+      assignedAt: now,
+      lastReminderAt: null,
+    })
     .where(
       and(
         eq(reviewAssignments.submissionId, id),
@@ -769,7 +776,7 @@ app.post("/:id/resubmit", async (c) => {
 
   const [updated] = await db
     .update(submissions)
-    .set({ status: "UNDER_REVIEW", updatedAt: new Date() })
+    .set({ status: "UNDER_REVIEW", updatedAt: now })
     .where(eq(submissions.id, id))
     .returning();
 

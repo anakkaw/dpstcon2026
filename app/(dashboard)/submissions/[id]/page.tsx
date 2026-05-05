@@ -81,10 +81,13 @@ export default async function SubmissionDetailPage({
     hasAccess = true;
   }
 
-  if (!hasAccess && hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
+  if (hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
     isTrackHead = hasTrackRole(currentUser, submission.trackId, "PROGRAM_CHAIR");
-    hasAccess = isTrackHead;
     canManageSubmission = canManageSubmission || isTrackHead;
+  }
+
+  if (!hasAccess && isTrackHead) {
+    hasAccess = isTrackHead;
   }
 
   if (!hasAccess) {
@@ -299,6 +302,7 @@ export default async function SubmissionDetailPage({
       submission={{ ...submission, discussions: filteredDiscussions, reviews: filteredReviews }}
       currentUserRoles={currentUser.roles}
       currentUserId={currentUser.id}
+      canManageSubmission={canManageSubmission}
       reviewers={reviewersWithLoad}
       files={files
         .filter((f) => {

@@ -114,6 +114,7 @@ interface Props {
   };
   currentUserRoles: string[];
   currentUserId: string;
+  canManageSubmission?: boolean;
   reviewers: { id: string; name: string; email: string; affiliation?: string | null; pendingLoad?: number; activeLoad?: number; completedLoad?: number }[];
   files: {
     id: string;
@@ -156,6 +157,7 @@ interface Props {
 
 export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
+  canManageSubmission = false,
   reviewCounts, decision, presentations, criteriaByType, deadlines,
   isAssignedReviewer, reviewerAssignmentId, reviewerAssignmentStatus, reviewerAssignmentAssignedAt, lastAdvisorEmail,
 }: Props) {
@@ -167,9 +169,7 @@ export function SubmissionDetail({
     null
   );
   const isOwner = submission.author.id === currentUserId;
-  const isAdmin = currentUserRoles.some((role) =>
-    ["ADMIN", "PROGRAM_CHAIR"].includes(role)
-  );
+  const isAdmin = canManageSubmission;
   const isAuthor = currentUserRoles.includes("AUTHOR");
   const isReviewer = currentUserRoles.includes("REVIEWER");
   const canManageOwnSubmission = isOwner && isAuthor;
@@ -178,6 +178,12 @@ export function SubmissionDetail({
   const canSubmit = canManageOwnSubmission && submission.status === "DRAFT";
   const canWithdraw = canManageOwnSubmission && !["WITHDRAWN", "DRAFT"].includes(submission.status);
   const canResubmit = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
+  const currentCompletedReviewCount = reviewCounts?.completed ?? 0;
+  const canShowDecisionPanel =
+    isAdmin &&
+    !decision &&
+    ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status) &&
+    currentCompletedReviewCount > 0;
 
   const [decisionOutcome, setDecisionOutcome] = useState("");
   const [decisionComments, setDecisionComments] = useState("");
@@ -238,14 +244,24 @@ export function SubmissionDetail({
   const [reviewCommentsToChair, setReviewCommentsToChair] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
   const [editReviewMode, setEditReviewMode] = useState(false);
+  const [pageClock, setPageClock] = useState<number | null>(null);
+
+  useEffect(() => {
+    const updateClock = () => setPageClock(Date.now());
+    updateClock();
+    const interval = window.setInterval(updateClock, 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const myCompletedReview = submission.reviews.find(
     (r) => r.reviewer.id === currentUserId && r.completedAt
   );
   const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
-  const canEditReview = myCompletedReview?.completedAt
-    ? Date.now() - new Date(myCompletedReview.completedAt as unknown as string | Date).getTime() < EDIT_WINDOW_MS
-    : false;
+  const canEditReview = Boolean(
+    pageClock !== null &&
+      myCompletedReview?.completedAt &&
+      pageClock - new Date(myCompletedReview.completedAt as unknown as string | Date).getTime() < EDIT_WINDOW_MS
+  );
 
   // Round 2 detection: author resubmitted → assignment re-opened to ACCEPTED with
   // assignedAt bumped past the existing review.completedAt. Reviewer should get
@@ -462,10 +478,9 @@ export function SubmissionDetail({
 
   function requestDecision() {
     if (!decisionOutcome) return;
-    const totalAssignments = reviewCounts?.total ?? submission.reviews.length;
-    const completedReviews = submission.reviews.filter((r) => r.completedAt).length;
+    const totalAssignments = reviewCounts?.total ?? 0;
     // Confirm if not all reviewers have submitted yet
-    if (totalAssignments > 0 && completedReviews < totalAssignments) {
+    if (totalAssignments > 0 && currentCompletedReviewCount < totalAssignments) {
       setDecisionConfirmOpen(true);
       return;
     }
@@ -946,9 +961,9 @@ export function SubmissionDetail({
                 </div>
 
                 {/* Link expiry info */}
-                {submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && (() => {
+                {submission.advisorApprovalStatus === "PENDING" && submission.submittedAt && pageClock !== null && (() => {
                   const expiresAt = new Date(new Date(submission.submittedAt!).getTime() + ADVISOR_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-                  const now = new Date();
+                  const now = new Date(pageClock);
                   const isExpired = now > expiresAt;
                   const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
                   return (
@@ -1717,7 +1732,7 @@ export function SubmissionDetail({
       )}
 
       {/* Admin: Decision Panel */}
-      {isAdmin && submission.status === "UNDER_REVIEW" && submission.reviews.some((r) => r.completedAt) && (
+      {canShowDecisionPanel && (
         <Card id="section-decision" accent="brand">
           <CardHeader>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1769,8 +1784,8 @@ export function SubmissionDetail({
         open={decisionConfirmOpen}
         title={t("detail.decisionPartialConfirmTitle")}
         description={t("detail.decisionPartialConfirmDesc", {
-          completed: submission.reviews.filter((r) => r.completedAt).length,
-          total: reviewCounts?.total ?? submission.reviews.length,
+          completed: currentCompletedReviewCount,
+          total: reviewCounts?.total ?? 0,
         })}
         confirmLabel={t("detail.decisionPartialConfirmBtn")}
         cancelLabel={t("common.cancel")}
@@ -1852,7 +1867,7 @@ export function SubmissionDetail({
                   <FileText className="h-3.5 w-3.5 shrink-0" />{t("detail.reviewResults")}
                 </a>
               )}
-              {isAdmin && submission.status === "UNDER_REVIEW" && submission.reviews.some((r) => r.completedAt) && (
+              {canShowDecisionPanel && (
                 <a href="#section-decision" className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-ink-muted hover:bg-surface-hover hover:text-ink transition-colors">
                   <Gavel className="h-3.5 w-3.5 shrink-0" />{t("detail.makeDecision")}
                 </a>
