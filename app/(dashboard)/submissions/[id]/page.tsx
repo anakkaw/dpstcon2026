@@ -199,7 +199,10 @@ export default async function SubmissionDetailPage({
     // Review assignment counts
     db.select({ status: reviewAssignments.status }).from(reviewAssignments).where(eq(reviewAssignments.submissionId, id)),
     // Decision
-    db.query.decisions.findFirst({ where: eq(decisions.submissionId, id) }),
+    db.query.decisions.findFirst({
+      where: eq(decisions.submissionId, id),
+      orderBy: [desc(decisions.decidedAt)],
+    }),
     // Presentation assignments
     db.select().from(presentationAssignments).where(eq(presentationAssignments.submissionId, id)),
     // Deadlines from settings
@@ -296,6 +299,11 @@ export default async function SubmissionDetailPage({
   }
   if (!deadlineMap.submissionDeadline) deadlineMap.submissionDeadline = "2026-06-30";
   if (!deadlineMap.cameraReadyDeadline) deadlineMap.cameraReadyDeadline = "2026-09-30";
+  const visibleDecision =
+    decision?.outcome === "CONDITIONAL_ACCEPT" &&
+    ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status)
+      ? null
+      : decision;
 
   return (
     <SubmissionDetail
@@ -317,11 +325,11 @@ export default async function SubmissionDetailPage({
           uploadedAt: f.uploadedAt.toISOString(),
         }))}
       reviewCounts={reviewCounts}
-      decision={decision ? {
-        outcome: decision.outcome,
-        comments: decision.comments,
-        conditions: decision.conditions,
-        decidedAt: decision.decidedAt.toISOString(),
+      decision={visibleDecision ? {
+        outcome: visibleDecision.outcome,
+        comments: visibleDecision.comments,
+        conditions: visibleDecision.conditions,
+        decidedAt: visibleDecision.decidedAt.toISOString(),
       } : null}
       presentations={presRows.map((p) => ({
         type: p.type,

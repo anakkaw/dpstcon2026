@@ -69,7 +69,6 @@ export default function AuthorDashboard({ stats }: { stats: Record<string, unkno
     { key: "submissionDeadline", label: t("dashboard.submissionDeadline") },
     { key: "reviewDeadline", label: t("dashboard.reviewDeadline") },
     { key: "notificationDate", label: t("dashboard.notificationDate") },
-    { key: "cameraReadyDeadline", label: t("dashboard.cameraReadyDeadline") },
   ]
     .map((d) => ({ ...d, date: deadlines[d.key], daysLeft: deadlines[d.key] ? getDaysUntil(deadlines[d.key]) : 999 }))
     .filter((d) => d.date && d.daysLeft > -30)

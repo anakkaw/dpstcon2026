@@ -415,6 +415,18 @@ export function SubmissionDetail({
 
   // Computed values for author view
   const hasManuscript = files.some((f) => f.kind === "MANUSCRIPT");
+  const revisionDecisionTime =
+    canResubmit && decision?.outcome === "CONDITIONAL_ACCEPT"
+      ? new Date(decision.decidedAt).getTime()
+      : null;
+  const hasRevisedManuscript =
+    revisionDecisionTime === null
+      ? hasManuscript
+      : files.some(
+          (f) =>
+            f.kind === "MANUSCRIPT" &&
+            new Date(f.uploadedAt).getTime() > revisionDecisionTime
+        );
   const nextAction = isAuthor ? getNextAction(submission.status, hasManuscript) : null;
   const deadlineKey = isAuthor ? getRelevantDeadlineKey(submission.status) : null;
   const relevantDeadline = deadlineKey && deadlines ? deadlines[deadlineKey] : null;
@@ -1569,17 +1581,6 @@ export function SubmissionDetail({
             />
           )}
 
-          {canManageOwnSubmission && ["ACCEPTED", "CAMERA_READY_PENDING"].includes(submission.status) && (
-            <FileUpload
-              submissionId={submission.id}
-              kind="CAMERA_READY"
-              label={t("detail.uploadCameraReady")}
-              hint={t("detail.uploadCameraReadyHint")}
-              accept=".pdf"
-              onUploadComplete={() => router.refresh()}
-            />
-          )}
-
           {canManageOwnSubmission && submission.status === "DRAFT" && (
             <FileUpload
               submissionId={submission.id}
@@ -1703,7 +1704,7 @@ export function SubmissionDetail({
             <Button
               onClick={() => setConfirmAction("resubmit")}
               loading={loading}
-              disabled={!files.some((f) => f.kind === "MANUSCRIPT")}
+              disabled={!hasRevisedManuscript}
             >
               <RotateCcw className="h-3.5 w-3.5" />
               {t("detail.resubmitBtn")}

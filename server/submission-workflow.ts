@@ -132,7 +132,7 @@ export function canAuthorUploadSubmissionFile(
   kind: SubmissionWorkflowFileKind
 ) {
   if (kind === "CAMERA_READY") {
-    return status === "ACCEPTED" || status === "CAMERA_READY_PENDING";
+    return false;
   }
 
   return status === "DRAFT" || status === "REVISION_REQUIRED";

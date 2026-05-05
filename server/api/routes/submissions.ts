@@ -17,7 +17,7 @@ import {
   presentationEvaluations,
   posterSlotJudges,
 } from "@/server/db/schema";
-import { eq, desc, and, ne, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, sql, inArray, gt } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -126,27 +126,6 @@ function matchesExpectedFileKey(
   const expectedPrefix = `submissions/${submissionId}/${FILE_KIND_PATHS[kind]}/`;
   const expectedSuffix = `-${sanitizeFileName(fileName)}`;
   return fileKey.startsWith(expectedPrefix) && fileKey.endsWith(expectedSuffix);
-}
-
-async function getLatestStoredKeyForKind(
-  submissionId: string,
-  kind: "MANUSCRIPT" | "CAMERA_READY",
-  excludingFileId: string
-) {
-  const [replacement] = await db
-    .select({ storedKey: storedFiles.storedKey })
-    .from(storedFiles)
-    .where(
-      and(
-        eq(storedFiles.submissionId, submissionId),
-        eq(storedFiles.kind, kind),
-        ne(storedFiles.id, excludingFileId)
-      )
-    )
-    .orderBy(desc(storedFiles.uploadedAt), desc(storedFiles.id))
-    .limit(1);
-
-  return replacement?.storedKey ?? null;
 }
 
 async function deleteSubmissionCascade(submissionId: string) {
@@ -757,28 +736,61 @@ app.post("/:id/resubmit", async (c) => {
   }
   if (submission.status !== "REVISION_REQUIRED") return c.json({ error: "Can only resubmit from REVISION_REQUIRED" }, 400);
 
+  const latestRevisionDecision = await db.query.decisions.findFirst({
+    where: and(
+      eq(decisions.submissionId, id),
+      eq(decisions.outcome, "CONDITIONAL_ACCEPT")
+    ),
+    columns: { decidedAt: true },
+    orderBy: [desc(decisions.decidedAt)],
+  });
+  if (latestRevisionDecision) {
+    const revisedAbstract = await db.query.storedFiles.findFirst({
+      where: and(
+        eq(storedFiles.submissionId, id),
+        eq(storedFiles.kind, "MANUSCRIPT"),
+        gt(storedFiles.uploadedAt, latestRevisionDecision.decidedAt)
+      ),
+      columns: { id: true },
+    });
+    if (!revisedAbstract) {
+      return c.json({ error: "กรุณาแนบ abstract ฉบับแก้ไขก่อนส่งให้กรรมการพิจารณาอีกครั้ง" }, 400);
+    }
+  }
+
   const now = new Date();
 
-  await db
-    .update(reviewAssignments)
-    .set({
-      status: "ACCEPTED",
-      respondedAt: null,
-      assignedAt: now,
-      lastReminderAt: null,
-    })
-    .where(
-      and(
-        eq(reviewAssignments.submissionId, id),
-        eq(reviewAssignments.status, "COMPLETED")
-      )
-    );
+  const [updated] = await db.transaction(async (tx) => {
+    await tx
+      .delete(decisions)
+      .where(
+        and(
+          eq(decisions.submissionId, id),
+          eq(decisions.outcome, "CONDITIONAL_ACCEPT")
+        )
+      );
 
-  const [updated] = await db
-    .update(submissions)
-    .set({ status: "UNDER_REVIEW", updatedAt: now })
-    .where(eq(submissions.id, id))
-    .returning();
+    await tx
+      .update(reviewAssignments)
+      .set({
+        status: "ACCEPTED",
+        respondedAt: null,
+        assignedAt: now,
+        lastReminderAt: null,
+      })
+      .where(
+        and(
+          eq(reviewAssignments.submissionId, id),
+          eq(reviewAssignments.status, "COMPLETED")
+        )
+      );
+
+    return tx
+      .update(submissions)
+      .set({ status: "UNDER_REVIEW", updatedAt: now })
+      .where(eq(submissions.id, id))
+      .returning();
+  });
 
   return c.json({ submission: updated });
 });
@@ -937,6 +949,10 @@ app.post("/:id/upload-url", async (c) => {
   const isOwner = submission.authorId === currentUser.id;
   const { fileName, mimeType, kind } = parsed.data;
 
+  if (kind === "CAMERA_READY") {
+    return c.json({ error: "งานประชุมนี้ใช้ abstract เป็นฉบับสมบูรณ์แล้ว ไม่ต้องอัปโหลด camera-ready" }, 400);
+  }
+
   if (kind === "REVIEW_ATTACHMENT") {
     const canReviewerUpload =
       hasRole(currentUser, "REVIEWER") &&
@@ -951,12 +967,6 @@ app.post("/:id/upload-url", async (c) => {
 
     if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
       return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
-    }
-    if (
-      kind === "CAMERA_READY" &&
-      !["ACCEPTED", "CAMERA_READY_PENDING"].includes(submission.status)
-    ) {
-      return c.json({ error: "Camera-ready upload is not available for this submission" }, 400);
     }
   }
 
@@ -1011,6 +1021,10 @@ app.post("/:id/confirm-upload", async (c) => {
 
   const { fileKey, fileName, mimeType, fileSize, kind, uploadToken } = parsed.data;
 
+  if (kind === "CAMERA_READY") {
+    return c.json({ error: "งานประชุมนี้ใช้ abstract เป็นฉบับสมบูรณ์แล้ว ไม่ต้องอัปโหลด camera-ready" }, 400);
+  }
+
   if (kind === "REVIEW_ATTACHMENT") {
     const canReviewerUpload =
       hasRole(currentUser, "REVIEWER") &&
@@ -1048,13 +1062,6 @@ app.post("/:id/confirm-upload", async (c) => {
     if (!isStaff && !canAuthorUploadSubmissionFile(submission.status, kind)) {
       return c.json({ error: "File upload is not allowed in the current submission status" }, 400);
     }
-
-    if (
-      kind === "CAMERA_READY" &&
-      !["ACCEPTED", "CAMERA_READY_PENDING"].includes(submission.status)
-    ) {
-      return c.json({ error: "Camera-ready upload is not allowed in the current status" }, 400);
-    }
   }
 
   const [file] = await db
@@ -1070,12 +1077,7 @@ app.post("/:id/confirm-upload", async (c) => {
     })
     .returning();
 
-  // Update submission timestamp; advance status for camera-ready uploads
-  if (kind === "CAMERA_READY") {
-    await db.update(submissions).set({ status: "CAMERA_READY_SUBMITTED", updatedAt: new Date() }).where(eq(submissions.id, id));
-  } else {
-    await db.update(submissions).set({ updatedAt: new Date() }).where(eq(submissions.id, id));
-  }
+  await db.update(submissions).set({ updatedAt: new Date() }).where(eq(submissions.id, id));
 
   return c.json({ file }, 201);
 });
@@ -1189,19 +1191,7 @@ app.delete("/:id/files/:fileId", async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  // When deleting a camera-ready file, revert status if no other camera-ready remains
-  if (file.kind === "CAMERA_READY") {
-    const nextCameraReadyKey = await getLatestStoredKeyForKind(id, "CAMERA_READY", file.id);
-    await db
-      .update(submissions)
-      .set({
-        status: nextCameraReadyKey ? submission.status : "CAMERA_READY_PENDING",
-        updatedAt: new Date(),
-      })
-      .where(eq(submissions.id, id));
-  } else {
-    await db.update(submissions).set({ updatedAt: new Date() }).where(eq(submissions.id, id));
-  }
+  await db.update(submissions).set({ updatedAt: new Date() }).where(eq(submissions.id, id));
 
   await db.delete(storedFiles).where(eq(storedFiles.id, file.id));
 

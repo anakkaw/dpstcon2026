@@ -950,8 +950,8 @@ const en: Record<TranslationKey, string> = {
   "labels.status.ACCEPTED": "Accepted",
   "labels.status.REJECTED": "Rejected",
   "labels.status.DESK_REJECTED": "Desk Rejected",
-  "labels.status.CAMERA_READY_PENDING": "Camera-Ready Pending",
-  "labels.status.CAMERA_READY_SUBMITTED": "Camera-Ready Submitted",
+  "labels.status.CAMERA_READY_PENDING": "Accepted",
+  "labels.status.CAMERA_READY_SUBMITTED": "Accepted",
   "labels.status.WITHDRAWN": "Withdrawn",
 
   // ─── Labels: Assignment Status ────────────────────────
@@ -985,7 +985,7 @@ const en: Record<TranslationKey, string> = {
   "labels.phase.REVIEW": "Review",
   "labels.phase.REBUTTAL": "Rebuttal",
   "labels.phase.NOTIFICATION": "Notification",
-  "labels.phase.CAMERA_READY": "Camera-Ready",
+  "labels.phase.CAMERA_READY": "Accepted",
 
   // ─── Labels: Bid Preference ───────────────────────────
   "labels.bid.EAGER": "Eager",

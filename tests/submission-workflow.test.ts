@@ -22,9 +22,9 @@ test("author upload permissions follow workflow state", () => {
   assert.equal(canAuthorUploadSubmissionFile("DRAFT", "CAMERA_READY"), false);
   assert.equal(
     canAuthorUploadSubmissionFile("CAMERA_READY_PENDING", "CAMERA_READY"),
-    true
+    false
   );
-  assert.equal(canAuthorUploadSubmissionFile("ACCEPTED", "CAMERA_READY"), true);
+  assert.equal(canAuthorUploadSubmissionFile("ACCEPTED", "CAMERA_READY"), false);
 });
 
 test("chair decisions map to the expected submission status", () => {

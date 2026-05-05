@@ -495,10 +495,17 @@ app.post("/decisions", async (c) => {
 
     const existingDecision = await tx.query.decisions.findFirst({
       where: eq(decisions.submissionId, data.submissionId),
-      columns: { id: true },
+      columns: { id: true, outcome: true },
     });
     if (existingDecision) {
-      return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
+      if (
+        existingDecision.outcome === "CONDITIONAL_ACCEPT" &&
+        ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status)
+      ) {
+        await tx.delete(decisions).where(eq(decisions.id, existingDecision.id));
+      } else {
+        return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
+      }
     }
 
     const completedAssignments = await tx.query.reviewAssignments.findMany({

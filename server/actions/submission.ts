@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/server/db";
-import { submissions, reviewAssignments, user as userTable } from "@/server/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { submissions, reviewAssignments, user as userTable, decisions, storedFiles } from "@/server/db/schema";
+import { eq, and, inArray, desc, gt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireActiveServerAuthContext } from "@/server/auth-helpers";
 import { advisorApprovalEmail, queueEmail, reviewAssignmentEmail } from "@/server/email";
@@ -174,33 +174,68 @@ export async function resubmitPaper(id: string) {
   if (submission.authorId !== session.user.id) throw new Error("Forbidden");
   if (submission.status !== "REVISION_REQUIRED") throw new Error("Can only resubmit from REVISION_REQUIRED");
 
+  const latestRevisionDecision = await db.query.decisions.findFirst({
+    where: and(
+      eq(decisions.submissionId, id),
+      eq(decisions.outcome, "CONDITIONAL_ACCEPT")
+    ),
+    columns: { decidedAt: true },
+    orderBy: [desc(decisions.decidedAt)],
+  });
+  if (latestRevisionDecision) {
+    const revisedAbstract = await db.query.storedFiles.findFirst({
+      where: and(
+        eq(storedFiles.submissionId, id),
+        eq(storedFiles.kind, "MANUSCRIPT"),
+        gt(storedFiles.uploadedAt, latestRevisionDecision.decidedAt)
+      ),
+      columns: { id: true },
+    });
+    if (!revisedAbstract) {
+      throw new Error("กรุณาแนบ abstract ฉบับแก้ไขก่อนส่งให้กรรมการพิจารณาอีกครั้ง");
+    }
+  }
+
   // Reset review assignments (COMPLETED → ACCEPTED) so the same reviewer reviews again.
   // Also bump assignedAt + clear lastReminderAt so the UI can detect "round 2".
   const now = new Date();
-  const reopened = await db
-    .update(reviewAssignments)
-    .set({
-      status: "ACCEPTED",
-      respondedAt: null,
-      assignedAt: now,
-      lastReminderAt: null,
-    })
-    .where(
-      and(
-        eq(reviewAssignments.submissionId, id),
-        eq(reviewAssignments.status, "COMPLETED")
-      )
-    )
-    .returning({ id: reviewAssignments.id, reviewerId: reviewAssignments.reviewerId, dueDate: reviewAssignments.dueDate });
+  const { reopened, updated } = await db.transaction(async (tx) => {
+    await tx
+      .delete(decisions)
+      .where(
+        and(
+          eq(decisions.submissionId, id),
+          eq(decisions.outcome, "CONDITIONAL_ACCEPT")
+        )
+      );
 
-  const [updated] = await db
-    .update(submissions)
-    .set({
-      status: "UNDER_REVIEW",
-      updatedAt: now,
-    })
-    .where(eq(submissions.id, id))
-    .returning();
+    const reopened = await tx
+      .update(reviewAssignments)
+      .set({
+        status: "ACCEPTED",
+        respondedAt: null,
+        assignedAt: now,
+        lastReminderAt: null,
+      })
+      .where(
+        and(
+          eq(reviewAssignments.submissionId, id),
+          eq(reviewAssignments.status, "COMPLETED")
+        )
+      )
+      .returning({ id: reviewAssignments.id, reviewerId: reviewAssignments.reviewerId, dueDate: reviewAssignments.dueDate });
+
+    const [updated] = await tx
+      .update(submissions)
+      .set({
+        status: "UNDER_REVIEW",
+        updatedAt: now,
+      })
+      .where(eq(submissions.id, id))
+      .returning();
+
+    return { reopened, updated };
+  });
 
   // Notify reviewers that a revised manuscript is ready for round-2 review
   if (reopened.length > 0) {

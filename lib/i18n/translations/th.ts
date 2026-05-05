@@ -940,8 +940,8 @@ const th = {
   "labels.status.ACCEPTED": "ตอบรับ",
   "labels.status.REJECTED": "ปฏิเสธ",
   "labels.status.DESK_REJECTED": "ปฏิเสธเบื้องต้น",
-  "labels.status.CAMERA_READY_PENDING": "รอฉบับสมบูรณ์",
-  "labels.status.CAMERA_READY_SUBMITTED": "ส่งฉบับสมบูรณ์แล้ว",
+  "labels.status.CAMERA_READY_PENDING": "ตอบรับ",
+  "labels.status.CAMERA_READY_SUBMITTED": "ตอบรับ",
   "labels.status.WITHDRAWN": "ถอนบทความ",
 
   // ─── Labels: Assignment Status ────────────────────────
@@ -975,7 +975,7 @@ const th = {
   "labels.phase.REVIEW": "รีวิว",
   "labels.phase.REBUTTAL": "ชี้แจง",
   "labels.phase.NOTIFICATION": "แจ้งผล",
-  "labels.phase.CAMERA_READY": "ฉบับสมบูรณ์",
+  "labels.phase.CAMERA_READY": "ตอบรับ",
 
   // ─── Labels: Bid Preference ───────────────────────────
   "labels.bid.EAGER": "สนใจมาก",
