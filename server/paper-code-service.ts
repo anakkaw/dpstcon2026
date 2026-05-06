@@ -1,9 +1,10 @@
-import { eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { formatPaperCode, getTrackPaperCode, parsePaperCodeSequence } from "@/lib/paper-codes";
 import { db } from "@/server/db";
 import { submissions } from "@/server/db/schema";
 
-type DbClient = Pick<typeof db, "execute" | "query" | "select" | "update">;
+type DbClient = Pick<typeof db, "query" | "select" | "update">;
+const PAPER_CODE_RETRY_LIMIT = 5;
 
 /**
  * Load all existing paper codes and compute next sequence per prefix.
@@ -26,8 +27,9 @@ async function buildPrefixCounter(client: DbClient = db): Promise<Map<string, nu
   return counter;
 }
 
-async function lockPaperCodePrefix(client: DbClient, prefix: string) {
-  await client.execute(sql`select pg_advisory_xact_lock(hashtext(${prefix}))`);
+function isUniqueViolation(error: unknown) {
+  const maybeError = error as { code?: string; message?: string };
+  return maybeError.code === "23505" || maybeError.message?.includes("duplicate key");
 }
 
 async function ensureSubmissionPaperCodeWithClient(client: DbClient, submissionId: string) {
@@ -41,7 +43,6 @@ async function ensureSubmissionPaperCodeWithClient(client: DbClient, submissionI
   if (submission.paperCode) return submission.paperCode;
 
   const prefix = getTrackPaperCode(submission.track?.name);
-  await lockPaperCodePrefix(client, prefix);
 
   const refreshed = await client.query.submissions.findFirst({
     where: eq(submissions.id, submissionId),
@@ -54,26 +55,46 @@ async function ensureSubmissionPaperCodeWithClient(client: DbClient, submissionI
   const next = (counter.get(prefix) ?? 0) + 1;
   const paperCode = formatPaperCode(prefix, next);
 
-  await client
+  const [updated] = await client
     .update(submissions)
     .set({ paperCode, updatedAt: new Date() })
-    .where(eq(submissions.id, submissionId));
+    .where(and(eq(submissions.id, submissionId), isNull(submissions.paperCode)))
+    .returning({ paperCode: submissions.paperCode });
 
-  return paperCode;
+  if (!updated?.paperCode) {
+    const latest = await client.query.submissions.findFirst({
+      where: eq(submissions.id, submissionId),
+      columns: { id: true, paperCode: true },
+    });
+
+    if (latest?.paperCode) return latest.paperCode;
+
+    throw new Error("Could not assign paper code");
+  }
+
+  return updated.paperCode;
 }
 
 /**
  * Ensure a single submission has a paper code. Idempotent — returns existing code if already set.
  */
 export async function ensureSubmissionPaperCode(submissionId: string) {
-  return db.transaction((tx) => ensureSubmissionPaperCodeWithClient(tx, submissionId));
-}
+  let lastError: unknown;
 
-export async function ensureSubmissionPaperCodeInTransaction(
-  client: DbClient,
-  submissionId: string
-) {
-  return ensureSubmissionPaperCodeWithClient(client, submissionId);
+  for (let attempt = 0; attempt < PAPER_CODE_RETRY_LIMIT; attempt++) {
+    try {
+      return await ensureSubmissionPaperCodeWithClient(db, submissionId);
+    } catch (error) {
+      lastError = error;
+      if (!isUniqueViolation(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Could not generate a unique paper code");
 }
 
 /**
@@ -98,37 +119,10 @@ export async function generateMissingPaperCodes() {
 
   const updated: Array<{ id: string; paperCode: string }> = [];
 
-  await db.transaction(async (tx) => {
-    const client = tx;
-    const prefixes = Array.from(
-      new Set(targets.map((target) => getTrackPaperCode(target.track?.name)))
-    ).sort();
-
-    for (const prefix of prefixes) {
-      await lockPaperCodePrefix(client, prefix);
-    }
-
-    const counter = await buildPrefixCounter(client);
-    for (const target of targets) {
-      const refreshed = await client.query.submissions.findFirst({
-        where: eq(submissions.id, target.id),
-        columns: { id: true, paperCode: true },
-      });
-      if (!refreshed || refreshed.paperCode) continue;
-
-      const prefix = getTrackPaperCode(target.track?.name);
-      const next = (counter.get(prefix) ?? 0) + 1;
-      counter.set(prefix, next);
-      const paperCode = formatPaperCode(prefix, next);
-
-      await client
-        .update(submissions)
-        .set({ paperCode, updatedAt: new Date() })
-        .where(eq(submissions.id, target.id));
-
-      updated.push({ id: target.id, paperCode });
-    }
-  });
+  for (const target of targets) {
+    const paperCode = await ensureSubmissionPaperCode(target.id);
+    updated.push({ id: target.id, paperCode });
+  }
 
   return updated;
 }

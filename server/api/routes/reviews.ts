@@ -13,7 +13,7 @@ import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import { isDuplicateReviewRound } from "@/server/access-policies";
-import { ensureSubmissionPaperCodeInTransaction } from "@/server/paper-code-service";
+import { ensureSubmissionPaperCode } from "@/server/paper-code-service";
 import {
   canMakeSubmissionDecision,
   canSubmitReviewForAssignment,
@@ -482,8 +482,8 @@ app.post("/decisions", async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  const result = await db.transaction(async (tx) => {
-    const submission = await tx.query.submissions.findFirst({
+  const result = await (async () => {
+    const submission = await db.query.submissions.findFirst({
       where: eq(submissions.id, data.submissionId),
       columns: { id: true, status: true, title: true },
       with: { author: { columns: { name: true, email: true } } },
@@ -493,7 +493,7 @@ app.post("/decisions", async (c) => {
       return { error: "Not found", status: 404 as const };
     }
 
-    const existingDecision = await tx.query.decisions.findFirst({
+    const existingDecision = await db.query.decisions.findFirst({
       where: eq(decisions.submissionId, data.submissionId),
       columns: { id: true, outcome: true },
     });
@@ -505,7 +505,7 @@ app.post("/decisions", async (c) => {
       return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
     }
 
-    const completedAssignments = await tx.query.reviewAssignments.findMany({
+    const completedAssignments = await db.query.reviewAssignments.findMany({
       where: and(
         eq(reviewAssignments.submissionId, data.submissionId),
         eq(reviewAssignments.status, "COMPLETED")
@@ -513,7 +513,7 @@ app.post("/decisions", async (c) => {
       columns: { id: true },
     });
 
-    const completedReviews = await tx.query.reviews.findMany({
+    const completedReviews = await db.query.reviews.findMany({
       where: and(
         eq(reviews.submissionId, data.submissionId),
         isNotNull(reviews.completedAt)
@@ -542,12 +542,12 @@ app.post("/decisions", async (c) => {
     };
 
     const [decision] = existingDecision
-      ? await tx
+      ? await db
           .update(decisions)
           .set(decisionValues)
           .where(eq(decisions.id, existingDecision.id))
           .returning()
-      : await tx
+      : await db
           .insert(decisions)
           .values({
             submissionId: data.submissionId,
@@ -562,15 +562,15 @@ app.post("/decisions", async (c) => {
 
     const newStatus = getDecisionSubmissionStatus(data.outcome);
 
-    await tx
+    await db
       .update(submissions)
       .set({ status: newStatus, updatedAt: new Date() })
       .where(eq(submissions.id, data.submissionId));
 
     if (newStatus === "ACCEPTED") {
-      await ensureSubmissionPaperCodeInTransaction(tx, data.submissionId);
+      await ensureSubmissionPaperCode(data.submissionId);
 
-      const existingPresentations = await tx.query.presentationAssignments.findMany({
+      const existingPresentations = await db.query.presentationAssignments.findMany({
         where: eq(presentationAssignments.submissionId, data.submissionId),
         columns: { type: true },
       });
@@ -580,18 +580,26 @@ app.post("/decisions", async (c) => {
       );
 
       if (missingTypes.length > 0) {
-        await tx.insert(presentationAssignments).values(
-          missingTypes.map((type) => ({
-            submissionId: data.submissionId,
-            type: type as "POSTER" | "ORAL",
-            status: "PENDING" as const,
-          }))
-        );
+        await db
+          .insert(presentationAssignments)
+          .values(
+            missingTypes.map((type) => ({
+              submissionId: data.submissionId,
+              type: type as "POSTER" | "ORAL",
+              status: "PENDING" as const,
+            }))
+          )
+          .onConflictDoNothing({
+            target: [
+              presentationAssignments.submissionId,
+              presentationAssignments.type,
+            ],
+          });
       }
     }
 
     return { decision, submission, status: 201 as const };
-  });
+  })();
 
   if ("error" in result) {
     return c.json({ error: result.error }, result.status);

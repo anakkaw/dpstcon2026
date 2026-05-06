@@ -763,28 +763,26 @@ app.post("/:id/resubmit", async (c) => {
 
   const now = new Date();
 
-  const [updated] = await db.transaction(async (tx) => {
-    await tx
-      .update(reviewAssignments)
-      .set({
-        status: "ACCEPTED",
-        respondedAt: null,
-        assignedAt: now,
-        lastReminderAt: null,
-      })
-      .where(
-        and(
-          eq(reviewAssignments.submissionId, id),
-          eq(reviewAssignments.status, "COMPLETED")
-        )
-      );
+  await db
+    .update(reviewAssignments)
+    .set({
+      status: "ACCEPTED",
+      respondedAt: null,
+      assignedAt: now,
+      lastReminderAt: null,
+    })
+    .where(
+      and(
+        eq(reviewAssignments.submissionId, id),
+        eq(reviewAssignments.status, "COMPLETED")
+      )
+    );
 
-    return tx
-      .update(submissions)
-      .set({ status: "UNDER_REVIEW", updatedAt: now })
-      .where(eq(submissions.id, id))
-      .returning();
-  });
+  const [updated] = await db
+    .update(submissions)
+    .set({ status: "UNDER_REVIEW", updatedAt: now })
+    .where(eq(submissions.id, id))
+    .returning();
 
   return c.json({ submission: updated });
 });

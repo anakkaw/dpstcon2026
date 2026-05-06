@@ -199,43 +199,30 @@ export async function resubmitPaper(id: string) {
   // Reset review assignments (COMPLETED → ACCEPTED) so the same reviewer reviews again.
   // Also bump assignedAt + clear lastReminderAt so the UI can detect "round 2".
   const now = new Date();
-  const { reopened, updated } = await db.transaction(async (tx) => {
-    await tx
-      .delete(decisions)
-      .where(
-        and(
-          eq(decisions.submissionId, id),
-          eq(decisions.outcome, "CONDITIONAL_ACCEPT")
-        )
-      );
-
-    const reopened = await tx
-      .update(reviewAssignments)
-      .set({
-        status: "ACCEPTED",
-        respondedAt: null,
-        assignedAt: now,
-        lastReminderAt: null,
-      })
-      .where(
-        and(
-          eq(reviewAssignments.submissionId, id),
-          eq(reviewAssignments.status, "COMPLETED")
-        )
+  const reopened = await db
+    .update(reviewAssignments)
+    .set({
+      status: "ACCEPTED",
+      respondedAt: null,
+      assignedAt: now,
+      lastReminderAt: null,
+    })
+    .where(
+      and(
+        eq(reviewAssignments.submissionId, id),
+        eq(reviewAssignments.status, "COMPLETED")
       )
-      .returning({ id: reviewAssignments.id, reviewerId: reviewAssignments.reviewerId, dueDate: reviewAssignments.dueDate });
+    )
+    .returning({ id: reviewAssignments.id, reviewerId: reviewAssignments.reviewerId, dueDate: reviewAssignments.dueDate });
 
-    const [updated] = await tx
-      .update(submissions)
-      .set({
-        status: "UNDER_REVIEW",
-        updatedAt: now,
-      })
-      .where(eq(submissions.id, id))
-      .returning();
-
-    return { reopened, updated };
-  });
+  const [updated] = await db
+    .update(submissions)
+    .set({
+      status: "UNDER_REVIEW",
+      updatedAt: now,
+    })
+    .where(eq(submissions.id, id))
+    .returning();
 
   // Notify reviewers that a revised manuscript is ready for round-2 review
   if (reopened.length > 0) {
