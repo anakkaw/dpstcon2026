@@ -505,22 +505,21 @@ app.post("/decisions", async (c) => {
       return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
     }
 
-    const [completedAssignments, completedReviews] = await Promise.all([
-      tx.query.reviewAssignments.findMany({
-        where: and(
-          eq(reviewAssignments.submissionId, data.submissionId),
-          eq(reviewAssignments.status, "COMPLETED")
-        ),
-        columns: { id: true },
-      }),
-      tx.query.reviews.findMany({
-        where: and(
-          eq(reviews.submissionId, data.submissionId),
-          isNotNull(reviews.completedAt)
-        ),
-        columns: { id: true },
-      }),
-    ]);
+    const completedAssignments = await tx.query.reviewAssignments.findMany({
+      where: and(
+        eq(reviewAssignments.submissionId, data.submissionId),
+        eq(reviewAssignments.status, "COMPLETED")
+      ),
+      columns: { id: true },
+    });
+
+    const completedReviews = await tx.query.reviews.findMany({
+      where: and(
+        eq(reviews.submissionId, data.submissionId),
+        isNotNull(reviews.completedAt)
+      ),
+      columns: { id: true },
+    });
 
     if (
       !canMakeSubmissionDecision({
@@ -534,21 +533,28 @@ app.post("/decisions", async (c) => {
       return { error: "บทความนี้ไม่อยู่ในสถานะที่ตัดสินได้ หรือยังไม่มีรีวิวที่เสร็จสมบูรณ์", status: 400 as const };
     }
 
-    if (existingDecision) {
-      await tx.delete(decisions).where(eq(decisions.id, existingDecision.id));
-    }
+    const decisionValues = {
+      decidedBy: currentUser.id,
+      outcome: data.outcome,
+      comments: data.comments,
+      conditions: data.outcome === "CONDITIONAL_ACCEPT" ? data.conditions : null,
+      decidedAt: new Date(),
+    };
 
-    const [decision] = await tx
-      .insert(decisions)
-      .values({
-        submissionId: data.submissionId,
-        decidedBy: currentUser.id,
-        outcome: data.outcome,
-        comments: data.comments,
-        conditions: data.outcome === "CONDITIONAL_ACCEPT" ? data.conditions : undefined,
-      })
-      .onConflictDoNothing({ target: decisions.submissionId })
-      .returning();
+    const [decision] = existingDecision
+      ? await tx
+          .update(decisions)
+          .set(decisionValues)
+          .where(eq(decisions.id, existingDecision.id))
+          .returning()
+      : await tx
+          .insert(decisions)
+          .values({
+            submissionId: data.submissionId,
+            ...decisionValues,
+          })
+          .onConflictDoNothing({ target: decisions.submissionId })
+          .returning();
 
     if (!decision) {
       return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
