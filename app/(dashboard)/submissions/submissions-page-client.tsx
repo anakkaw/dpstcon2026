@@ -15,6 +15,10 @@ import { getSubmissionStatusLabels, SUBMISSION_STATUS_COLORS } from "@/lib/label
 import { useI18n } from "@/lib/i18n";
 import { formatDate, truncate } from "@/lib/utils";
 import { displayNameTh } from "@/lib/display-name";
+import {
+  getSubmissionStatusSummaryCounts,
+  isAcceptedSubmissionStatus,
+} from "@/lib/submission-status";
 import { useDashboardAuth } from "@/components/dashboard-auth-context";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import {
@@ -320,7 +324,13 @@ export function SubmissionsPageClient({
     submissions
       .filter((s) => {
         if (trackFilter && s.track?.id !== trackFilter) return false;
-        if (statusFilter !== "ALL" && s.status !== statusFilter) return false;
+        if (statusFilter !== "ALL") {
+          if (statusFilter === "ACCEPTED") {
+            if (!isAcceptedSubmissionStatus(s.status)) return false;
+          } else if (s.status !== statusFilter) {
+            return false;
+          }
+        }
         if (quickFilter === "needs_action" && !NEEDS_ACTION_STATUSES.has(s.status)) return false;
         if (quickFilter === "advisor_stalled") {
           if (s.status !== "ADVISOR_APPROVAL_PENDING") return false;
@@ -441,9 +451,10 @@ export function SubmissionsPageClient({
     );
   }
 
+  const summaryStatusCounts = getSubmissionStatusSummaryCounts(statusCounts);
   const statusTabs = [
     { key: "ALL", label: t("common.all"), count: totalFiltered },
-    ...Object.entries(statusCounts)
+    ...Object.entries(summaryStatusCounts)
       .sort(([a], [b]) => {
         const order = ["DRAFT", "ADVISOR_APPROVAL_PENDING", "SUBMITTED", "UNDER_REVIEW", "REVISION_REQUIRED", "REBUTTAL", "ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED", "REJECTED", "DESK_REJECTED", "WITHDRAWN"];
         return order.indexOf(a) - order.indexOf(b);
@@ -452,7 +463,7 @@ export function SubmissionsPageClient({
   ];
 
   const submitted = (statusCounts.SUBMITTED || 0) + (statusCounts.UNDER_REVIEW || 0);
-  const accepted = (statusCounts.ACCEPTED || 0) + (statusCounts.CAMERA_READY_PENDING || 0) + (statusCounts.CAMERA_READY_SUBMITTED || 0);
+  const accepted = summaryStatusCounts.ACCEPTED || 0;
   const rejected = (statusCounts.REJECTED || 0) + (statusCounts.DESK_REJECTED || 0);
 
   return (

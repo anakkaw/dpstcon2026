@@ -5,6 +5,7 @@ import {
   canAuthorEditSubmission,
   canAuthorUploadSubmissionFile,
   canSubmitReviewForAssignment,
+  getAcceptedSubmissionStatus,
   getDecisionSubmissionStatus,
   getSubmissionValidationError,
 } from "@/server/submission-workflow";
@@ -29,12 +30,27 @@ test("author upload permissions follow workflow state", () => {
 
 test("chair decisions map to the expected submission status", () => {
   assert.equal(getDecisionSubmissionStatus("ACCEPT"), "ACCEPTED");
+  assert.equal(
+    getDecisionSubmissionStatus("ACCEPT", { hasFinalAbstract: true }),
+    "CAMERA_READY_SUBMITTED"
+  );
   assert.equal(getDecisionSubmissionStatus("REJECT"), "REJECTED");
   assert.equal(
     getDecisionSubmissionStatus("CONDITIONAL_ACCEPT"),
     "REVISION_REQUIRED"
   );
   assert.equal(getDecisionSubmissionStatus("DESK_REJECT"), "DESK_REJECTED");
+});
+
+test("accepted status is final when the latest abstract file already exists", () => {
+  assert.equal(
+    getAcceptedSubmissionStatus({ hasFinalAbstract: true }),
+    "CAMERA_READY_SUBMITTED"
+  );
+  assert.equal(
+    getAcceptedSubmissionStatus({ hasFinalAbstract: false }),
+    "ACCEPTED"
+  );
 });
 
 test("decision eligibility uses current completed reviews only", () => {

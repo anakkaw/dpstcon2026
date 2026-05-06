@@ -8,6 +8,7 @@ import {
   getSubmissionStatusLabels,
   SUBMISSION_STATUS_COLORS,
 } from "@/lib/labels";
+import { getSubmissionStatusSummaryCounts } from "@/lib/submission-status";
 import { useI18n } from "@/lib/i18n";
 import {
   FileText, ClipboardCheck, Users, BarChart3,
@@ -46,7 +47,9 @@ export default function AdminDashboard({ stats, roles = [] }: { stats: Record<st
   const byStatus = (stats.submissionsByStatus || {}) as Record<string, number>;
   const byTrack = (stats.submissionsByTrack || []) as { name: string; count: number }[];
   const totalSubs = (stats.totalSubmissions as number) || 0;
-  const orderedStatusRows = Object.entries(byStatus).sort((a, b) => b[1] - a[1]);
+  const summaryByStatus = getSubmissionStatusSummaryCounts(byStatus);
+  const acceptedCount = summaryByStatus.ACCEPTED || 0;
+  const orderedStatusRows = Object.entries(summaryByStatus).sort((a, b) => b[1] - a[1]);
 
   const submittedCount = (byStatus.SUBMITTED || 0);
 
@@ -64,7 +67,7 @@ export default function AdminDashboard({ stats, roles = [] }: { stats: Record<st
         <StatCard label={t("dashboard.totalPapers")} value={(stats.totalSubmissions as number) || 0} icon={<FileText className="h-5 w-5" />} accent="brand" />
         <StatCard label={t("dashboard.reviewers")} value={(stats.totalReviewers as number) || 0} icon={<Users className="h-5 w-5" />} accent="info" />
         <StatCard label={t("dashboard.totalReviews")} value={(stats.totalReviews as number) || 0} icon={<ClipboardCheck className="h-5 w-5" />} accent="warning" />
-        <StatCard label={t("dashboard.accepted")} value={byStatus.ACCEPTED || 0} icon={<BarChart3 className="h-5 w-5" />} accent="success" />
+        <StatCard label={t("dashboard.accepted")} value={acceptedCount} icon={<BarChart3 className="h-5 w-5" />} accent="success" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]">

@@ -92,6 +92,13 @@
       "when": 1778000000000,
       "tag": "0012_review_reminder_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1778040601000,
+      "tag": "0013_normalize_camera_ready_pending",
+      "breakpoints": true
     }
   ]
 }

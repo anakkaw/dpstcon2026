@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
+import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
 import type { ServerAuthUser } from "@/server/auth-helpers";
 import { db } from "@/server/db";
 import {
@@ -114,9 +115,6 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
     getPosterSessionSettings(),
   ]);
 
-  // Build WHERE conditions to push filters into the DB query
-  const acceptedStatuses = ["ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"] as const;
-
   const posterRows = await db.query.presentationAssignments.findMany({
     where: eq(presentationAssignments.type, "POSTER"),
     with: {
@@ -133,7 +131,7 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
 
   // Filter in-memory (Drizzle relational queries don't support nested WHERE on related table)
   const filteredPosters = posterRows.filter((row) => {
-    if (!(acceptedStatuses as readonly string[]).includes(row.submission.status)) return false;
+    if (!isAcceptedSubmissionStatus(row.submission.status)) return false;
     if (scopedTrackIds === null) return true;
     if (!row.submission.track?.id) return false;
     return scopedTrackIds.includes(row.submission.track.id);

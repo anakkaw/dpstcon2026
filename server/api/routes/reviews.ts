@@ -12,8 +12,10 @@ import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
+import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
 import { isDuplicateReviewRound } from "@/server/access-policies";
 import { ensureSubmissionPaperCode } from "@/server/paper-code-service";
+import { hasFileOfKind } from "@/server/stored-files-helpers";
 import {
   canMakeSubmissionDecision,
   canSubmitReviewForAssignment,
@@ -560,14 +562,20 @@ app.post("/decisions", async (c) => {
       return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
     }
 
-    const newStatus = getDecisionSubmissionStatus(data.outcome);
+    const hasFinalAbstract =
+      data.outcome === "ACCEPT"
+        ? await hasFileOfKind(data.submissionId, "MANUSCRIPT")
+        : false;
+    const newStatus = getDecisionSubmissionStatus(data.outcome, {
+      hasFinalAbstract,
+    });
 
     await db
       .update(submissions)
       .set({ status: newStatus, updatedAt: new Date() })
       .where(eq(submissions.id, data.submissionId));
 
-    if (newStatus === "ACCEPTED") {
+    if (isAcceptedSubmissionStatus(newStatus)) {
       await ensureSubmissionPaperCode(data.submissionId);
 
       const existingPresentations = await db.query.presentationAssignments.findMany({

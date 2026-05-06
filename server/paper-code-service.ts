@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { formatPaperCode, getTrackPaperCode, parsePaperCodeSequence } from "@/lib/paper-codes";
+import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
 import { db } from "@/server/db";
 import { submissions } from "@/server/db/schema";
 
@@ -102,17 +103,13 @@ export async function ensureSubmissionPaperCode(submissionId: string) {
  * Assigns codes in a single pass to avoid sequence gaps.
  */
 export async function generateMissingPaperCodes() {
-  const acceptedStatuses = ["ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"] as const;
-
   const rows = await db.query.submissions.findMany({
     columns: { id: true, paperCode: true, status: true },
     with: { track: { columns: { name: true } } },
   });
 
   const targets = rows.filter(
-    (row) =>
-      acceptedStatuses.includes(row.status as (typeof acceptedStatuses)[number]) &&
-      !row.paperCode
+    (row) => isAcceptedSubmissionStatus(row.status) && !row.paperCode
   );
 
   if (targets.length === 0) return [];

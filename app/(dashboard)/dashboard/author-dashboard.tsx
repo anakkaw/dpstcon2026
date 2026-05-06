@@ -16,6 +16,7 @@ import {
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { NextActionCard } from "@/components/author/next-action-card";
 import { getNextAction, getDaysUntil, getRelevantDeadlineKey } from "@/lib/author-utils";
+import { getAcceptedSubmissionCount } from "@/lib/submission-status";
 import { formatDate } from "@/lib/utils";
 
 interface AuthorSubmission {
@@ -46,6 +47,7 @@ export default function AuthorDashboard({ stats }: { stats: Record<string, unkno
   const subs = (stats.submissions || []) as AuthorSubmission[];
   const deadlines = (stats.deadlines || {}) as Record<string, string>;
   const presentations = (stats.presentations || []) as AuthorPresentation[];
+  const acceptedCount = getAcceptedSubmissionCount(byStatus);
 
   const actionItems = subs
     .map((s) => {
@@ -88,7 +90,7 @@ export default function AuthorDashboard({ stats }: { stats: Record<string, unkno
             <StatCard label={t("dashboard.totalPapers")} value={(stats.totalSubmissions as number) || 0} icon={<FileText className="h-5 w-5" />} accent="brand" />
             <StatCard label={t("dashboard.drafts")} value={byStatus.DRAFT || 0} icon={<Clock className="h-5 w-5" />} accent="warning" />
             <StatCard label={t("dashboard.underReview")} value={(byStatus.SUBMITTED || 0) + (byStatus.UNDER_REVIEW || 0)} icon={<Send className="h-5 w-5" />} accent="info" />
-            <StatCard label={t("dashboard.accepted")} value={byStatus.ACCEPTED || 0} icon={<CheckCircle2 className="h-5 w-5" />} accent="success" />
+            <StatCard label={t("dashboard.accepted")} value={acceptedCount} icon={<CheckCircle2 className="h-5 w-5" />} accent="success" />
           </div>
         </div>
 

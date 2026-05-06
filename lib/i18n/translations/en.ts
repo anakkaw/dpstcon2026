@@ -950,8 +950,8 @@ const en: Record<TranslationKey, string> = {
   "labels.status.ACCEPTED": "Accepted",
   "labels.status.REJECTED": "Rejected",
   "labels.status.DESK_REJECTED": "Desk Rejected",
-  "labels.status.CAMERA_READY_PENDING": "Accepted",
-  "labels.status.CAMERA_READY_SUBMITTED": "Accepted",
+  "labels.status.CAMERA_READY_PENDING": "Camera-ready pending",
+  "labels.status.CAMERA_READY_SUBMITTED": "Camera-ready submitted",
   "labels.status.WITHDRAWN": "Withdrawn",
 
   // ─── Labels: Assignment Status ────────────────────────
