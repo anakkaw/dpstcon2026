@@ -154,14 +154,20 @@ export function getDecisionSubmissionStatus(
 export function canMakeSubmissionDecision(input: {
   status: string;
   currentCompletedReviews: number;
+  completedReviewHistory?: number;
   hasDecision: boolean;
+  isRevisionResubmission?: boolean;
 }) {
+  const hasCurrentCompletedReview = input.currentCompletedReviews > 0;
+  const hasRevisionReviewBasis =
+    !!input.isRevisionResubmission && (input.completedReviewHistory ?? 0) > 0;
+
   return (
     !input.hasDecision &&
     DECIDABLE_SUBMISSION_STATUSES.includes(
       input.status as (typeof DECIDABLE_SUBMISSION_STATUSES)[number]
     ) &&
-    input.currentCompletedReviews > 0
+    (hasCurrentCompletedReview || hasRevisionReviewBasis)
   );
 }
 

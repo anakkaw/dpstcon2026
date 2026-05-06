@@ -70,6 +70,26 @@ test("decision eligibility uses current completed reviews only", () => {
     }),
     false
   );
+  assert.equal(
+    canMakeSubmissionDecision({
+      status: "UNDER_REVIEW",
+      currentCompletedReviews: 0,
+      completedReviewHistory: 1,
+      hasDecision: false,
+      isRevisionResubmission: true,
+    }),
+    true
+  );
+  assert.equal(
+    canMakeSubmissionDecision({
+      status: "UNDER_REVIEW",
+      currentCompletedReviews: 0,
+      completedReviewHistory: 0,
+      hasDecision: false,
+      isRevisionResubmission: true,
+    }),
+    false
+  );
 });
 
 test("reviews can only be submitted for accepted assignments", () => {

@@ -20,6 +20,7 @@ import {
   getPresentationRubrics,
   type PresentationType,
 } from "@/server/presentation-rubrics";
+import { canMakeSubmissionDecision } from "@/server/submission-workflow";
 
 export default async function SubmissionDetailPage({
   params,
@@ -242,6 +243,10 @@ export default async function SubmissionDetailPage({
     total: assignmentRows.length,
     completed: assignmentRows.filter((r) => r.status === "COMPLETED").length,
   };
+  const isRevisionResubmission =
+    decision?.outcome === "CONDITIONAL_ACCEPT" &&
+    ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status);
+  const completedReviewHistory = submission.reviews.filter((review) => review.completedAt).length;
 
   // Fetch workload (pending/active/completed counts) + affiliation for the reviewer dropdown
   const reviewerIdsForLoad = reviewers.map((r) => r.id);
@@ -304,6 +309,13 @@ export default async function SubmissionDetailPage({
     ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status)
       ? null
       : decision;
+  const canMakeDecision = canMakeSubmissionDecision({
+    status: submission.status,
+    currentCompletedReviews: reviewCounts.completed,
+    completedReviewHistory,
+    hasDecision: !!visibleDecision,
+    isRevisionResubmission,
+  });
 
   return (
     <SubmissionDetail
@@ -325,6 +337,7 @@ export default async function SubmissionDetailPage({
           uploadedAt: f.uploadedAt.toISOString(),
         }))}
       reviewCounts={reviewCounts}
+      canMakeDecision={canMakeDecision}
       decision={visibleDecision ? {
         outcome: visibleDecision.outcome,
         comments: visibleDecision.comments,

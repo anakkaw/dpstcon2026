@@ -7,7 +7,7 @@ import {
   decisions,
   presentationAssignments,
 } from "@/server/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -497,33 +497,45 @@ app.post("/decisions", async (c) => {
       where: eq(decisions.submissionId, data.submissionId),
       columns: { id: true, outcome: true },
     });
-    if (existingDecision) {
-      if (
-        existingDecision.outcome === "CONDITIONAL_ACCEPT" &&
-        ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status)
-      ) {
-        await tx.delete(decisions).where(eq(decisions.id, existingDecision.id));
-      } else {
-        return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
-      }
+    const isRevisionResubmission =
+      existingDecision?.outcome === "CONDITIONAL_ACCEPT" &&
+      ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status);
+
+    if (existingDecision && !isRevisionResubmission) {
+      return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
     }
 
-    const completedAssignments = await tx.query.reviewAssignments.findMany({
-      where: and(
-        eq(reviewAssignments.submissionId, data.submissionId),
-        eq(reviewAssignments.status, "COMPLETED")
-      ),
-      columns: { id: true },
-    });
+    const [completedAssignments, completedReviews] = await Promise.all([
+      tx.query.reviewAssignments.findMany({
+        where: and(
+          eq(reviewAssignments.submissionId, data.submissionId),
+          eq(reviewAssignments.status, "COMPLETED")
+        ),
+        columns: { id: true },
+      }),
+      tx.query.reviews.findMany({
+        where: and(
+          eq(reviews.submissionId, data.submissionId),
+          isNotNull(reviews.completedAt)
+        ),
+        columns: { id: true },
+      }),
+    ]);
 
     if (
       !canMakeSubmissionDecision({
         status: submission.status,
         currentCompletedReviews: completedAssignments.length,
+        completedReviewHistory: completedReviews.length,
         hasDecision: false,
+        isRevisionResubmission,
       })
     ) {
       return { error: "บทความนี้ไม่อยู่ในสถานะที่ตัดสินได้ หรือยังไม่มีรีวิวที่เสร็จสมบูรณ์", status: 400 as const };
+    }
+
+    if (existingDecision) {
+      await tx.delete(decisions).where(eq(decisions.id, existingDecision.id));
     }
 
     const [decision] = await tx

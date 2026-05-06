@@ -127,6 +127,7 @@ interface Props {
     uploaderName?: string | null;
   }[];
   reviewCounts?: { total: number; completed: number };
+  canMakeDecision?: boolean;
   decision?: {
     outcome: string;
     comments: string | null;
@@ -158,7 +159,7 @@ interface Props {
 export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
   canManageSubmission = false,
-  reviewCounts, decision, presentations, criteriaByType, deadlines,
+  reviewCounts, canMakeDecision, decision, presentations, criteriaByType, deadlines,
   isAssignedReviewer, reviewerAssignmentId, reviewerAssignmentStatus, reviewerAssignmentAssignedAt, lastAdvisorEmail,
 }: Props) {
   const router = useRouter();
@@ -181,9 +182,10 @@ export function SubmissionDetail({
   const currentCompletedReviewCount = reviewCounts?.completed ?? 0;
   const canShowDecisionPanel =
     isAdmin &&
-    !decision &&
-    ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status) &&
-    currentCompletedReviewCount > 0;
+    (canMakeDecision ??
+      (!decision &&
+        ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status) &&
+        currentCompletedReviewCount > 0));
 
   const [decisionOutcome, setDecisionOutcome] = useState("");
   const [decisionComments, setDecisionComments] = useState("");
