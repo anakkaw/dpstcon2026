@@ -17,7 +17,7 @@ import {
   presentationEvaluations,
   posterSlotJudges,
 } from "@/server/db/schema";
-import { eq, desc, and, sql, inArray, gt } from "drizzle-orm";
+import { eq, desc, and, inArray, gt } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -293,7 +293,10 @@ app.get("/", async (c) => {
     roleFetches.push(
       Promise.resolve().then(async () => {
         if (trackIds.length > 0) {
-          const trackSubs = await db.select({ id: submissions.id }).from(submissions).where(sql`${submissions.trackId} IN ${trackIds}`);
+          const trackSubs = await db
+            .select({ id: submissions.id })
+            .from(submissions)
+            .where(inArray(submissions.trackId, trackIds));
           trackSubs.forEach((s) => submissionIds.add(s.id));
         }
       })
@@ -323,7 +326,7 @@ app.get("/", async (c) => {
 
   const ids = Array.from(submissionIds);
   const results = await db.query.submissions.findMany({
-    where: sql`${submissions.id} IN ${ids}`,
+    where: inArray(submissions.id, ids),
     with: {
       author: { columns: { id: true, name: true, email: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
       track: { columns: { id: true, name: true } },

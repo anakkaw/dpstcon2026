@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
@@ -23,7 +23,10 @@ async function loadLatestManuscripts(submissionIds: string[]) {
     })
     .from(storedFiles)
     .where(
-      sql`${storedFiles.kind} = 'MANUSCRIPT' AND ${storedFiles.submissionId} IN ${submissionIds}`
+      and(
+        eq(storedFiles.kind, "MANUSCRIPT"),
+        inArray(storedFiles.submissionId, submissionIds)
+      )
     );
   // Keep only the newest MANUSCRIPT per submission
   const map = new Map<string, { id: string; originalName: string; mimeType: string; uploadedAt: Date }>();
@@ -148,7 +151,10 @@ async function loadInitialSubmissions(
     roleFetches.push(
       Promise.resolve().then(async () => {
         if (trackIds.length > 0) {
-          const trackSubs = await db.select({ id: submissions.id }).from(submissions).where(sql`${submissions.trackId} IN ${trackIds}`);
+          const trackSubs = await db
+            .select({ id: submissions.id })
+            .from(submissions)
+            .where(inArray(submissions.trackId, trackIds));
           trackSubs.forEach((submission) => submissionIds.add(submission.id));
         }
       })
@@ -175,7 +181,7 @@ async function loadInitialSubmissions(
 
   const ids = Array.from(submissionIds);
   const results = await db.query.submissions.findMany({
-    where: sql`${submissions.id} IN ${ids}`,
+    where: inArray(submissions.id, ids),
     with: {
       author: { columns: { id: true, name: true, email: true } },
       track: { columns: { id: true, name: true } },
