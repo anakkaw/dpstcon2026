@@ -765,15 +765,6 @@ app.post("/:id/resubmit", async (c) => {
 
   const [updated] = await db.transaction(async (tx) => {
     await tx
-      .delete(decisions)
-      .where(
-        and(
-          eq(decisions.submissionId, id),
-          eq(decisions.outcome, "CONDITIONAL_ACCEPT")
-        )
-      );
-
-    await tx
       .update(reviewAssignments)
       .set({
         status: "ACCEPTED",
