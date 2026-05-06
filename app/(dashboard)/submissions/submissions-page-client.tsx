@@ -18,6 +18,7 @@ import { displayNameTh } from "@/lib/display-name";
 import {
   getSubmissionStatusSummaryCounts,
   isAcceptedSubmissionStatus,
+  normalizeSubmissionStatus,
 } from "@/lib/submission-status";
 import { useDashboardAuth } from "@/components/dashboard-auth-context";
 import { useDebounce } from "@/lib/hooks/use-debounce";
@@ -75,7 +76,6 @@ const NEEDS_ACTION_STATUSES = new Set([
   "DRAFT",
   "ADVISOR_APPROVAL_PENDING",
   "REVISION_REQUIRED",
-  "CAMERA_READY_PENDING",
 ]);
 
 function daysSince(iso: string, now: number): number {
@@ -83,6 +83,13 @@ function daysSince(iso: string, now: number): number {
 }
 
 type SortKey = "title" | "author" | "track" | "status" | "createdAt" | "reviews";
+
+function normalizeSubmissionData(submission: SubmissionData): SubmissionData {
+  const normalizedStatus = normalizeSubmissionStatus(submission.status);
+  return normalizedStatus === submission.status
+    ? submission
+    : { ...submission, status: normalizedStatus };
+}
 
 export function SubmissionsPageClient({
   initialSubmissions,
@@ -98,13 +105,15 @@ export function SubmissionsPageClient({
   const canCreateSubmission = roles.includes("AUTHOR");
   const [now] = useState(() => Date.now());
 
-  const [submissions, setSubmissions] = useState<SubmissionData[]>(initialSubmissions);
+  const [submissions, setSubmissions] = useState<SubmissionData[]>(() =>
+    initialSubmissions.map(normalizeSubmissionData)
+  );
 
   // Sync local state with fresh server data after router.refresh() (e.g. after
   // assigning a reviewer). Without this, useState keeps the initial prop and
   // the table looks stale.
   useEffect(() => {
-    setSubmissions(initialSubmissions);
+    setSubmissions(initialSubmissions.map(normalizeSubmissionData));
   }, [initialSubmissions]);
   const [trackFilter, setTrackFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -456,7 +465,7 @@ export function SubmissionsPageClient({
     { key: "ALL", label: t("common.all"), count: totalFiltered },
     ...Object.entries(summaryStatusCounts)
       .sort(([a], [b]) => {
-        const order = ["DRAFT", "ADVISOR_APPROVAL_PENDING", "SUBMITTED", "UNDER_REVIEW", "REVISION_REQUIRED", "REBUTTAL", "ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED", "REJECTED", "DESK_REJECTED", "WITHDRAWN"];
+        const order = ["DRAFT", "ADVISOR_APPROVAL_PENDING", "SUBMITTED", "UNDER_REVIEW", "REVISION_REQUIRED", "REBUTTAL", "ACCEPTED", "REJECTED", "DESK_REJECTED", "WITHDRAWN"];
         return order.indexOf(a) - order.indexOf(b);
       })
       .map(([key, count]) => ({ key, label: statusLabels[key] || key, count })),

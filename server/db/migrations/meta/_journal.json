@@ -99,6 +99,13 @@
       "when": 1778040601000,
       "tag": "0013_normalize_camera_ready_pending",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778041134000,
+      "tag": "0014_normalize_all_camera_ready_pending",
+      "breakpoints": true
     }
   ]
 }

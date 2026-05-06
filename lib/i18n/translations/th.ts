@@ -940,8 +940,8 @@ const th = {
   "labels.status.ACCEPTED": "ตอบรับ",
   "labels.status.REJECTED": "ปฏิเสธ",
   "labels.status.DESK_REJECTED": "ปฏิเสธเบื้องต้น",
-  "labels.status.CAMERA_READY_PENDING": "รอส่งฉบับสมบูรณ์",
-  "labels.status.CAMERA_READY_SUBMITTED": "ส่งฉบับสมบูรณ์แล้ว",
+  "labels.status.CAMERA_READY_PENDING": "ตอบรับ",
+  "labels.status.CAMERA_READY_SUBMITTED": "ตอบรับ",
   "labels.status.WITHDRAWN": "ถอนบทความ",
 
   // ─── Labels: Assignment Status ────────────────────────

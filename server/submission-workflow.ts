@@ -139,25 +139,16 @@ export function canAuthorUploadSubmissionFile(
 }
 
 export function getDecisionSubmissionStatus(
-  outcome: DecisionOutcome,
-  options: { hasFinalAbstract?: boolean } = {}
+  outcome: DecisionOutcome
 ): SubmissionWorkflowStatus {
   const statusMap: Record<DecisionOutcome, SubmissionWorkflowStatus> = {
-    ACCEPT: getAcceptedSubmissionStatus({
-      hasFinalAbstract: options.hasFinalAbstract ?? false,
-    }),
+    ACCEPT: "ACCEPTED",
     REJECT: "REJECTED",
     CONDITIONAL_ACCEPT: "REVISION_REQUIRED",
     DESK_REJECT: "DESK_REJECTED",
   };
 
   return statusMap[outcome];
-}
-
-export function getAcceptedSubmissionStatus(input: {
-  hasFinalAbstract: boolean;
-}): SubmissionWorkflowStatus {
-  return input.hasFinalAbstract ? "CAMERA_READY_SUBMITTED" : "ACCEPTED";
 }
 
 export function canMakeSubmissionDecision(input: {

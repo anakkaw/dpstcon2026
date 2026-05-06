@@ -5,6 +5,7 @@ import { eq, count, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -25,7 +26,15 @@ app.get("/", async (c) => {
 
   stats.author = {
     totalSubmissions: mySubmissions.reduce((s, r) => s + Number(r.count), 0),
-    byStatus: Object.fromEntries(mySubmissions.map((s) => [s.status, Number(s.count)])),
+    byStatus: Object.fromEntries(
+      mySubmissions.reduce<[string, number][]>((entries, row) => {
+        const status = normalizeSubmissionStatus(row.status);
+        const existing = entries.find(([key]) => key === status);
+        if (existing) existing[1] += Number(row.count);
+        else entries.push([status, Number(row.count)]);
+        return entries;
+      }, [])
+    ),
   };
 
   // Reviewer stats
@@ -96,7 +105,13 @@ app.get("/", async (c) => {
       totalReviewers: Number(reviewerCount?.total || 0),
       totalReviews: Number(revCount?.total || 0),
       submissionsByStatus: Object.fromEntries(
-        statusBreakdown.map((s) => [s.status, Number(s.count)])
+        statusBreakdown.reduce<[string, number][]>((entries, row) => {
+          const status = normalizeSubmissionStatus(row.status);
+          const existing = entries.find(([key]) => key === status);
+          if (existing) existing[1] += Number(row.count);
+          else entries.push([status, Number(row.count)]);
+          return entries;
+        }, [])
       ),
     };
   }

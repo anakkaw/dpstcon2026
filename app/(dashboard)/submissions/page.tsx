@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
 import { reviewAssignments, storedFiles, submissions } from "@/server/db/schema";
@@ -128,6 +129,7 @@ async function loadInitialSubmissions(
       const manuscript = manuscripts.get(submission.id) ?? null;
       return {
         ...submission,
+        status: normalizeSubmissionStatus(submission.status),
         createdAt: submission.createdAt.toISOString(),
         submittedAt: submission.submittedAt?.toISOString() || null,
         advisorApprovalAt: submission.advisorApprovalAt?.toISOString() || null,
@@ -202,6 +204,7 @@ async function loadInitialSubmissions(
     const manuscript = manuscripts.get(submission.id) ?? null;
     return {
       ...submission,
+      status: normalizeSubmissionStatus(submission.status),
       createdAt: submission.createdAt.toISOString(),
       submittedAt: submission.submittedAt?.toISOString() || null,
       advisorApprovalAt: submission.advisorApprovalAt?.toISOString() || null,

@@ -15,6 +15,7 @@ import { eq, sql, and, inArray, desc, count } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasTrackRole, hasRole } from "@/lib/permissions";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { canRevealReviewerIdentity } from "@/server/access-policies";
 import {
   getPresentationRubrics,
@@ -53,6 +54,7 @@ export default async function SubmissionDetailPage({
   });
 
   if (!submission) notFound();
+  const submissionStatus = normalizeSubmissionStatus(submission.status);
 
   // Check reviewer assignment independently of access chain
   // so PROGRAM_CHAIR who is also a reviewer gets isAssignedReviewer set correctly
@@ -118,7 +120,7 @@ export default async function SubmissionDetailPage({
   // Fetch all supplementary data in parallel (was 7 sequential queries)
   const [reviewers, files, assignmentRows, decision, presRows, deadlineRows, lastAdvisorEmailRows] = await Promise.all([
     // Reviewers list (only needed for admin on SUBMITTED/UNDER_REVIEW status)
-    canManageSubmission && ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status)
+    canManageSubmission && ["SUBMITTED", "UNDER_REVIEW"].includes(submissionStatus)
       ? (async () => {
           if (hasRole(currentUser, "ADMIN")) {
             const reviewerRoleRows = await db
@@ -245,7 +247,7 @@ export default async function SubmissionDetailPage({
   };
   const isRevisionResubmission =
     decision?.outcome === "CONDITIONAL_ACCEPT" &&
-    ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status);
+    ["SUBMITTED", "UNDER_REVIEW"].includes(submissionStatus);
   const completedReviewHistory = submission.reviews.filter((review) => review.completedAt).length;
 
   // Fetch workload (pending/active/completed counts) + affiliation for the reviewer dropdown
@@ -306,11 +308,11 @@ export default async function SubmissionDetailPage({
   if (!deadlineMap.cameraReadyDeadline) deadlineMap.cameraReadyDeadline = "2026-09-30";
   const visibleDecision =
     decision?.outcome === "CONDITIONAL_ACCEPT" &&
-    ["SUBMITTED", "UNDER_REVIEW"].includes(submission.status)
+    ["SUBMITTED", "UNDER_REVIEW"].includes(submissionStatus)
       ? null
       : decision;
   const canMakeDecision = canMakeSubmissionDecision({
-    status: submission.status,
+    status: submissionStatus,
     currentCompletedReviews: reviewCounts.completed,
     completedReviewHistory,
     hasDecision: !!visibleDecision,
@@ -319,7 +321,12 @@ export default async function SubmissionDetailPage({
 
   return (
     <SubmissionDetail
-      submission={{ ...submission, discussions: filteredDiscussions, reviews: filteredReviews }}
+      submission={{
+        ...submission,
+        status: submissionStatus,
+        discussions: filteredDiscussions,
+        reviews: filteredReviews,
+      }}
       currentUserRoles={currentUser.roles}
       currentUserId={currentUser.id}
       canManageSubmission={canManageSubmission}

@@ -3,6 +3,7 @@ import { db } from "@/server/db";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { submissions } from "@/server/db/schema";
 import { inArray } from "drizzle-orm";
 
@@ -44,7 +45,7 @@ app.get("/proceedings", async (c) => {
       .map((s) => {
         const cr = s.reviews.filter((r) => r.completedAt);
         const recs = cr.map((r) => r.recommendation).filter(Boolean).join("; ");
-        return [s.id, `"${s.title.replace(/"/g, '""')}"`, `"${s.author.name}"`, s.author.email, `"${s.author.affiliation || ""}"`, `"${s.track?.name || ""}"`, s.status, `"${recs}"`].join(",");
+        return [s.id, `"${s.title.replace(/"/g, '""')}"`, `"${s.author.name}"`, s.author.email, `"${s.author.affiliation || ""}"`, `"${s.track?.name || ""}"`, normalizeSubmissionStatus(s.status), `"${recs}"`].join(",");
       })
       .join("\n");
 
@@ -58,7 +59,7 @@ app.get("/proceedings", async (c) => {
     count: allSubmissions.length,
     submissions: allSubmissions.map((s) => {
       const cr = s.reviews.filter((r) => r.completedAt);
-      return { id: s.id, title: s.title, abstract: s.abstract, status: s.status, author: s.author, coAuthors: s.coAuthors, track: s.track?.name, reviewCount: cr.length, reviews: cr };
+      return { id: s.id, title: s.title, abstract: s.abstract, status: normalizeSubmissionStatus(s.status), author: s.author, coAuthors: s.coAuthors, track: s.track?.name, reviewCount: cr.length, reviews: cr };
     }),
   });
 });

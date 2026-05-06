@@ -4,6 +4,7 @@ import {
   getAcceptedSubmissionCount,
   getSubmissionStatusSummaryCounts,
   isAcceptedSubmissionStatus,
+  normalizeSubmissionStatus,
 } from "@/lib/submission-status";
 
 test("accepted submission count includes camera-ready states", () => {
@@ -35,6 +36,12 @@ test("submission status summaries collapse accepted workflow states", () => {
       REVISION_REQUIRED: 2,
     }
   );
+});
+
+test("legacy camera-ready statuses normalize to accepted", () => {
+  assert.equal(normalizeSubmissionStatus("CAMERA_READY_PENDING"), "ACCEPTED");
+  assert.equal(normalizeSubmissionStatus("CAMERA_READY_SUBMITTED"), "ACCEPTED");
+  assert.equal(normalizeSubmissionStatus("UNDER_REVIEW"), "UNDER_REVIEW");
 });
 
 test("accepted submission status predicate matches every accepted workflow state", () => {

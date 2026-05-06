@@ -34,13 +34,11 @@ import {
   isPaperCodeAvailable,
 } from "@/server/paper-code-service";
 import {
-  getAcceptedSubmissionStatus,
   canAuthorEditSubmission,
   canAuthorUploadSubmissionFile,
   getSubmissionValidationError,
 } from "@/server/submission-workflow";
-import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
-import { hasFileOfKind } from "@/server/stored-files-helpers";
+import { isAcceptedSubmissionStatus, normalizeSubmissionStatus } from "@/lib/submission-status";
 import { advisorApprovalEmail, queueEmail } from "@/server/email";
 
 const app = new OpenAPIHono<AuthEnv>();
@@ -473,7 +471,7 @@ app.patch("/:id", async (c) => {
     status: z.enum([
       "DRAFT", "ADVISOR_APPROVAL_PENDING", "SUBMITTED", "UNDER_REVIEW",
       "REVISION_REQUIRED", "REBUTTAL", "ACCEPTED", "REJECTED",
-      "DESK_REJECTED", "CAMERA_READY_SUBMITTED", "WITHDRAWN",
+      "DESK_REJECTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED", "WITHDRAWN",
     ]).optional(),
   });
 
@@ -528,9 +526,7 @@ app.patch("/:id", async (c) => {
     typeof updatePayload.status === "string" &&
     isAcceptedSubmissionStatus(updatePayload.status)
   ) {
-    updatePayload.status = getAcceptedSubmissionStatus({
-      hasFinalAbstract: await hasFileOfKind(id, "MANUSCRIPT"),
-    });
+    updatePayload.status = normalizeSubmissionStatus(updatePayload.status);
   }
 
   // Side-effect: advisor approval status override by admin

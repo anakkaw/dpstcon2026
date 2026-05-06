@@ -1,4 +1,5 @@
 import type { TranslationKey } from "@/lib/i18n";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import thDict from "@/lib/i18n/translations/th";
 
 type TFn = (key: TranslationKey) => string;
@@ -19,6 +20,7 @@ export const PIPELINE_STEPS = [
 export type PipelineStepState = "completed" | "current" | "future";
 
 export function getPipelineSteps(status: string, t: TFn = _defaultT): { key: string; label: string; state: PipelineStepState }[] {
+  status = normalizeSubmissionStatus(status);
   let foundCurrent = false;
   return PIPELINE_STEPS.map((step) => {
     const label = t(step.labelKey);
@@ -33,6 +35,7 @@ export function getPipelineSteps(status: string, t: TFn = _defaultT): { key: str
 
 /** Get the current step index (0-based) */
 export function getPipelineIndex(status: string): number {
+  status = normalizeSubmissionStatus(status);
   return PIPELINE_STEPS.findIndex((s) => s.statuses.includes(status as never));
 }
 
@@ -45,6 +48,7 @@ export interface NextAction {
 }
 
 export function getNextAction(status: string, hasFile: boolean, t: TFn = _defaultT): NextAction | null {
+  status = normalizeSubmissionStatus(status);
   switch (status) {
     case "DRAFT":
       return hasFile
@@ -74,6 +78,7 @@ export function getDeadlineUrgency(daysLeft: number): "normal" | "warning" | "ur
 
 /** Map submission status to relevant deadline key */
 export function getRelevantDeadlineKey(status: string): string | null {
+  status = normalizeSubmissionStatus(status);
   switch (status) {
     case "DRAFT":
     case "ADVISOR_APPROVAL_PENDING":
@@ -87,5 +92,6 @@ export function getRelevantDeadlineKey(status: string): string | null {
 
 /** Statuses where the paper has been "ended" (terminal or withdrawn) */
 export function isTerminalStatus(status: string): boolean {
-  return ["ACCEPTED", "REJECTED", "DESK_REJECTED", "WITHDRAWN", "CAMERA_READY_SUBMITTED"].includes(status);
+  status = normalizeSubmissionStatus(status);
+  return ["ACCEPTED", "REJECTED", "DESK_REJECTED", "WITHDRAWN"].includes(status);
 }

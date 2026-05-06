@@ -12,10 +12,9 @@ import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
-import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
+import { isAcceptedSubmissionStatus, normalizeSubmissionStatus } from "@/lib/submission-status";
 import { isDuplicateReviewRound } from "@/server/access-policies";
 import { ensureSubmissionPaperCode } from "@/server/paper-code-service";
-import { hasFileOfKind } from "@/server/stored-files-helpers";
 import {
   canMakeSubmissionDecision,
   canSubmitReviewForAssignment,
@@ -525,7 +524,7 @@ app.post("/decisions", async (c) => {
 
     if (
       !canMakeSubmissionDecision({
-        status: submission.status,
+        status: normalizeSubmissionStatus(submission.status),
         currentCompletedReviews: completedAssignments.length,
         completedReviewHistory: completedReviews.length,
         hasDecision: false,
@@ -562,13 +561,7 @@ app.post("/decisions", async (c) => {
       return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
     }
 
-    const hasFinalAbstract =
-      data.outcome === "ACCEPT"
-        ? await hasFileOfKind(data.submissionId, "MANUSCRIPT")
-        : false;
-    const newStatus = getDecisionSubmissionStatus(data.outcome, {
-      hasFinalAbstract,
-    });
+    const newStatus = getDecisionSubmissionStatus(data.outcome);
 
     await db
       .update(submissions)

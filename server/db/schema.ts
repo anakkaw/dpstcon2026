@@ -9,9 +9,10 @@ import {
   boolean,
   jsonb,
   index,
+  check,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ─── Enums ───────────────────────────────────────────────────
 
@@ -284,6 +285,10 @@ export const submissions = pgTable(
     index("submissions_track_idx").on(table.trackId),
     index("submissions_advisor_token_idx").on(table.advisorApprovalToken),
     uniqueIndex("submissions_paper_code_unique").on(table.paperCode),
+    check(
+      "submissions_no_legacy_accepted_status_check",
+      sql`${table.status}::text NOT IN ('CAMERA_READY_PENDING', 'CAMERA_READY_SUBMITTED')`
+    ),
   ]
 );
 

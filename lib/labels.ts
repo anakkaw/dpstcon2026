@@ -46,7 +46,7 @@ export const SUBMISSION_STATUS_COLORS: Record<
   ACCEPTED: "success",
   REJECTED: "danger",
   DESK_REJECTED: "danger",
-  CAMERA_READY_PENDING: "warning",
+  CAMERA_READY_PENDING: "success",
   CAMERA_READY_SUBMITTED: "success",
   WITHDRAWN: "neutral",
 };

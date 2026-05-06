@@ -12,6 +12,10 @@ export function isAcceptedSubmissionStatus(
   return ACCEPTED_SUBMISSION_STATUSES.includes(status as AcceptedSubmissionStatus);
 }
 
+export function normalizeSubmissionStatus(status: string) {
+  return isAcceptedSubmissionStatus(status) ? "ACCEPTED" : status;
+}
+
 export function getAcceptedSubmissionCount(
   statusCounts: Record<string, number | undefined>
 ) {
@@ -27,7 +31,10 @@ export function getSubmissionStatusSummaryCounts(
   const summaryCounts: Record<string, number> = {};
 
   for (const [status, count = 0] of Object.entries(statusCounts)) {
-    const summaryStatus = isAcceptedSubmissionStatus(status) ? "ACCEPTED" : status;
+    const normalizedStatus = normalizeSubmissionStatus(status);
+    const summaryStatus = isAcceptedSubmissionStatus(normalizedStatus)
+      ? "ACCEPTED"
+      : normalizedStatus;
     summaryCounts[summaryStatus] = (summaryCounts[summaryStatus] ?? 0) + count;
   }
 

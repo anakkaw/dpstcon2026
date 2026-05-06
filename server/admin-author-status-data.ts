@@ -1,4 +1,5 @@
 import { db } from "@/server/db";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { user, userRoles, submissions } from "@/server/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
@@ -71,7 +72,7 @@ export async function getAdminAuthorStatusData(): Promise<{ authors: AuthorStatu
       id: sub.id,
       paperCode: sub.paperCode,
       title: sub.title,
-      status: sub.status,
+      status: normalizeSubmissionStatus(sub.status),
       trackName: sub.track?.name ?? null,
       createdAt: sub.createdAt.toISOString(),
       updatedAt: sub.updatedAt.toISOString(),

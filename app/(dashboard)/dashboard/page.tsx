@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { and, count, eq, inArray } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
 import {
@@ -100,7 +101,8 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
 
   const byStatus: Record<string, number> = {};
   for (const submission of mySubmissions) {
-    byStatus[submission.status] = (byStatus[submission.status] || 0) + 1;
+    const status = normalizeSubmissionStatus(submission.status);
+    byStatus[status] = (byStatus[status] || 0) + 1;
   }
 
   // Batch check which submissions have a manuscript file
@@ -120,7 +122,7 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
       id: submission.id,
       paperCode: submission.paperCode,
       title: submission.title,
-      status: submission.status,
+      status: normalizeSubmissionStatus(submission.status),
       hasFile: hasManuscriptSet.has(submission.id),
       trackName: submission.track?.name || null,
       reviewTotal: submission.reviewAssignments.length,
@@ -247,7 +249,13 @@ async function loadManagerStats(
     totalReviewers: Number(reviewerCount?.total || 0),
     totalReviews: Number(revCount?.total || 0),
     submissionsByStatus: Object.fromEntries(
-      statusBreakdown.map((row) => [row.status, Number(row.count)])
+      statusBreakdown.reduce<[string, number][]>((entries, row) => {
+        const status = normalizeSubmissionStatus(row.status);
+        const existing = entries.find(([key]) => key === status);
+        if (existing) existing[1] += Number(row.count);
+        else entries.push([status, Number(row.count)]);
+        return entries;
+      }, [])
     ),
     submissionsByTrack: trackBreakdown.map((row) => ({
       name: row.trackName || "ไม่ระบุสาขา",

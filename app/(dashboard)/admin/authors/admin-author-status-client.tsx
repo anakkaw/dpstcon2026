@@ -12,6 +12,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { getSubmissionStatusLabels, SUBMISSION_STATUS_COLORS } from "@/lib/labels";
 import { useI18n } from "@/lib/i18n";
 import { displayNameTh } from "@/lib/display-name";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import type { AuthorStatusRow } from "@/server/admin-author-status-data";
 import {
   Users, Search, X, FileText, CheckCircle2, Clock,
@@ -35,20 +36,20 @@ const FILTER_GROUPS: FilterGroup[] = [
   { key: "DRAFT",           label: "อยู่ในร่าง",                 statuses: ["DRAFT"] },
   { key: "ADVISOR_PENDING", label: "รออาจารย์ที่ปรึกษา",          statuses: ["ADVISOR_APPROVAL_PENDING"] },
   { key: "IN_REVIEW",       label: "ส่งแล้ว / กำลังพิจารณา",     statuses: ["SUBMITTED", "UNDER_REVIEW", "REVISION_REQUIRED", "REBUTTAL"] },
-  { key: "ACCEPTED",        label: "ตอบรับแล้ว",                 statuses: ["ACCEPTED", "CAMERA_READY_PENDING", "CAMERA_READY_SUBMITTED"] },
+  { key: "ACCEPTED",        label: "ตอบรับแล้ว",                 statuses: ["ACCEPTED"] },
   { key: "REJECTED",        label: "ปฏิเสธ",                    statuses: ["REJECTED", "DESK_REJECTED"] },
 ];
 
 function matchesGroup(author: AuthorStatusRow, group: FilterGroup): boolean {
   if (group.statuses === null) return true;
   if (group.statuses.length === 0) return author.submissions.length === 0;
-  return author.submissions.some((s) => group.statuses!.includes(s.status));
+  return author.submissions.some((s) => group.statuses!.includes(normalizeSubmissionStatus(s.status)));
 }
 
 // Maps variant statuses to their group representative for summary-row display,
 // so the badge always matches the filter group the author appears under.
 function normalizeDisplayStatus(status: string): string {
-  if (status === "CAMERA_READY_PENDING" || status === "CAMERA_READY_SUBMITTED") return "ACCEPTED";
+  status = normalizeSubmissionStatus(status);
   if (status === "DESK_REJECTED") return "REJECTED";
   return status;
 }
@@ -57,16 +58,17 @@ function getAuthorHighestStatus(subs: AuthorStatusRow["submissions"]): string {
   if (subs.length === 0) return "NO_SUBMISSION";
 
   const PRIORITY: Record<string, number> = {
-    CAMERA_READY_SUBMITTED: 0, CAMERA_READY_PENDING: 1, ACCEPTED: 2,
-    REJECTED: 3, DESK_REJECTED: 4,
-    UNDER_REVIEW: 5, REBUTTAL: 6, REVISION_REQUIRED: 7,
-    SUBMITTED: 8, ADVISOR_APPROVAL_PENDING: 9,
-    DRAFT: 10, WITHDRAWN: 11,
+    ACCEPTED: 0,
+    REJECTED: 1, DESK_REJECTED: 2,
+    UNDER_REVIEW: 3, REBUTTAL: 4, REVISION_REQUIRED: 5,
+    SUBMITTED: 6, ADVISOR_APPROVAL_PENDING: 7,
+    DRAFT: 8, WITHDRAWN: 9,
   };
 
   const best = subs.reduce((b, s) => {
-    return (PRIORITY[s.status] ?? 99) < (PRIORITY[b] ?? 99) ? s.status : b;
-  }, subs[0].status);
+    const status = normalizeSubmissionStatus(s.status);
+    return (PRIORITY[status] ?? 99) < (PRIORITY[b] ?? 99) ? status : b;
+  }, normalizeSubmissionStatus(subs[0].status));
 
   return normalizeDisplayStatus(best);
 }

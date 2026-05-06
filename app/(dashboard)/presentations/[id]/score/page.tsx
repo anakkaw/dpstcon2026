@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { and, eq, inArray } from "drizzle-orm";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasRole } from "@/lib/permissions";
+import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { db } from "@/server/db";
 import {
   posterSlotJudges,
@@ -143,9 +144,9 @@ export default async function ScorePresentationPage({
         .filter(
           (row) =>
             !evaluatedSet.has(row.id) &&
-            row.submissionStatus !== "WITHDRAWN" &&
-            row.submissionStatus !== "DESK_REJECTED" &&
-            row.submissionStatus !== "REJECTED"
+            !["WITHDRAWN", "DESK_REJECTED", "REJECTED"].includes(
+              normalizeSubmissionStatus(row.submissionStatus)
+            )
         )
         .sort((a, b) => {
           const at = a.scheduledAt?.getTime() ?? Number.POSITIVE_INFINITY;
