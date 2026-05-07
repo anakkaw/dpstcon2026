@@ -37,6 +37,7 @@ import {
   canAuthorEditSubmission,
   canAuthorUploadSubmissionFile,
   getSubmissionValidationError,
+  canSubmitReviewForAssignment,
 } from "@/server/submission-workflow";
 import { isAcceptedSubmissionStatus, normalizeSubmissionStatus } from "@/lib/submission-status";
 import { advisorApprovalEmail, queueEmail } from "@/server/email";
@@ -197,10 +198,10 @@ async function canAccessSubmission(
         eq(reviewAssignments.submissionId, submission.id),
         eq(reviewAssignments.reviewerId, currentUser.id)
       ),
-      columns: { id: true },
+      columns: { status: true },
     });
 
-    if (assignment) return true;
+    if (assignment && assignment.status !== "DECLINED") return true;
   }
 
   if (hasRole(currentUser, "PROGRAM_CHAIR") && submission.trackId) {
@@ -238,10 +239,10 @@ async function getSubmissionAccessFlags(
         eq(reviewAssignments.submissionId, submission.id),
         eq(reviewAssignments.reviewerId, currentUser.id)
       ),
-      columns: { id: true },
+      columns: { status: true },
     });
 
-    isAssignedReviewer = !!assignment;
+    isAssignedReviewer = !!assignment && assignment.status !== "DECLINED";
   }
 
   let isTrackHead = false;
@@ -931,9 +932,9 @@ async function isAssignedReviewerFor(
       eq(reviewAssignments.submissionId, submissionId),
       eq(reviewAssignments.reviewerId, userId)
     ),
-    columns: { id: true },
+    columns: { status: true },
   });
-  return Boolean(assignment);
+  return Boolean(assignment && canSubmitReviewForAssignment(assignment.status));
 }
 
 app.post("/:id/upload-url", async (c) => {

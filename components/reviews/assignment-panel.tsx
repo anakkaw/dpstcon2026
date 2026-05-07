@@ -106,7 +106,13 @@ export function AssignmentPanel({
   const [assignmentToRemove, setAssignmentToRemove] = useState<PanelAssignment | null>(null);
 
   const assignedReviewerIds = useMemo(
-    () => new Set(assignments.map((a) => a.reviewer?.id).filter(Boolean) as string[]),
+    () =>
+      new Set(
+        assignments
+          .filter((assignment) => assignment.status !== "DECLINED")
+          .map((assignment) => assignment.reviewer?.id)
+          .filter(Boolean) as string[]
+      ),
     [assignments]
   );
 

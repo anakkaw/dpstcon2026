@@ -4,7 +4,14 @@ import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
 import { reviewAssignments, submissions, user, userRoles } from "@/server/db/schema";
-import { ReviewsPageClient, type AssignmentData, type ReviewerUser } from "./reviews-page-client";
+import {
+  ReviewsPageClient,
+  type AssignmentData,
+  type ReviewerUser,
+  type ReviewSubmissionData,
+} from "./reviews-page-client";
+
+const REVIEW_MANAGEMENT_STATUSES = ["SUBMITTED", "UNDER_REVIEW"] as const;
 
 async function loadInitialAssignments(
   currentUser: NonNullable<Awaited<ReturnType<typeof getServerAuthContext>>>["user"]
@@ -143,19 +150,47 @@ async function loadInitialReviewerUsers(
   });
 }
 
+async function loadInitialReviewSubmissions(
+  currentUser: NonNullable<Awaited<ReturnType<typeof getServerAuthContext>>>["user"]
+): Promise<ReviewSubmissionData[]> {
+  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+    return [];
+  }
+
+  const whereParts = [inArray(submissions.status, REVIEW_MANAGEMENT_STATUSES)];
+  if (!hasRole(currentUser, "ADMIN")) {
+    const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
+    if (chairedTrackIds.length === 0) {
+      return [];
+    }
+    whereParts.push(inArray(submissions.trackId, chairedTrackIds));
+  }
+
+  return db.query.submissions.findMany({
+    where: and(...whereParts),
+    columns: { id: true, title: true, status: true },
+    with: {
+      author: { columns: { id: true, name: true } },
+      track: { columns: { id: true, name: true } },
+    },
+  });
+}
+
 export default async function ReviewsPage() {
   const authContext = await getServerAuthContext();
   if (!authContext?.user.isActive) redirect("/login");
 
-  const [initialAssignments, initialReviewerUsers] = await Promise.all([
+  const [initialAssignments, initialReviewerUsers, initialSubmissions] = await Promise.all([
     loadInitialAssignments(authContext.user),
     loadInitialReviewerUsers(authContext.user),
+    loadInitialReviewSubmissions(authContext.user),
   ]);
 
   return (
     <ReviewsPageClient
       initialAssignments={initialAssignments}
       initialReviewerUsers={initialReviewerUsers}
+      initialSubmissions={initialSubmissions}
     />
   );
 }

@@ -54,6 +54,14 @@ export interface ReviewerUser {
   completedLoad?: number;
 }
 
+export interface ReviewSubmissionData {
+  id: string;
+  title: string;
+  status: string;
+  author: { id: string; name: string };
+  track: { id: string; name: string } | null;
+}
+
 interface GroupedSubmission {
   submissionId: string;
   title: string;
@@ -70,24 +78,23 @@ type SortKey = "title" | "author" | "track" | "reviewers" | "progress";
 export function ReviewsPageClient({
   initialAssignments,
   initialReviewerUsers,
+  initialSubmissions = [],
 }: {
   initialAssignments: AssignmentData[];
   initialReviewerUsers: ReviewerUser[];
+  initialSubmissions?: ReviewSubmissionData[];
 }) {
   const { t, locale } = useI18n();
   const assignmentLabels = getAssignmentStatusLabels(t);
   const { roles, id: currentUserId } = useDashboardAuth();
   const canManageReviews = roles.some((role) => ["ADMIN", "PROGRAM_CHAIR"].includes(role));
 
-  const [assignments, setAssignments] = useState<AssignmentData[]>(initialAssignments);
-
-  // Keep the table in sync when server data is re-fetched via router.refresh()
-  // (e.g. the embedded MyReviewTasksCard responds to an assignment). Without
-  // this, React keeps the initial prop and the table looks stale after the
-  // server data changes.
-  useEffect(() => {
-    setAssignments(initialAssignments);
-  }, [initialAssignments]);
+  const [reviewDataOverride, setReviewDataOverride] = useState<{
+    assignments: AssignmentData[];
+    submissions: ReviewSubmissionData[];
+  } | null>(null);
+  const assignments = reviewDataOverride?.assignments ?? initialAssignments;
+  const managedSubmissions = reviewDataOverride?.submissions ?? initialSubmissions;
   const [reviewerUsers] = useState<ReviewerUser[]>(initialReviewerUsers);
   const [trackFilter, setTrackFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -119,7 +126,10 @@ export function ReviewsPageClient({
 
   const reloadAssignments = useCallback(async () => {
     const data = await fetch("/api/reviews/assignments").then((response) => response.json());
-    setAssignments(data.assignments || []);
+    setReviewDataOverride({
+      assignments: data.assignments || [],
+      submissions: Array.isArray(data.submissions) ? data.submissions : [],
+    });
   }, []);
 
   useEffect(() => {
@@ -217,16 +227,40 @@ export function ReviewsPageClient({
 
   const trackCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const assignment of assignments) {
-      if (assignment.submission.track?.id) {
-        counts[assignment.submission.track.id] = (counts[assignment.submission.track.id] || 0) + 1;
+    if (canManageReviews) {
+      for (const submission of managedSubmissions) {
+        if (submission.track?.id) {
+          counts[submission.track.id] = (counts[submission.track.id] || 0) + 1;
+        }
+      }
+    } else {
+      for (const assignment of assignments) {
+        if (assignment.submission.track?.id) {
+          counts[assignment.submission.track.id] = (counts[assignment.submission.track.id] || 0) + 1;
+        }
       }
     }
     return counts;
-  }, [assignments]);
+  }, [assignments, canManageReviews, managedSubmissions]);
 
   const groups = useMemo(() => {
     const groupMap = new Map<string, GroupedSubmission>();
+    if (canManageReviews && statusFilter === "ALL") {
+      for (const submission of managedSubmissions) {
+        if (trackFilter && submission.track?.id !== trackFilter) continue;
+        groupMap.set(submission.id, {
+          submissionId: submission.id,
+          title: submission.title,
+          authorName: displayNameTh(submission.author),
+          track: submission.track,
+          assignments: [],
+          completedCount: 0,
+          totalCount: 0,
+          hasOverdue: false,
+        });
+      }
+    }
+
     for (const assignment of assignments) {
       if (trackFilter && assignment.submission.track?.id !== trackFilter) continue;
       if (statusFilter !== "ALL" && assignment.status !== statusFilter) continue;
@@ -276,11 +310,20 @@ export function ReviewsPageClient({
           default: return 0;
         }
       });
-  }, [assignments, trackFilter, statusFilter, searchQuery, sortKey, sortDir, isOverdue]);
+  }, [assignments, canManageReviews, managedSubmissions, trackFilter, statusFilter, searchQuery, sortKey, sortDir, isOverdue]);
 
   const assignedReviewerIds = useMemo(() =>
     assigningSubId
-      ? new Set(assignments.filter((assignment) => assignment.submission.id === assigningSubId).map((assignment) => assignment.reviewer?.id).filter(Boolean))
+      ? new Set(
+          assignments
+            .filter(
+              (assignment) =>
+                assignment.submission.id === assigningSubId &&
+                assignment.status !== "DECLINED"
+            )
+            .map((assignment) => assignment.reviewer?.id)
+            .filter(Boolean)
+        )
       : new Set<string>(),
     [assignments, assigningSubId]);
 

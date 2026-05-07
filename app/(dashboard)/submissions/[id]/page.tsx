@@ -68,7 +68,7 @@ export default async function SubmissionDetailPage({
       ),
       columns: { id: true, status: true, assignedAt: true },
     });
-    isAssignedReviewer = !!reviewerAssignment;
+    isAssignedReviewer = !!reviewerAssignment && reviewerAssignment.status !== "DECLINED";
     reviewerAssignmentId = reviewerAssignment?.id ?? null;
     reviewerAssignmentStatus = reviewerAssignment?.status ?? null;
     reviewerAssignmentAssignedAt = reviewerAssignment?.assignedAt?.toISOString() ?? null;
@@ -199,8 +199,14 @@ export default async function SubmissionDetailPage({
       .from(storedFiles)
       .leftJoin(user, eq(storedFiles.uploadedById, user.id))
       .where(eq(storedFiles.submissionId, id)),
-    // Review assignment counts
-    db.select({ status: reviewAssignments.status }).from(reviewAssignments).where(eq(reviewAssignments.submissionId, id)),
+    // Review assignment counts + assigned reviewer ids
+    db
+      .select({
+        status: reviewAssignments.status,
+        reviewerId: reviewAssignments.reviewerId,
+      })
+      .from(reviewAssignments)
+      .where(eq(reviewAssignments.submissionId, id)),
     // Decision
     db.query.decisions.findFirst({
       where: eq(decisions.submissionId, id),
@@ -245,6 +251,9 @@ export default async function SubmissionDetailPage({
     total: assignmentRows.length,
     completed: assignmentRows.filter((r) => r.status === "COMPLETED").length,
   };
+  const assignedReviewerIds = assignmentRows
+    .filter((r) => r.status !== "DECLINED")
+    .map((r) => r.reviewerId);
   const isRevisionResubmission =
     decision?.outcome === "CONDITIONAL_ACCEPT" &&
     ["SUBMITTED", "UNDER_REVIEW"].includes(submissionStatus);
@@ -365,6 +374,7 @@ export default async function SubmissionDetailPage({
       reviewerAssignmentId={reviewerAssignmentId}
       reviewerAssignmentStatus={reviewerAssignmentStatus}
       reviewerAssignmentAssignedAt={reviewerAssignmentAssignedAt}
+      assignedReviewerIds={assignedReviewerIds}
       lastAdvisorEmail={
         lastAdvisorEmailRows[0]
           ? {

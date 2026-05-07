@@ -148,6 +148,7 @@ interface Props {
   reviewerAssignmentId?: string | null;
   reviewerAssignmentStatus?: string | null;
   reviewerAssignmentAssignedAt?: string | null;
+  assignedReviewerIds?: string[];
   lastAdvisorEmail?: {
     status: "PENDING" | "SENT" | "FAILED";
     sentAt: string | null;
@@ -160,7 +161,8 @@ export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
   canManageSubmission = false,
   reviewCounts, canMakeDecision, decision, presentations, criteriaByType, deadlines,
-  isAssignedReviewer, reviewerAssignmentId, reviewerAssignmentStatus, reviewerAssignmentAssignedAt, lastAdvisorEmail,
+  isAssignedReviewer, reviewerAssignmentId, reviewerAssignmentStatus, reviewerAssignmentAssignedAt,
+  assignedReviewerIds = [], lastAdvisorEmail,
 }: Props) {
   const router = useRouter();
   const { t } = useI18n();
@@ -180,7 +182,7 @@ export function SubmissionDetail({
   const canWithdraw = canManageOwnSubmission && !["WITHDRAWN", "DRAFT"].includes(submission.status);
   const canResubmit = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
   const currentCompletedReviewCount = reviewCounts?.completed ?? 0;
-  const canShowDecisionPanel =
+  const baseCanShowDecisionPanel =
     isAdmin &&
     (canMakeDecision ??
       (!decision &&
@@ -277,6 +279,34 @@ export function SubmissionDetail({
       new Date(myCompletedReview.completedAt as unknown as string | Date).getTime()
     );
   })();
+  const canSubmitCurrentReview =
+    isAssignedReviewer && reviewerAssignmentStatus === "ACCEPTED";
+  const shouldShowReviewForm =
+    (canSubmitCurrentReview && (!myCompletedReview || isRound2Active)) ||
+    editReviewMode;
+  const mustCompleteOwnReviewBeforeDecision =
+    isAdmin &&
+    isAssignedReviewer &&
+    !isOwner &&
+    reviewerAssignmentStatus === "ACCEPTED" &&
+    (!myCompletedReview || isRound2Active);
+  const canShowDecisionPanel =
+    baseCanShowDecisionPanel && !mustCompleteOwnReviewBeforeDecision;
+  const shouldShowDecisionLockedNotice =
+    baseCanShowDecisionPanel && mustCompleteOwnReviewBeforeDecision;
+
+  useEffect(() => {
+    if (!shouldShowReviewForm) return;
+    const key = `review-form-scroll-${submission.id}`;
+    if (window.sessionStorage.getItem(key) !== "1") return;
+    window.sessionStorage.removeItem(key);
+    window.requestAnimationFrame(() => {
+      document.getElementById("section-review-form")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [shouldShowReviewForm, submission.id]);
 
   function startEditReview() {
     if (!myCompletedReview) return;
@@ -299,9 +329,8 @@ export function SubmissionDetail({
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Draft autosave is active whenever the user is an assigned reviewer
-  // (covers round 1, round 2 after resubmit, and the 24h edit window).
-  const canWriteReview = isAssignedReviewer;
+  // Draft autosave follows the same state as the review form.
+  const canWriteReview = shouldShowReviewForm;
 
   // Load saved draft once on mount
   useEffect(() => {
@@ -1233,7 +1262,7 @@ export function SubmissionDetail({
           - reviewer hasn't submitted yet (round 1), OR
           - reviewer is editing within 24h window, OR
           - round 2 is active (author resubmitted after REVISE) */}
-      {isAssignedReviewer && (!myCompletedReview || editReviewMode || isRound2Active) && (() => {
+      {shouldShowReviewForm && (() => {
         const myAttachments = files.filter(
           (f) => f.kind === "REVIEW_ATTACHMENT" && f.uploadedById === currentUserId
         );
@@ -1322,16 +1351,28 @@ export function SubmissionDetail({
               <StepHeader
                 number={3}
                 done={chairChars > 0}
-                title={t("reviewForm.step3")}
+                title={
+                  isAdmin && isAssignedReviewer && !isOwner
+                    ? t("reviewForm.step3Self")
+                    : t("reviewForm.step3")
+                }
                 hint={t("reviewForm.step3Optional")}
                 tone="optional"
               />
-              <p className="text-xs text-ink-muted">{t("reviewForm.commentsToChairExamples")}</p>
+              <p className="text-xs text-ink-muted">
+                {isAdmin && isAssignedReviewer && !isOwner
+                  ? t("reviewForm.commentsToChairSelfExamples")
+                  : t("reviewForm.commentsToChairExamples")}
+              </p>
               <Textarea
                 id="reviewCommentsToChair"
                 value={reviewCommentsToChair}
                 onChange={(e) => setReviewCommentsToChair(e.target.value)}
-                placeholder={t("reviewForm.commentsToChairPlaceholder")}
+                placeholder={
+                  isAdmin && isAssignedReviewer && !isOwner
+                    ? t("reviewForm.commentsToChairSelfPlaceholder")
+                    : t("reviewForm.commentsToChairPlaceholder")
+                }
                 rows={focusMode ? 5 : 3}
               />
               <p className="text-[11px] text-right text-ink-muted">
@@ -1728,13 +1769,52 @@ export function SubmissionDetail({
         <AssignReviewerCard
           submissionId={submission.id}
           reviewers={reviewers}
-          excludeReviewerIds={submission.reviews.map((r) => r.reviewer.id)}
+          excludeReviewerIds={assignedReviewerIds}
+          currentUserId={currentUserId}
+          trackId={submission.track?.id ?? null}
+          canAssignSelf={isAdmin && !isOwner}
           onMessage={setMessage}
           showDueDate
         />
       )}
 
       {/* Admin: Decision Panel */}
+      {shouldShowDecisionLockedNotice && (
+        <Card id="section-decision" accent="warning">
+          <CardHeader>
+            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+              <Gavel className="h-4 w-4" />
+              {t("detail.decisionLockedTitle")}
+            </h3>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Alert tone="warning">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium">{t("detail.decisionLockedHeading")}</p>
+                  <p className="mt-0.5 text-xs">{t("detail.decisionLockedDesc")}</p>
+                </div>
+              </div>
+            </Alert>
+            {shouldShowReviewForm && (
+              <Button
+                size="sm"
+                onClick={() =>
+                  document.getElementById("section-review-form")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  })
+                }
+              >
+                <Send className="h-3.5 w-3.5" />
+                {t("detail.goToOwnReview")}
+              </Button>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
       {canShowDecisionPanel && (
         <Card id="section-decision" accent="brand">
           <CardHeader>
@@ -1843,7 +1923,7 @@ export function SubmissionDetail({
           <nav className="rounded-2xl border border-border bg-white p-4 shadow-elev-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">{t("detail.onThisPage")}</p>
             <div className="space-y-0.5 text-sm">
-              {isAssignedReviewer && !submission.reviews.some((r) => r.reviewer.id === currentUserId && r.completedAt) && (
+              {shouldShowReviewForm && (
                 <a href="#section-review-form" className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-brand-50 text-brand-700 font-medium hover:bg-brand-100 transition-colors">
                   <Send className="h-3.5 w-3.5 shrink-0" />{t("reviewForm.title")}
                 </a>

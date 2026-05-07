@@ -6,6 +6,8 @@ import {
   submissions,
   decisions,
   presentationAssignments,
+  user,
+  userRoles,
 } from "@/server/db/schema";
 import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
@@ -23,6 +25,7 @@ import {
 import { logger } from "@/server/logger";
 
 const app = new OpenAPIHono<AuthEnv>();
+const REVIEW_MANAGEMENT_STATUSES = ["SUBMITTED", "UNDER_REVIEW"] as const;
 
 app.use("/*", authMiddleware);
 
@@ -47,6 +50,7 @@ async function canManageSubmissionById(currentUser: AuthEnv["Variables"]["user"]
 app.get("/assignments", async (c) => {
   const currentUser = c.get("user");
   const isAdmin = hasRole(currentUser, "ADMIN");
+  const isManager = hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR");
 
   let whereClause = undefined;
   if (!isAdmin) {
@@ -75,14 +79,15 @@ app.get("/assignments", async (c) => {
       managedAssignments.forEach((assignment) => assignmentIds.add(assignment.id));
     }
 
-    if (assignmentIds.size === 0) {
-      return c.json({ assignments: [] });
-    }
-
-    whereClause = inArray(reviewAssignments.id, Array.from(assignmentIds));
+    whereClause =
+      assignmentIds.size > 0
+        ? inArray(reviewAssignments.id, Array.from(assignmentIds))
+        : undefined;
   }
 
-  const assignments = await db.query.reviewAssignments.findMany({
+  const assignmentsPromise = whereClause === undefined && !isAdmin
+    ? Promise.resolve([])
+    : db.query.reviewAssignments.findMany({
     where: whereClause,
     with: {
       submission: {
@@ -96,7 +101,32 @@ app.get("/assignments", async (c) => {
     },
   });
 
-  return c.json({ assignments });
+  const submissionsPromise = (async () => {
+    if (!isManager) return [];
+
+    const whereParts = [inArray(submissions.status, REVIEW_MANAGEMENT_STATUSES)];
+    if (!isAdmin) {
+      const chairedTrackIds = getTrackRoleIds(currentUser, "PROGRAM_CHAIR");
+      if (chairedTrackIds.length === 0) return [];
+      whereParts.push(inArray(submissions.trackId, chairedTrackIds));
+    }
+
+    return db.query.submissions.findMany({
+      where: and(...whereParts),
+      columns: { id: true, title: true, status: true },
+      with: {
+        author: { columns: { id: true, name: true, prefixTh: true, firstNameTh: true, lastNameTh: true, prefixEn: true, firstNameEn: true, lastNameEn: true } },
+        track: { columns: { id: true, name: true } },
+      },
+    });
+  })();
+
+  const [assignments, reviewSubmissions] = await Promise.all([
+    assignmentsPromise,
+    submissionsPromise,
+  ]);
+
+  return c.json({ assignments, submissions: reviewSubmissions });
 });
 
 // POST /api/reviews/assignments/manual
@@ -116,8 +146,57 @@ app.post("/assignments/manual", async (c) => {
 
   const { submissionId, reviewerId, dueDate } = parsed.data;
 
-  if (!(await canManageSubmissionById(currentUser, submissionId))) {
+  const assignmentSubmission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, submissionId),
+    columns: { id: true, title: true, authorId: true, trackId: true },
+  });
+
+  if (!assignmentSubmission) {
+    return c.json({ error: "Submission not found" }, 404);
+  }
+
+  const canManageSubmission =
+    hasRole(currentUser, "ADMIN") ||
+    hasTrackRole(currentUser, assignmentSubmission.trackId, "PROGRAM_CHAIR");
+
+  if (!canManageSubmission) {
     return c.json({ error: "Forbidden — คุณไม่ใช่ผู้ดูแลบทความนี้" }, 403);
+  }
+
+  if (assignmentSubmission.authorId === reviewerId) {
+    return c.json({ error: "Cannot assign the submission author as a reviewer" }, 409);
+  }
+
+  const reviewerRoleWhere = hasRole(currentUser, "ADMIN")
+    ? and(eq(userRoles.userId, reviewerId), eq(userRoles.role, "REVIEWER"))
+    : assignmentSubmission.trackId
+      ? and(
+          eq(userRoles.userId, reviewerId),
+          eq(userRoles.role, "REVIEWER"),
+          eq(userRoles.trackId, assignmentSubmission.trackId)
+        )
+      : undefined;
+
+  if (!reviewerRoleWhere) {
+    return c.json({ error: "Selected user is not an eligible reviewer for this track" }, 400);
+  }
+
+  const reviewerRole = await db.query.userRoles.findFirst({
+    where: reviewerRoleWhere,
+    columns: { userId: true },
+  });
+
+  if (!reviewerRole) {
+    return c.json({ error: "Selected user is not an eligible reviewer for this track" }, 400);
+  }
+
+  const reviewer = await db.query.user.findFirst({
+    where: eq(user.id, reviewerId),
+    columns: { name: true, email: true, isActive: true },
+  });
+
+  if (!reviewer?.isActive) {
+    return c.json({ error: "Selected reviewer account is not active" }, 400);
   }
 
   // Check if already assigned. If the reviewer previously DECLINED, allow re-assignment
@@ -187,23 +266,12 @@ app.post("/assignments/manual", async (c) => {
       )
     );
 
-  // Send email to reviewer
-  const { user } = await import("@/server/db/schema");
-  const reviewer = await db.query.user.findFirst({
-    where: eq(user.id, reviewerId),
-    columns: { name: true, email: true },
-  });
-  const submission = await db.query.submissions.findFirst({
-    where: eq(submissions.id, submissionId),
-    columns: { title: true },
-  });
-
-  if (reviewer && submission) {
+  if (reviewer) {
     const { queueEmail, reviewAssignmentEmail } = await import("@/server/email");
     const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const emailContent = reviewAssignmentEmail({
       reviewerName: reviewer.name,
-      paperTitle: submission.title,
+      paperTitle: assignmentSubmission.title,
       dueDate: dueDate || undefined,
       loginUrl: `${appUrl}/reviews`,
     });

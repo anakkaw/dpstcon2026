@@ -82,7 +82,6 @@ app.post("/:trackId", async (c) => {
   const existing = await db.query.trackMembers.findFirst({
     where: and(eq(trackMembers.trackId, trackId), eq(trackMembers.userId, userId)),
   });
-  if (existing) return c.json({ error: "User already in this track" }, 409);
 
   // Add role to user_roles table (instead of overwriting global role)
   const existingRole = await db.query.userRoles.findFirst({
@@ -113,6 +112,13 @@ app.post("/:trackId", async (c) => {
         updatedAt: new Date(),
       })
       .where(eq(user.id, userId));
+  }
+
+  if (existing) {
+    if (existingRole) {
+      return c.json({ error: "User already in this track" }, 409);
+    }
+    return c.json({ member: existing, roleAdded: true }, 200);
   }
 
   const [member] = await db
