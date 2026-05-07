@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, memo, Fragment } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -75,6 +76,16 @@ interface GroupedSubmission {
 
 type SortKey = "title" | "author" | "track" | "reviewers" | "progress";
 
+const SORT_KEYS = new Set<SortKey>(["title", "author", "track", "reviewers", "progress"]);
+
+function readSortKey(value: string | null): SortKey {
+  return value && SORT_KEYS.has(value as SortKey) ? (value as SortKey) : "title";
+}
+
+function readSortDir(value: string | null): "asc" | "desc" {
+  return value === "desc" ? "desc" : "asc";
+}
+
 export function ReviewsPageClient({
   initialAssignments,
   initialReviewerUsers,
@@ -84,6 +95,10 @@ export function ReviewsPageClient({
   initialReviewerUsers: ReviewerUser[];
   initialSubmissions?: ReviewSubmissionData[];
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const { t, locale } = useI18n();
   const assignmentLabels = getAssignmentStatusLabels(t);
   const { roles, id: currentUserId } = useDashboardAuth();
@@ -96,11 +111,11 @@ export function ReviewsPageClient({
   const assignments = reviewDataOverride?.assignments ?? initialAssignments;
   const managedSubmissions = reviewDataOverride?.submissions ?? initialSubmissions;
   const [reviewerUsers] = useState<ReviewerUser[]>(initialReviewerUsers);
-  const [trackFilter, setTrackFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [trackFilter, setTrackFilter] = useState(() => searchParams.get("track") || "");
+  const [statusFilter, setStatusFilter] = useState<string>(() => searchParams.get("status") || "ALL");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get("q") || "");
 
   const [assigningSubId, setAssigningSubId] = useState<string | null>(null);
   const [selectedReviewerId, setSelectedReviewerId] = useState("");
@@ -109,8 +124,8 @@ export function ReviewsPageClient({
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [assignmentToRemove, setAssignmentToRemove] = useState<AssignmentData | null>(null);
 
-  const [sortKey, setSortKey] = useState<SortKey>("title");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<SortKey>(() => readSortKey(searchParams.get("sort")));
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => readSortDir(searchParams.get("dir")));
   const [now, setNow] = useState(() => Date.now());
 
   const toggleSort = useCallback((key: SortKey) => {
@@ -123,6 +138,33 @@ export function ReviewsPageClient({
       return key;
     });
   }, []);
+
+  const listQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (trackFilter) params.set("track", trackFilter);
+    if (statusFilter !== "ALL") params.set("status", statusFilter);
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    if (sortKey !== "title") params.set("sort", sortKey);
+    if (sortDir !== "asc") params.set("dir", sortDir);
+    return params.toString();
+  }, [trackFilter, statusFilter, searchQuery, sortKey, sortDir]);
+
+  const listHref = listQuery ? `/reviews?${listQuery}` : "/reviews";
+
+  const getDetailHref = useCallback(
+    (submissionId: string, hash = "") => {
+      const params = new URLSearchParams({ returnTo: listHref });
+      return `/submissions/${submissionId}?${params.toString()}${hash}`;
+    },
+    [listHref]
+  );
+
+  useEffect(() => {
+    const currentHref = searchParamsString ? `${pathname}?${searchParamsString}` : pathname;
+    if (pathname === "/reviews" && currentHref !== listHref) {
+      router.replace(listHref, { scroll: false });
+    }
+  }, [listHref, pathname, router, searchParamsString]);
 
   const reloadAssignments = useCallback(async () => {
     const data = await fetch("/api/reviews/assignments").then((response) => response.json());
@@ -343,7 +385,7 @@ export function ReviewsPageClient({
             {myFiltered.map((assignment) => (
               <Card key={assignment.id} hover className="mb-0">
                 <CardBody className="py-4">
-                  <Link href={`/submissions/${assignment.submission.id}`}>
+                  <Link href={getDetailHref(assignment.submission.id)}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-semibold text-ink truncate">{assignment.submission.title}</h3>
@@ -373,7 +415,7 @@ export function ReviewsPageClient({
                         </>
                       )}
                       {assignment.status === "ACCEPTED" && (
-                        <Link href={`/submissions/${assignment.submission.id}#section-review-form`} className="flex-1">
+                        <Link href={getDetailHref(assignment.submission.id, "#section-review-form")} className="flex-1">
                           <Button size="sm" className="w-full sm:w-auto">
                             <ExternalLink className="h-3.5 w-3.5" />{t("reviews.writeReview")}
                           </Button>
@@ -431,7 +473,7 @@ export function ReviewsPageClient({
                 const dueSoon = !overdue && assignment.status !== "DECLINED" && isDueSoon(assignment.dueDate);
                 return (
                   <div key={assignment.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-border-light bg-white p-3 hover:shadow-sm transition-all">
-                    <Link href={`/submissions/${assignment.submission.id}`} className="flex-1 min-w-0">
+                    <Link href={getDetailHref(assignment.submission.id)} className="flex-1 min-w-0">
                       <span className="text-sm font-semibold text-ink line-clamp-2 block hover:text-brand-600">{assignment.submission.title}</span>
                       <div className="mt-1.5 flex items-center gap-2 text-xs text-ink-muted flex-wrap">
                         {assignment.submission.track && <Badge tone="info">{assignment.submission.track.name}</Badge>}
@@ -459,7 +501,7 @@ export function ReviewsPageClient({
                         </>
                       )}
                       {assignment.status === "ACCEPTED" && (
-                        <Link href={`/submissions/${assignment.submission.id}#section-review-form`}>
+                        <Link href={getDetailHref(assignment.submission.id, "#section-review-form")}>
                           <Button size="sm">
                             <ExternalLink className="h-3.5 w-3.5" />{t("reviews.writeReview")}
                           </Button>
@@ -613,7 +655,7 @@ export function ReviewsPageClient({
                         <UserPlus className="h-4 w-4" />
                         {t("reviews.assignReviewer")}
                       </Button>
-                      <Link href={`/submissions/${group.submissionId}`}>
+                      <Link href={getDetailHref(group.submissionId)}>
                         <Button size="sm" variant="secondary">
                           <ExternalLink className="h-4 w-4" />
                           {t("common.viewAll")}
@@ -805,7 +847,7 @@ export function ReviewsPageClient({
                               >
                                 <UserPlus className="h-4 w-4" />
                               </button>
-                              <Link href={`/submissions/${group.submissionId}`} className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors">
+                              <Link href={getDetailHref(group.submissionId)} className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors">
                                 <ExternalLink className="h-4 w-4" />
                               </Link>
                             </div>

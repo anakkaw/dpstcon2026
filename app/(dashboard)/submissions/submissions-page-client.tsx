@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, memo, useEffect, Fragment } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -83,6 +84,27 @@ function daysSince(iso: string, now: number): number {
 }
 
 type SortKey = "title" | "author" | "track" | "status" | "createdAt" | "reviews";
+type QuickFilter = "none" | "needs_action" | "advisor_stalled";
+
+const SORT_KEYS = new Set<SortKey>(["title", "author", "track", "status", "createdAt", "reviews"]);
+const QUICK_FILTERS = new Set<QuickFilter>(["none", "needs_action", "advisor_stalled"]);
+
+function readSortKey(value: string | null): SortKey {
+  return value && SORT_KEYS.has(value as SortKey) ? (value as SortKey) : "createdAt";
+}
+
+function readSortDir(value: string | null): "asc" | "desc" {
+  return value === "asc" ? "asc" : "desc";
+}
+
+function readQuickFilter(value: string | null): QuickFilter {
+  return value && QUICK_FILTERS.has(value as QuickFilter) ? (value as QuickFilter) : "none";
+}
+
+function readPage(value: string | null): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
 
 function normalizeSubmissionData(submission: SubmissionData): SubmissionData {
   const normalizedStatus = normalizeSubmissionStatus(submission.status);
@@ -98,6 +120,10 @@ export function SubmissionsPageClient({
   initialSubmissions: SubmissionData[];
   reviewerPool?: ReviewerOption[];
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const { t, locale } = useI18n();
   const statusLabels = getSubmissionStatusLabels(t);
   const { roles, id: currentUserId } = useDashboardAuth();
@@ -115,11 +141,11 @@ export function SubmissionsPageClient({
   useEffect(() => {
     setSubmissions(initialSubmissions.map(normalizeSubmissionData));
   }, [initialSubmissions]);
-  const [trackFilter, setTrackFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [trackFilter, setTrackFilter] = useState(() => searchParams.get("track") || "");
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "ALL");
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get("q") || "");
   // quick filters: "none" | "needs_action" | "advisor_stalled"
-  const [quickFilter, setQuickFilter] = useState<"none" | "needs_action" | "advisor_stalled">("none");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => readQuickFilter(searchParams.get("quick")));
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
 
@@ -127,7 +153,7 @@ export function SubmissionsPageClient({
   const setTrackFilterAndReset = useCallback((v: string) => { setTrackFilter(v); setPage(1); }, []);
   const setStatusFilterAndReset = useCallback((v: string) => { setStatusFilter(v); setPage(1); setQuickFilter("none"); }, []);
   const setSearchQueryAndReset = useCallback((v: string) => { setSearchQuery(v); setPage(1); }, []);
-  const setQuickFilterAndReset = useCallback((v: "none" | "needs_action" | "advisor_stalled") => {
+  const setQuickFilterAndReset = useCallback((v: QuickFilter) => {
     setQuickFilter((prev) => (prev === v ? "none" : v));
     setStatusFilter("ALL");
     setPage(1);
@@ -175,9 +201,9 @@ export function SubmissionsPageClient({
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<SortKey>(() => readSortKey(searchParams.get("sort")));
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => readSortDir(searchParams.get("dir")));
+  const [page, setPage] = useState(() => readPage(searchParams.get("page")));
   const [actionsOpenId, setActionsOpenId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewFor, setPreviewFor] = useState<{
@@ -200,6 +226,35 @@ export function SubmissionsPageClient({
     });
     setPage(1);
   }, []);
+
+  const listQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (trackFilter) params.set("track", trackFilter);
+    if (statusFilter !== "ALL") params.set("status", statusFilter);
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    if (quickFilter !== "none") params.set("quick", quickFilter);
+    if (sortKey !== "createdAt") params.set("sort", sortKey);
+    if (sortDir !== "desc") params.set("dir", sortDir);
+    if (page !== 1) params.set("page", String(page));
+    return params.toString();
+  }, [trackFilter, statusFilter, searchQuery, quickFilter, sortKey, sortDir, page]);
+
+  const listHref = listQuery ? `/submissions?${listQuery}` : "/submissions";
+
+  const getDetailHref = useCallback(
+    (submissionId: string, hash = "") => {
+      const params = new URLSearchParams({ returnTo: listHref });
+      return `/submissions/${submissionId}?${params.toString()}${hash}`;
+    },
+    [listHref]
+  );
+
+  useEffect(() => {
+    const currentHref = searchParamsString ? `${pathname}?${searchParamsString}` : pathname;
+    if (pathname === "/submissions" && currentHref !== listHref) {
+      router.replace(listHref, { scroll: false });
+    }
+  }, [listHref, pathname, router, searchParamsString]);
 
   async function savePaperCode(submissionId: string) {
     setSavingPaperCode(true);
@@ -377,6 +432,12 @@ export function SubmissionsPageClient({
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pagedFiltered = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   const needsActionCount = useMemo(
     () => submissions.filter((s) => (!trackFilter || s.track?.id === trackFilter) && NEEDS_ACTION_STATUSES.has(s.status)).length,
     [submissions, trackFilter]
@@ -433,7 +494,7 @@ export function SubmissionsPageClient({
             {filtered.map((sub) => {
               const action = getNextAction(sub.status, true, t);
               return (
-                <Link key={sub.id} href={`/submissions/${sub.id}`}>
+                <Link key={sub.id} href={getDetailHref(sub.id)}>
                   <Card hover className="mb-0">
                     <CardBody className="py-4">
                       <div className="flex items-start justify-between gap-4">
@@ -520,7 +581,10 @@ export function SubmissionsPageClient({
 
       {/* Personal review tasks — surfaced on the workbench so PC+Reviewer users
           see their own pending reviews before the management table. */}
-      <MyReviewTasksCard tasks={myReviewTasks} />
+      <MyReviewTasksCard
+        tasks={myReviewTasks}
+        getSubmissionHref={getDetailHref}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <ClickableStatCard active={statusFilter === "ALL" && quickFilter === "none"} onClick={() => { setStatusFilterAndReset("ALL"); }}>
@@ -640,7 +704,7 @@ export function SubmissionsPageClient({
                     onChange={() => toggleSelect(sub.id)}
                     className="mt-4 h-4 w-4 shrink-0 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
                   />
-                  <Link href={`/submissions/${sub.id}`} className="flex-1 min-w-0">
+                  <Link href={getDetailHref(sub.id)} className="flex-1 min-w-0">
                   <Card hover>
                     <CardBody className="space-y-3">
                       <div className="flex items-start justify-between gap-3">
@@ -791,7 +855,7 @@ export function SubmissionsPageClient({
                           {/* title + author + time */}
                           <td className="px-4 py-3">
                             <div className="flex items-start gap-2">
-                              <Link href={`/submissions/${sub.id}`} className="group/link block min-w-0 flex-1">
+                              <Link href={getDetailHref(sub.id)} className="group/link block min-w-0 flex-1">
                                 <p
                                   className="font-medium text-ink leading-snug line-clamp-2 group-hover/link:text-brand-600 transition-colors"
                                   title={sub.abstract || undefined}
@@ -903,7 +967,7 @@ export function SubmissionsPageClient({
                           {/* ⋮ actions */}
                           <td className="pr-3 py-3">
                             <RowActionsMenu
-                              submissionId={sub.id}
+                              href={getDetailHref(sub.id)}
                               open={actionsOpenId === sub.id}
                               onToggle={() => setActionsOpenId((prev) => prev === sub.id ? null : sub.id)}
                               onClose={() => setActionsOpenId(null)}
@@ -931,6 +995,8 @@ export function SubmissionsPageClient({
                                   trackId={sub.track?.id ?? null}
                                   canAssignSelf={isAdmin}
                                   onMessage={(msg) => { setMessage(msg); setMessageTone("success"); }}
+                                  submissionHref={getDetailHref(sub.id)}
+                                  reviewFormHref={getDetailHref(sub.id, "#section-review-form")}
                                 />
                               </div>
                             </td>
@@ -1129,9 +1195,9 @@ const PaperCodeCell = memo(function PaperCodeCell({
 });
 
 const RowActionsMenu = memo(function RowActionsMenu({
-  submissionId, open, onToggle, onClose, viewLabel,
+  href, open, onToggle, onClose, viewLabel,
 }: {
-  submissionId: string; open: boolean; onToggle: () => void; onClose: () => void; viewLabel: string;
+  href: string; open: boolean; onToggle: () => void; onClose: () => void; viewLabel: string;
 }) {
   return (
     <div className="relative">
@@ -1150,7 +1216,7 @@ const RowActionsMenu = memo(function RowActionsMenu({
           <div className="fixed inset-0 z-20" aria-hidden="true" onClick={onClose} />
           <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-32 rounded-card border border-border bg-white py-1 shadow-elev-3">
             <Link
-              href={`/submissions/${submissionId}`}
+              href={href}
               role="menuitem"
               onClick={onClose}
               className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-surface-1 transition-colors"

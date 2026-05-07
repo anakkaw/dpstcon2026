@@ -70,6 +70,8 @@ interface AssignmentPanelProps {
   canAssignSelf?: boolean;
   /** Called with a user-facing message after any mutation */
   onMessage?: (msg: string) => void;
+  submissionHref?: string;
+  reviewFormHref?: string;
 }
 
 function isOverdue(dueDate: string | null, now: number) {
@@ -91,6 +93,8 @@ export function AssignmentPanel({
   trackId,
   canAssignSelf = false,
   onMessage,
+  submissionHref = `/submissions/${submissionId}`,
+  reviewFormHref = `/submissions/${submissionId}#section-review-form`,
 }: AssignmentPanelProps) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -340,7 +344,7 @@ export function AssignmentPanel({
 
             <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
               {isMe && assignment.status === "ACCEPTED" && (
-                <Link href={`/submissions/${submissionId}#section-review-form`}>
+                <Link href={reviewFormHref}>
                   <Button size="sm">
                     <Send className="h-3.5 w-3.5" />
                     {t("reviews.writeReview")}
@@ -454,7 +458,7 @@ export function AssignmentPanel({
       )}
 
       <div className="flex justify-end">
-        <Link href={`/submissions/${submissionId}`}>
+        <Link href={submissionHref}>
           <Button size="sm" variant="ghost">
             <ExternalLink className="h-3.5 w-3.5" />
             {t("common.viewAll")}

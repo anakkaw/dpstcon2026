@@ -155,6 +155,7 @@ interface Props {
     error: string | null;
     createdAt: string;
   } | null;
+  submissionListHref?: string;
 }
 
 export function SubmissionDetail({
@@ -162,7 +163,7 @@ export function SubmissionDetail({
   canManageSubmission = false,
   reviewCounts, canMakeDecision, decision, presentations, criteriaByType, deadlines,
   isAssignedReviewer, reviewerAssignmentId, reviewerAssignmentStatus, reviewerAssignmentAssignedAt,
-  assignedReviewerIds = [], lastAdvisorEmail,
+  assignedReviewerIds = [], lastAdvisorEmail, submissionListHref = "/submissions",
 }: Props) {
   const router = useRouter();
   const { t } = useI18n();
@@ -515,7 +516,7 @@ export function SubmissionDetail({
         return;
       }
 
-      router.push("/submissions");
+      router.push(submissionListHref);
       router.refresh();
     } catch {
       setMessage(t("detail.deleteError"));
@@ -767,7 +768,7 @@ export function SubmissionDetail({
         onConfirm={handleOverrideAdvisorStatus}
       />
 
-      <Breadcrumb items={[{ label: t("detail.papers"), href: "/submissions" }, { label: submission.title }]} />
+      <Breadcrumb items={[{ label: t("detail.papers"), href: submissionListHref }, { label: submission.title }]} />
 
       {message && <Alert tone="info">{message}</Alert>}
 

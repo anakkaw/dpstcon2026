@@ -25,10 +25,14 @@ import { canMakeSubmissionDecision } from "@/server/submission-workflow";
 
 export default async function SubmissionDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const submissionListHref = getSubmissionListHref(resolvedSearchParams.returnTo);
   const authContext = await getServerAuthContext();
   if (!authContext?.user.isActive) redirect("/login");
 
@@ -385,6 +389,20 @@ export default async function SubmissionDetailPage({
             }
           : null
       }
+      submissionListHref={submissionListHref}
     />
   );
+}
+
+function getSubmissionListHref(value: string | string[] | undefined) {
+  const href = Array.isArray(value) ? value[0] : value;
+  if (
+    href === "/submissions" ||
+    href?.startsWith("/submissions?") ||
+    href === "/reviews" ||
+    href?.startsWith("/reviews?")
+  ) {
+    return href;
+  }
+  return "/submissions";
 }

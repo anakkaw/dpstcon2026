@@ -41,6 +41,7 @@ interface MyReviewTasksCardProps {
   tasks: MyReviewTask[];
   /** Header layout variant. "section" draws as a standalone section (used on /reviews and /submissions), "compact" is leaner for the dashboard. */
   variant?: "section" | "compact";
+  getSubmissionHref?: (submissionId: string, hash?: string) => string;
 }
 
 function isOverdue(dueDate: string | null, now: number) {
@@ -57,6 +58,7 @@ function isDueSoon(dueDate: string | null, now: number) {
 export function MyReviewTasksCard({
   tasks,
   variant = "section",
+  getSubmissionHref = (submissionId, hash = "") => `/submissions/${submissionId}${hash}`,
 }: MyReviewTasksCardProps) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -101,7 +103,10 @@ export function MyReviewTasksCard({
               className="flex flex-col gap-3 rounded-lg border border-border-light bg-white p-3 transition-all hover:shadow-sm sm:flex-row sm:items-center"
             >
               <Link
-                href={`/submissions/${task.submission.id}${task.status === "ACCEPTED" ? "#section-review-form" : ""}`}
+                href={getSubmissionHref(
+                  task.submission.id,
+                  task.status === "ACCEPTED" ? "#section-review-form" : ""
+                )}
                 className="min-w-0 flex-1"
               >
                 <span className="block truncate text-sm font-semibold text-ink hover:text-brand-600">
@@ -156,7 +161,7 @@ export function MyReviewTasksCard({
                 )}
                 {task.status === "ACCEPTED" && (
                   <Link
-                    href={`/submissions/${task.submission.id}#section-review-form`}
+                    href={getSubmissionHref(task.submission.id, "#section-review-form")}
                   >
                     <Button size="sm">
                       <ExternalLink className="h-3.5 w-3.5" />
