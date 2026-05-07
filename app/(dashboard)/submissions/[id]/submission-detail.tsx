@@ -458,6 +458,14 @@ export function SubmissionDetail({
             f.kind === "MANUSCRIPT" &&
             new Date(f.uploadedAt).getTime() > revisionDecisionTime
         );
+  const revisedFiles =
+    revisionDecisionTime === null
+      ? []
+      : files.filter(
+          (f) =>
+            (f.kind === "MANUSCRIPT" || f.kind === "SUPPLEMENTARY") &&
+            new Date(f.uploadedAt).getTime() > revisionDecisionTime
+        );
   const nextAction = isAuthor ? getNextAction(submission.status, hasManuscript) : null;
   const deadlineKey = isAuthor ? getRelevantDeadlineKey(submission.status) : null;
   const relevantDeadline = deadlineKey && deadlines ? deadlines[deadlineKey] : null;
@@ -858,12 +866,30 @@ export function SubmissionDetail({
       {/* Next Action (author view) */}
       {isAuthor && nextAction && (
         <Card accent={nextAction.urgency === "urgent" ? "danger" : nextAction.urgency === "warning" ? "warning" : "brand"}>
-          <CardBody className="flex items-center gap-3">
-            <Zap className="h-5 w-5 text-brand-500 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-ink">{nextAction.label}</p>
-              <p className="text-xs text-ink-muted">{nextAction.description}</p>
+          <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Zap className="h-5 w-5 text-brand-500 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-ink">{nextAction.label}</p>
+                <p className="text-xs text-ink-muted">{nextAction.description}</p>
+              </div>
             </div>
+            {canResubmit && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  document.getElementById("section-revision-submit")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  })
+                }
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {t("detail.goToRevision")}
+              </Button>
+            )}
           </CardBody>
         </Card>
       )}
@@ -1715,7 +1741,7 @@ export function SubmissionDetail({
 
       {/* Resubmit Section — shown when revision required */}
       {canResubmit && (
-        <Card accent="warning">
+        <Card id="section-revision-submit" accent="warning">
           <CardHeader>
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
               <RotateCcw className="h-4 w-4" />
@@ -1723,9 +1749,23 @@ export function SubmissionDetail({
             </h3>
           </CardHeader>
           <CardBody className="space-y-4">
-            <Alert tone="warning">
-              {t("detail.revisionAlert")}
+            <Alert tone={hasRevisedManuscript ? "success" : "warning"}>
+              {hasRevisedManuscript ? t("detail.revisionReadyAlert") : t("detail.revisionAlert")}
             </Alert>
+            {revisedFiles.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider">
+                  {t("detail.revisedFiles")}
+                </p>
+                <FileList
+                  submissionId={submission.id}
+                  files={revisedFiles}
+                  canDelete
+                  currentUserId={currentUserId}
+                  onDeleteComplete={() => router.refresh()}
+                />
+              </div>
+            )}
             <FileUpload
               submissionId={submission.id}
               kind="MANUSCRIPT"

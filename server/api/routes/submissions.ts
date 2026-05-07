@@ -1183,12 +1183,33 @@ app.delete("/:id/files/:fileId", async (c) => {
   });
   if (!file) return c.json({ error: "File not found" }, 404);
 
+  let canManageOwnRevisionUpload = false;
+  if (
+    submission.authorId === currentUser.id &&
+    submission.status === "REVISION_REQUIRED" &&
+    hasAuthorSubmissionRole(currentUser) &&
+    file.uploadedById === currentUser.id &&
+    (file.kind === "MANUSCRIPT" || file.kind === "SUPPLEMENTARY")
+  ) {
+    const latestRevisionDecision = await db.query.decisions.findFirst({
+      where: and(
+        eq(decisions.submissionId, id),
+        eq(decisions.outcome, "CONDITIONAL_ACCEPT")
+      ),
+      columns: { decidedAt: true },
+      orderBy: [desc(decisions.decidedAt)],
+    });
+    canManageOwnRevisionUpload = Boolean(
+      latestRevisionDecision && file.uploadedAt > latestRevisionDecision.decidedAt
+    );
+  }
+
   // Reviewers can delete their own REVIEW_ATTACHMENT files
   const canReviewerDeleteOwn =
     file.kind === "REVIEW_ATTACHMENT" &&
     file.uploadedById === currentUser.id;
 
-  if (!canManageAsStaff && !canManageOwnDraft && !canReviewerDeleteOwn) {
+  if (!canManageAsStaff && !canManageOwnDraft && !canManageOwnRevisionUpload && !canReviewerDeleteOwn) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
