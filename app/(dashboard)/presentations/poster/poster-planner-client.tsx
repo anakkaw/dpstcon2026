@@ -11,10 +11,12 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { RubricManager } from "@/components/presentations/rubric-manager";
 import { SectionTitle } from "@/components/ui/section-title";
+import { Select } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
 import type {
   PosterPlannerSubmission,
   PosterPlannerSessionSettings,
+  PosterJudgeBusySlot,
   AuthorPosterSlot,
   CommitteePosterSlot,
 } from "@/server/poster-planner-data";
@@ -25,6 +27,7 @@ import {
   Clock,
   FolderKanban,
   LayoutPanelTop,
+  LockKeyhole,
   Plus,
   Star,
   Trash2,
@@ -42,10 +45,12 @@ interface PosterPlannerClientProps {
   initialSessionSettings?: PosterPlannerSessionSettings;
   initialPosterSubmissions?: PosterPlannerSubmission[];
   initialCommitteeUsers?: AdminCommitteeUser[];
+  initialJudgeBusySlots?: PosterJudgeBusySlot[];
   authorSlots?: AuthorPosterSlot[];
   committeeSlots?: CommitteePosterSlot[];
   criteria?: CriterionData[];
   canEditCriteria?: boolean;
+  canEditSessionSettings?: boolean;
 }
 
 type MessageTone = "success" | "danger";
@@ -88,20 +93,43 @@ interface ScheduleRow {
   slotAssignments: Record<string, { slotId: string; judgeId: string }>;
 }
 
+type ScheduleSlotTemplate = PosterPlannerSessionSettings["slotTemplates"][number] & {
+  isOrphan?: boolean;
+};
+
+type JudgeBusyAssignment = {
+  slotId: string;
+  submissionId: string | null;
+  slotTemplateId: string;
+  label: string | null;
+};
+
+function createSlotTemplateId(startsAt: string, endsAt: string): string {
+  return `${startsAt}__${endsAt}`;
+}
+
+function rangesOverlap(aStartsAt: string, aEndsAt: string, bStartsAt: string, bEndsAt: string): boolean {
+  return new Date(aStartsAt).getTime() < new Date(bEndsAt).getTime() &&
+    new Date(aEndsAt).getTime() > new Date(bStartsAt).getTime();
+}
+
 export function PosterPlannerClient({
   mode,
   initialSessionSettings = { room: "", slotTemplates: [] },
   initialPosterSubmissions = [],
   initialCommitteeUsers = [],
+  initialJudgeBusySlots = [],
   authorSlots = [],
   committeeSlots = [],
   criteria = [],
   canEditCriteria = false,
+  canEditSessionSettings = false,
 }: PosterPlannerClientProps) {
   const { t } = useI18n();
   const plannerId = useId();
   const [adminTab, setAdminTab] = useState<"planner" | "criteria">("planner");
   const [posterSubmissions, setPosterSubmissions] = useState(initialPosterSubmissions);
+  const [judgeBusySlots, setJudgeBusySlots] = useState(initialJudgeBusySlots);
   const [sessionSettings, setSessionSettings] = useState(initialSessionSettings);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("success");
@@ -138,7 +166,7 @@ export function PosterPlannerClient({
     return posterSubmissions.map((sub) => {
       const slotAssignments: Record<string, { slotId: string; judgeId: string }> = {};
       for (const sj of sub.slotJudges) {
-        const templateId = `${sj.startsAt}__${sj.endsAt}`;
+        const templateId = createSlotTemplateId(sj.startsAt, sj.endsAt);
         slotAssignments[templateId] = { slotId: sj.id, judgeId: sj.judgeId };
       }
 
@@ -162,10 +190,15 @@ export function PosterPlannerClient({
 
   // ── Committee users for selected track ──
   const trackCommitteeUsers = useMemo(() => {
-    if (!selectedTrackId) return initialCommitteeUsers;
-    return initialCommitteeUsers.filter(
-      (u) => u.trackId === null || u.trackId === selectedTrackId
-    );
+    const scopedUsers = selectedTrackId
+      ? initialCommitteeUsers.filter((u) => u.trackId === null || u.trackId === selectedTrackId)
+      : initialCommitteeUsers;
+    const seen = new Set<string>();
+    return scopedUsers.filter((u) => {
+      if (seen.has(u.id)) return false;
+      seen.add(u.id);
+      return true;
+    });
   }, [initialCommitteeUsers, selectedTrackId]);
 
   // ── Judge workload across all tracks ──
@@ -189,6 +222,85 @@ export function PosterPlannerClient({
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [initialCommitteeUsers, posterSubmissions]);
 
+  const sessionTemplateIds = useMemo(
+    () => new Set(sessionSettings.slotTemplates.map((slot) => slot.id)),
+    [sessionSettings.slotTemplates]
+  );
+
+  const orphanSlotTemplates = useMemo((): ScheduleSlotTemplate[] => {
+    const orphanMap = new Map<string, ScheduleSlotTemplate>();
+    for (const sub of posterSubmissions) {
+      for (const sj of sub.slotJudges) {
+        const id = createSlotTemplateId(sj.startsAt, sj.endsAt);
+        if (!sessionTemplateIds.has(id)) {
+          orphanMap.set(id, { id, startsAt: sj.startsAt, endsAt: sj.endsAt, isOrphan: true });
+        }
+      }
+    }
+    return Array.from(orphanMap.values()).sort(
+      (a, b) =>
+        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() ||
+        new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime()
+    );
+  }, [posterSubmissions, sessionTemplateIds]);
+
+  const visibleSlotTemplates = useMemo(
+    (): ScheduleSlotTemplate[] => [...sessionSettings.slotTemplates, ...orphanSlotTemplates],
+    [orphanSlotTemplates, sessionSettings.slotTemplates]
+  );
+
+  const orphanAssignmentCount = useMemo(() => {
+    let count = 0;
+    for (const sub of posterSubmissions) {
+      for (const sj of sub.slotJudges) {
+        if (!sessionTemplateIds.has(createSlotTemplateId(sj.startsAt, sj.endsAt))) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }, [posterSubmissions, sessionTemplateIds]);
+
+  const selectedTrackOrphanAssignmentCount = useMemo(() => {
+    let count = 0;
+    for (const row of filteredRows) {
+      for (const templateId of Object.keys(row.slotAssignments)) {
+        if (!sessionTemplateIds.has(templateId)) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }, [filteredRows, sessionTemplateIds]);
+
+  const judgeBusyBySlot = useMemo(() => {
+    const busy = new Map<string, Map<string, JudgeBusyAssignment[]>>();
+    for (const slot of visibleSlotTemplates) {
+      const judges = new Map<string, JudgeBusyAssignment[]>();
+      for (const busySlot of judgeBusySlots) {
+        if (!rangesOverlap(slot.startsAt, slot.endsAt, busySlot.startsAt, busySlot.endsAt)) continue;
+        const assignments = judges.get(busySlot.judgeId) ?? [];
+        assignments.push({
+          slotId: busySlot.slotId,
+          submissionId: busySlot.submissionId,
+          slotTemplateId: createSlotTemplateId(busySlot.startsAt, busySlot.endsAt),
+          label: busySlot.label,
+        });
+        judges.set(busySlot.judgeId, assignments);
+      }
+      busy.set(slot.id, judges);
+    }
+    return busy;
+  }, [judgeBusySlots, visibleSlotTemplates]);
+
+  const getJudgeConflicts = useCallback(
+    (row: ScheduleRow, slot: ScheduleSlotTemplate, judgeId: string) =>
+      (judgeBusyBySlot.get(slot.id)?.get(judgeId) ?? []).filter(
+        (assignment) => assignment.slotId !== row.slotAssignments[slot.id]?.slotId
+      ),
+    [judgeBusyBySlot]
+  );
+
   // ── API helpers ──
   const refreshPlanner = useCallback(async () => {
     const response = await fetch("/api/presentations/poster-planner");
@@ -196,6 +308,7 @@ export function PosterPlannerClient({
     setSessionSettings(data.sessionSettings || { room: "", slotTemplates: [] });
     setSessionDraft(data.sessionSettings || { room: "", slotTemplates: [] });
     setPosterSubmissions(data.posterSubmissions || []);
+    setJudgeBusySlots(data.judgeBusySlots || []);
   }, []);
 
   const runAction = useCallback(async (key: string, action: () => Promise<void>) => {
@@ -298,8 +411,20 @@ export function PosterPlannerClient({
   const handleJudgeChange = useCallback(
     async (row: ScheduleRow, templateId: string, newJudgeId: string) => {
       const existing = row.slotAssignments[templateId];
-      const template = sessionSettings.slotTemplates.find((s) => s.id === templateId);
+      const template = visibleSlotTemplates.find((s) => s.id === templateId);
       if (!template) return;
+
+      if (template.isOrphan && !existing && newJudgeId) {
+        setMessageTone("danger");
+        setMessage(t("poster.orphanSlotCannotCreate"));
+        return;
+      }
+
+      if (newJudgeId && getJudgeConflicts(row, template, newJudgeId).length > 0) {
+        setMessageTone("danger");
+        setMessage(t("poster.judgeTimeConflict"));
+        return;
+      }
 
       const actionKey = `assign-${row.submissionId}-${templateId}`;
       await runAction(actionKey, async () => {
@@ -310,7 +435,7 @@ export function PosterPlannerClient({
           });
           if (!response.ok) {
             const data = await response.json().catch(() => null);
-            throw new Error(data?.error || t("poster.unableToSaveJudge"));
+            throw new Error(data?.message || data?.error || t("poster.unableToSaveJudge"));
           }
         } else if (existing && newJudgeId) {
           // Update slot
@@ -321,7 +446,7 @@ export function PosterPlannerClient({
           });
           if (!response.ok) {
             const data = await response.json().catch(() => null);
-            throw new Error(data?.error || t("poster.unableToSaveJudge"));
+            throw new Error(data?.message || data?.error || t("poster.unableToSaveJudge"));
           }
         } else if (!existing && newJudgeId) {
           // Create slot
@@ -337,14 +462,14 @@ export function PosterPlannerClient({
           });
           if (!response.ok) {
             const data = await response.json().catch(() => null);
-            throw new Error(data?.error || t("poster.unableToSaveJudge"));
+            throw new Error(data?.message || data?.error || t("poster.unableToSaveJudge"));
           }
         }
         await refreshPlanner();
         setMessage(t("poster.judgeSaved"));
       });
     },
-    [refreshPlanner, runAction, sessionSettings.slotTemplates, t]
+    [getJudgeConflicts, refreshPlanner, runAction, t, visibleSlotTemplates]
   );
 
   const sessionRoomId = `${plannerId}-session-room`;
@@ -559,15 +684,29 @@ export function PosterPlannerClient({
           {/* ── Session Settings ── */}
           <Card>
             <CardHeader>
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <Clock className="h-4 w-4 text-ink-muted" />
-                {t("poster.sessionSettings")}
-              </h3>
-              <p className="text-sm text-ink-muted">
-                {t("poster.sessionSettingsDesc", { n: SLOT_DURATION_MINUTES })}
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <Clock className="h-4 w-4 text-ink-muted" />
+                    {t("poster.sessionSettings")}
+                  </h3>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    {t("poster.sessionSettingsDesc", { n: SLOT_DURATION_MINUTES })}
+                  </p>
+                </div>
+                {!canEditSessionSettings && (
+                  <Badge tone="info" icon={LockKeyhole}>
+                    {t("poster.adminManagedSettings")}
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardBody className="space-y-4">
+              {!canEditSessionSettings && (
+                <Alert tone="info">
+                  {t("poster.adminManagedSettingsDesc")}
+                </Alert>
+              )}
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
                 <Field label={t("poster.roomLabel")} htmlFor={sessionRoomId}>
                   <Input
@@ -577,6 +716,7 @@ export function PosterPlannerClient({
                     placeholder="e.g. Poster Hall A"
                     name="sharedRoom"
                     autoComplete="off"
+                    disabled={!canEditSessionSettings}
                   />
                 </Field>
                 <div className="space-y-3">
@@ -591,34 +731,40 @@ export function PosterPlannerClient({
                         <div key={slot.id} className="group flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface-alt px-2.5 py-1.5">
                           <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">{formatSlotCode(index)}</span>
                           <span className="text-sm font-medium text-ink">{formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}</span>
-                          <button
-                            type="button"
-                            onClick={() => removeSessionSlotTemplate(slot.id)}
-                            className="ml-1 rounded p-0.5 text-ink-muted opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                            aria-label={`Remove slot ${formatSlotCode(index)}`}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
+                          {canEditSessionSettings && (
+                            <button
+                              type="button"
+                              onClick={() => removeSessionSlotTemplate(slot.id)}
+                              className="ml-1 rounded p-0.5 text-ink-muted opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                              aria-label={`Remove slot ${formatSlotCode(index)}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
-                  <div className="flex items-end gap-2">
-                    <Field label={t("poster.addSlotTime")} htmlFor={`${plannerId}-new-slot-time`}>
-                      <Input id={`${plannerId}-new-slot-time`} type="time" value={newSlotTime} onChange={(event) => setNewSlotTime(event.target.value)} name="newSlotTime" />
-                    </Field>
-                    <Button size="sm" variant="outline" onClick={addSessionSlotTemplate}>
-                      <Plus className="h-3.5 w-3.5" />
-                      {t("poster.add")}
-                    </Button>
-                  </div>
+                  {canEditSessionSettings && (
+                    <div className="flex items-end gap-2">
+                      <Field label={t("poster.addSlotTime")} htmlFor={`${plannerId}-new-slot-time`}>
+                        <Input id={`${plannerId}-new-slot-time`} type="time" value={newSlotTime} onChange={(event) => setNewSlotTime(event.target.value)} name="newSlotTime" />
+                      </Field>
+                      <Button size="sm" variant="outline" onClick={addSessionSlotTemplate}>
+                        <Plus className="h-3.5 w-3.5" />
+                        {t("poster.add")}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="flex justify-end border-t border-border/40 pt-3">
-                <Button size="sm" onClick={saveSessionSettings} loading={savingKey === "session-settings"}>
-                  {t("poster.saveSessionSettings")}
-                </Button>
-              </div>
+              {canEditSessionSettings && (
+                <div className="flex justify-end border-t border-border/40 pt-3">
+                  <Button size="sm" onClick={saveSessionSettings} loading={savingKey === "session-settings"}>
+                    {t("poster.saveSessionSettings")}
+                  </Button>
+                </div>
+              )}
             </CardBody>
           </Card>
 
@@ -647,10 +793,19 @@ export function PosterPlannerClient({
           )}
 
           {/* ── Schedule Table ── */}
-          {sessionSettings.slotTemplates.length === 0 ? (
+          {orphanAssignmentCount > 0 && (
+            <Alert tone="warning">
+              {t("poster.orphanSlotsWarning", {
+                n: orphanAssignmentCount,
+                trackN: selectedTrackOrphanAssignmentCount,
+              })}
+            </Alert>
+          )}
+
+          {visibleSlotTemplates.length === 0 ? (
             <Alert tone="danger">
               <CalendarRange className="inline h-4 w-4 mr-1" />
-              {t("poster.addSlotsFirst")}
+              {canEditSessionSettings ? t("poster.addSlotsFirst") : t("poster.noAdminSlotsYet")}
             </Alert>
           ) : filteredRows.length === 0 ? (
             <EmptyState icon={<FolderKanban className="h-12 w-12" />} title={t("poster.noPapersInTrack")} body={t("poster.noRecordsDesc")} />
@@ -666,11 +821,14 @@ export function PosterPlannerClient({
                       <th className="px-3 py-3 text-left font-semibold text-ink min-w-[120px]">
                         {t("poster.authorColumn")}
                       </th>
-                      {sessionSettings.slotTemplates.map((slot, index) => (
+                      {visibleSlotTemplates.map((slot, index) => (
                         <th key={slot.id} className="px-3 py-3 text-center font-semibold text-ink min-w-[160px]">
                           <div className="flex flex-col items-center gap-0.5">
-                            <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">{formatSlotCode(index)}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${slot.isOrphan ? "bg-amber-100 text-amber-800" : "bg-brand-100 text-brand-700"}`}>{formatSlotCode(index)}</span>
                             <span className="text-xs text-ink-muted">{formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}</span>
+                            {slot.isOrphan && (
+                              <span className="text-[11px] font-semibold text-amber-700">{t("poster.removedSlot")}</span>
+                            )}
                           </div>
                         </th>
                       ))}
@@ -686,28 +844,53 @@ export function PosterPlannerClient({
                           </div>
                         </td>
                         <td className="px-3 py-2.5 text-ink-muted whitespace-nowrap">{row.authorName}</td>
-                        {sessionSettings.slotTemplates.map((slot) => {
+                        {visibleSlotTemplates.map((slot) => {
                           const assignment = row.slotAssignments[slot.id];
                           const currentJudgeId = assignment?.judgeId || "";
                           const isSaving = savingKey === `assign-${row.submissionId}-${slot.id}`;
+                          const isEmptyOrphanSlot = Boolean(slot.isOrphan && !assignment);
+                          const currentConflicts = currentJudgeId
+                            ? getJudgeConflicts(row, slot, currentJudgeId)
+                            : [];
+                          const hasCurrentConflict = currentConflicts.length > 0;
+                          const currentConflictLabel =
+                            currentConflicts[0]?.label ?? t("poster.anotherTrackConflict");
 
                           return (
                             <td key={slot.id} className="px-2 py-2">
-                              <select
+                              <Select
                                 value={currentJudgeId}
                                 onChange={(e) => handleJudgeChange(row, slot.id, e.target.value)}
-                                disabled={isSaving}
+                                disabled={isSaving || isEmptyOrphanSlot}
                                 className={`w-full rounded-lg border px-2 py-1.5 text-xs transition-colors ${
-                                  currentJudgeId
-                                    ? "border-brand-200 bg-brand-50/40 text-ink"
-                                    : "border-border/60 bg-white text-ink-muted"
+                                  hasCurrentConflict
+                                    ? "border-red-300 bg-red-50/70 text-red-900"
+                                    : slot.isOrphan
+                                      ? "border-amber-200 bg-amber-50/60 text-amber-900"
+                                      : currentJudgeId
+                                        ? "border-brand-200 bg-brand-50/40 text-ink"
+                                        : "border-border/60 bg-white text-ink-muted"
                                 } ${isSaving ? "opacity-50 cursor-wait" : "hover:border-brand-300 focus:border-brand-400 focus:ring-1 focus:ring-brand-200"} focus:outline-none`}
                               >
-                                <option value="">{t("poster.selectJudgeOption")}</option>
-                                {trackCommitteeUsers.map((cu) => (
-                                  <option key={cu.id} value={cu.id}>{cu.name}</option>
-                                ))}
-                              </select>
+                                <option value="">{isEmptyOrphanSlot ? t("poster.removedSlotOption") : t("poster.selectJudgeOption")}</option>
+                                {trackCommitteeUsers.map((cu) => {
+                                  const conflicts = getJudgeConflicts(row, slot, cu.id);
+                                  const hasConflict = conflicts.length > 0 && currentJudgeId !== cu.id;
+                                  const conflictLabel = conflicts[0]?.label ?? t("poster.anotherTrackConflict");
+                                  return (
+                                    <option key={cu.id} value={cu.id} disabled={hasConflict}>
+                                      {hasConflict
+                                        ? t("poster.judgeBusyOption", { name: cu.name, paper: conflictLabel })
+                                        : cu.name}
+                                    </option>
+                                  );
+                                })}
+                              </Select>
+                              {hasCurrentConflict && (
+                                <p className="mt-1 text-[11px] font-semibold leading-tight text-red-700">
+                                  {t("poster.existingConflictWarning", { paper: currentConflictLabel })}
+                                </p>
+                              )}
                             </td>
                           );
                         })}

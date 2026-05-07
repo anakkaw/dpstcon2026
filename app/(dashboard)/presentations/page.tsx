@@ -60,8 +60,10 @@ export default async function PresentationsPage({
           initialSessionSettings={data.sessionSettings}
           initialPosterSubmissions={data.posterSubmissions}
           initialCommitteeUsers={data.committeeUsers}
+          initialJudgeBusySlots={data.judgeBusySlots}
           criteria={criteria}
           canEditCriteria={canEditCriteria}
+          canEditSessionSettings={canEditCriteria}
         />
       </PresentationsTabs>
     );

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
 import type { ServerAuthUser } from "@/server/auth-helpers";
@@ -41,6 +41,15 @@ export interface PosterPlannerSubmission {
   track: { id: string; name: string } | null;
   author: { id: string; name: string };
   slotJudges: PosterSlotJudge[];
+}
+
+export interface PosterJudgeBusySlot {
+  slotId: string;
+  judgeId: string;
+  submissionId: string | null;
+  startsAt: string;
+  endsAt: string;
+  label: string | null;
 }
 
 function createSlotTemplateId(startsAt: string, endsAt: string) {
@@ -164,13 +173,38 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
             : and(
                 eq(userRoles.role, "COMMITTEE"),
                 scopedTrackIds.length > 0
-                  ? inArray(userRoles.trackId, scopedTrackIds)
-                  : eq(userRoles.trackId, "00000000-0000-0000-0000-000000000000")
+                  ? or(inArray(userRoles.trackId, scopedTrackIds), isNull(userRoles.trackId))
+                  : isNull(userRoles.trackId)
               )
         )
     : Promise.resolve([]);
 
   const [slotJudgeRows, committeeUsers] = await Promise.all([slotJudgePromise, committeePromise]);
+  const visibleSubmissionIds = new Set(submissionIds);
+  const candidateJudgeIds = Array.from(new Set(committeeUsers.map((committeeUser) => committeeUser.id)));
+
+  const busySlotRows = candidateJudgeIds.length > 0
+    ? await db.query.posterSlotJudges.findMany({
+        where: inArray(posterSlotJudges.judgeId, candidateJudgeIds),
+        with: {
+          submission: {
+            columns: { id: true, paperCode: true, title: true },
+          },
+        },
+      })
+    : [];
+
+  const judgeBusySlots: PosterJudgeBusySlot[] = busySlotRows.map((slot) => {
+    const canSeeSubmission = scopedTrackIds === null || visibleSubmissionIds.has(slot.submissionId);
+    return {
+      slotId: slot.id,
+      judgeId: slot.judgeId,
+      submissionId: canSeeSubmission ? slot.submissionId : null,
+      startsAt: slot.startsAt.toISOString(),
+      endsAt: slot.endsAt.toISOString(),
+      label: canSeeSubmission ? slot.submission.paperCode || slot.submission.title : null,
+    };
+  });
 
   // Group slot judges by submission
   const slotJudgesBySubmission = new Map<string, PosterSlotJudge[]>();
@@ -200,6 +234,7 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
     sessionSettings,
     posterSubmissions,
     committeeUsers,
+    judgeBusySlots,
   };
 }
 

@@ -9,7 +9,7 @@ import {
   submissions,
   userRoles,
 } from "@/server/db/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -155,6 +155,44 @@ async function savePosterSessionSettings(input: {
   ]);
 
   return getPosterSessionSettings();
+}
+
+async function findPosterJudgeTimeConflict(input: {
+  judgeId: string;
+  startsAt: Date;
+  endsAt: Date;
+  excludeSlotId?: string;
+}) {
+  return db.query.posterSlotJudges.findFirst({
+    where: and(
+      eq(posterSlotJudges.judgeId, input.judgeId),
+      lt(posterSlotJudges.startsAt, input.endsAt),
+      gt(posterSlotJudges.endsAt, input.startsAt),
+      input.excludeSlotId ? ne(posterSlotJudges.id, input.excludeSlotId) : undefined
+    ),
+    with: {
+      submission: {
+        columns: { paperCode: true, title: true },
+      },
+    },
+  });
+}
+
+async function isValidPosterJudgeForSubmission(input: {
+  judgeId: string;
+  submissionTrackId: string | null;
+}) {
+  const judgeRole = await db.query.userRoles.findFirst({
+    where: and(
+      eq(userRoles.userId, input.judgeId),
+      eq(userRoles.role, "COMMITTEE"),
+      input.submissionTrackId
+        ? or(isNull(userRoles.trackId), eq(userRoles.trackId, input.submissionTrackId))
+        : isNull(userRoles.trackId)
+    ),
+  });
+
+  return Boolean(judgeRole);
 }
 
 app.get("/", async (c) => {
@@ -506,23 +544,28 @@ app.post("/poster-slots", async (c) => {
     columns: { trackId: true },
   });
 
-  const judgeRole = await db.query.userRoles.findFirst({
-    where: and(
-      eq(userRoles.userId, parsed.data.judgeId),
-      eq(userRoles.role, "COMMITTEE")
-    ),
+  const isValidJudge = await isValidPosterJudgeForSubmission({
+    judgeId: parsed.data.judgeId,
+    submissionTrackId: submission?.trackId ?? null,
   });
 
-  if (!judgeRole) {
+  if (!isValidJudge) {
     return c.json({ error: "Selected user is not a committee member" }, 400);
   }
-  if (
-    !hasRole(currentUser, "ADMIN") &&
-    judgeRole.trackId &&
-    submission?.trackId &&
-    judgeRole.trackId !== submission.trackId
-  ) {
-    return c.json({ error: "Judge is scoped to a different track" }, 400);
+
+  const conflict = await findPosterJudgeTimeConflict({
+    judgeId: parsed.data.judgeId,
+    startsAt,
+    endsAt,
+  });
+  if (conflict) {
+    return c.json(
+      {
+        error: "JUDGE_TIME_CONFLICT",
+        message: `Judge already has a poster slot at this time (${conflict.submission.paperCode ?? conflict.submission.title})`,
+      },
+      409
+    );
   }
 
   const [slot] = await db
@@ -553,7 +596,7 @@ app.patch("/poster-slots/:slotId", async (c) => {
 
   const existing = await db.query.posterSlotJudges.findFirst({
     where: eq(posterSlotJudges.id, slotId),
-    columns: { submissionId: true },
+    columns: { submissionId: true, startsAt: true, endsAt: true },
   });
   if (!existing) return c.json({ error: "Not found" }, 404);
   if (!(await canManageSubmissionPresentation(currentUser, existing.submissionId))) {
@@ -565,22 +608,28 @@ app.patch("/poster-slots/:slotId", async (c) => {
       where: eq(submissions.id, existing.submissionId),
       columns: { trackId: true },
     });
-    const judgeRole = await db.query.userRoles.findFirst({
-      where: and(
-        eq(userRoles.userId, parsed.data.judgeId),
-        eq(userRoles.role, "COMMITTEE")
-      ),
+    const isValidJudge = await isValidPosterJudgeForSubmission({
+      judgeId: parsed.data.judgeId,
+      submissionTrackId: submission?.trackId ?? null,
     });
-    if (!judgeRole) {
+    if (!isValidJudge) {
       return c.json({ error: "Selected user is not a committee member" }, 400);
     }
-    if (
-      !hasRole(currentUser, "ADMIN") &&
-      judgeRole.trackId &&
-      submission?.trackId &&
-      judgeRole.trackId !== submission.trackId
-    ) {
-      return c.json({ error: "Judge is scoped to a different track" }, 400);
+
+    const conflict = await findPosterJudgeTimeConflict({
+      judgeId: parsed.data.judgeId,
+      startsAt: existing.startsAt,
+      endsAt: existing.endsAt,
+      excludeSlotId: slotId,
+    });
+    if (conflict) {
+      return c.json(
+        {
+          error: "JUDGE_TIME_CONFLICT",
+          message: `Judge already has a poster slot at this time (${conflict.submission.paperCode ?? conflict.submission.title})`,
+        },
+        409
+      );
     }
   }
 
@@ -613,7 +662,7 @@ app.delete("/poster-slots/:slotId", async (c) => {
 
 app.put("/poster-session", async (c) => {
   const currentUser = c.get("user");
-  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
+  if (!hasRole(currentUser, "ADMIN")) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
