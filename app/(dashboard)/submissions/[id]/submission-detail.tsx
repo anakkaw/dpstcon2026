@@ -39,6 +39,7 @@ import {
   Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
   Trash2, Pencil, Mail, UserCheck, MessageSquare, AlertCircle,
+  Save,
 } from "lucide-react";
 
 function StepHeader({
@@ -182,6 +183,7 @@ export function SubmissionDetail({
   const canSubmit = canManageOwnSubmission && submission.status === "DRAFT";
   const canWithdraw = canManageOwnSubmission && !["WITHDRAWN", "DRAFT"].includes(submission.status);
   const canResubmit = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
+  const canEditRevisionTitle = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
   const currentCompletedReviewCount = reviewCounts?.completed ?? 0;
   const baseCanShowDecisionPanel =
     isAdmin &&
@@ -197,6 +199,10 @@ export function SubmissionDetail({
   const [discussionMsg, setDiscussionMsg] = useState("");
   const [posting, setPosting] = useState(false);
   const [resendingAdvisor, setResendingAdvisor] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState(submission.title);
+  const [editTitleEn, setEditTitleEn] = useState(submission.titleEn || "");
+  const [savingTitle, setSavingTitle] = useState(false);
 
   // Advisor management state (admin)
   const [showEditAdvisorModal, setShowEditAdvisorModal] = useState(false);
@@ -207,6 +213,11 @@ export function SubmissionDetail({
   const [showOverrideConfirm, setShowOverrideConfirm] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<string>("");
   const [overriding, setOverriding] = useState(false);
+
+  useEffect(() => {
+    setEditTitle(submission.title);
+    setEditTitleEn(submission.titleEn || "");
+  }, [submission.title, submission.titleEn]);
 
   // Manuscript preview modal
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -638,6 +649,36 @@ export function SubmissionDetail({
     }
   }
 
+  async function handleSaveTitle() {
+    const nextTitle = editTitle.trim();
+    const nextTitleEn = editTitleEn.trim();
+    if (!nextTitle || !nextTitleEn) {
+      setMessage(t("detail.titleEditRequired"));
+      return;
+    }
+
+    setSavingTitle(true);
+    try {
+      const res = await fetch(`/api/submissions/${submission.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: nextTitle, titleEn: nextTitleEn }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || t("detail.titleEditError"));
+        return;
+      }
+      setMessage(t("detail.titleEditSuccess"));
+      setEditingTitle(false);
+      router.refresh();
+    } catch {
+      setMessage(t("detail.titleEditError"));
+    } finally {
+      setSavingTitle(false);
+    }
+  }
+
   async function handleSaveAdvisor() {
     if (!editAdvisorEmail.trim() || !editAdvisorName.trim()) return;
     setSavingAdvisor(true);
@@ -777,7 +818,21 @@ export function SubmissionDetail({
           {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-ink tracking-tight">{submission.title}</h1>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <h1 className="min-w-0 text-2xl font-bold text-ink tracking-tight">{submission.title}</h1>
+            {canEditRevisionTitle && !editingTitle && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setEditingTitle(true)}
+                className="sm:mt-0.5 sm:shrink-0"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {t("detail.editTitleAction")}
+              </Button>
+            )}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2.5">
             {submission.paperCode && <Badge>{submission.paperCode}</Badge>}
             <Badge tone={SUBMISSION_STATUS_COLORS[submission.status] || "neutral"}>
@@ -787,6 +842,58 @@ export function SubmissionDetail({
               <span className="text-xs text-ink-muted bg-surface-alt px-2.5 py-1 rounded-md">{submission.track.name}</span>
             )}
           </div>
+          {editingTitle && (
+            <div className="mt-4 max-w-2xl rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+              <div className="grid gap-3">
+                <Field label={t("detail.titleEditTh")} htmlFor="revision-title-th" required>
+                  <Input
+                    id="revision-title-th"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    maxLength={500}
+                  />
+                </Field>
+                <Field
+                  label={t("detail.titleEditEn")}
+                  htmlFor="revision-title-en"
+                  required
+                  hint={t("detail.titleEditHint")}
+                >
+                  <Input
+                    id="revision-title-en"
+                    value={editTitleEn}
+                    onChange={(e) => setEditTitleEn(e.target.value)}
+                    maxLength={500}
+                  />
+                </Field>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setEditTitle(submission.title);
+                      setEditTitleEn(submission.titleEn || "");
+                      setEditingTitle(false);
+                    }}
+                    disabled={savingTitle}
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    {t("common.cancel")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleSaveTitle}
+                    loading={savingTitle}
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {t("common.save")}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-2 sm:shrink-0 sm:flex-row">
           {canSubmit && <Button onClick={handleSubmit} loading={loading} size="sm"><Send className="h-3.5 w-3.5" />{t("detail.submitBtn")}</Button>}

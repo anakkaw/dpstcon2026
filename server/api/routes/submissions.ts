@@ -35,6 +35,7 @@ import {
 } from "@/server/paper-code-service";
 import {
   canAuthorEditSubmission,
+  canAuthorEditSubmissionTitle,
   canAuthorUploadSubmissionFile,
   getSubmissionValidationError,
   canSubmitReviewForAssignment,
@@ -457,8 +458,8 @@ app.patch("/:id", async (c) => {
 
   // Validate allowed fields to prevent mass assignment
   const patchSchema = z.object({
-    title: z.string().min(1).max(500).optional(),
-    titleEn: z.string().max(500).optional(),
+    title: z.string().trim().min(1).max(500).optional(),
+    titleEn: z.string().trim().min(1).max(500).optional(),
     abstract: z.string().optional(),
     abstractEn: z.string().optional(),
     keywords: z.string().optional(),
@@ -487,12 +488,25 @@ app.patch("/:id", async (c) => {
   if (existing.authorId !== currentUser.id && !canManageAsStaff) {
     return c.json({ error: "Forbidden" }, 403);
   }
-  if (
-    existing.authorId === currentUser.id &&
-    !canManageAsStaff &&
-    (!hasAuthorSubmissionRole(currentUser) || !canAuthorEditSubmission(existing.status))
-  ) {
-    return c.json({ error: "Authors can only edit submission metadata while the paper is in draft" }, 403);
+  if (existing.authorId === currentUser.id && !canManageAsStaff) {
+    const authorPatchFields = Object.entries(parsed.data)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key);
+    const onlyTitleFields =
+      authorPatchFields.length > 0 &&
+      authorPatchFields.every((field) => field === "title" || field === "titleEn");
+
+    if (!hasAuthorSubmissionRole(currentUser)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+    if (!canAuthorEditSubmission(existing.status)) {
+      if (!canAuthorEditSubmissionTitle(existing.status) || !onlyTitleFields) {
+        return c.json(
+          { error: "Authors can only edit the paper title while revision is required" },
+          403
+        );
+      }
+    }
   }
   if (parsed.data.status && !canManageAsStaff) {
     return c.json({ error: "Forbidden — only chairs can change status" }, 403);

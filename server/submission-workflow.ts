@@ -127,6 +127,10 @@ export function canAuthorEditSubmission(status: SubmissionWorkflowStatus) {
   return status === "DRAFT";
 }
 
+export function canAuthorEditSubmissionTitle(status: SubmissionWorkflowStatus) {
+  return status === "DRAFT" || status === "REVISION_REQUIRED";
+}
+
 export function canAuthorUploadSubmissionFile(
   status: SubmissionWorkflowStatus,
   kind: SubmissionWorkflowFileKind

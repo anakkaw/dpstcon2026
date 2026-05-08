@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   canMakeSubmissionDecision,
   canAuthorEditSubmission,
+  canAuthorEditSubmissionTitle,
   canAuthorUploadSubmissionFile,
   canSubmitReviewForAssignment,
   getDecisionSubmissionStatus,
@@ -13,6 +14,13 @@ test("authors can only edit metadata while submission is in draft", () => {
   assert.equal(canAuthorEditSubmission("DRAFT"), true);
   assert.equal(canAuthorEditSubmission("ADVISOR_APPROVAL_PENDING"), false);
   assert.equal(canAuthorEditSubmission("REVISION_REQUIRED"), false);
+});
+
+test("authors can edit the paper title while revising", () => {
+  assert.equal(canAuthorEditSubmissionTitle("DRAFT"), true);
+  assert.equal(canAuthorEditSubmissionTitle("REVISION_REQUIRED"), true);
+  assert.equal(canAuthorEditSubmissionTitle("UNDER_REVIEW"), false);
+  assert.equal(canAuthorEditSubmissionTitle("ACCEPTED"), false);
 });
 
 test("author upload permissions follow workflow state", () => {
