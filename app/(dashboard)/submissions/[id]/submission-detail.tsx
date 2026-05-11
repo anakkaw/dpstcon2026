@@ -184,6 +184,7 @@ export function SubmissionDetail({
   const canWithdraw = canManageOwnSubmission && !["WITHDRAWN", "DRAFT"].includes(submission.status);
   const canResubmit = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
   const canEditRevisionTitle = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
+  const canEditRevisionAbstract = canManageOwnSubmission && submission.status === "REVISION_REQUIRED";
   const currentCompletedReviewCount = reviewCounts?.completed ?? 0;
   const baseCanShowDecisionPanel =
     isAdmin &&
@@ -204,6 +205,11 @@ export function SubmissionDetail({
   const [editTitleEn, setEditTitleEn] = useState(submission.titleEn || "");
   const [savingTitle, setSavingTitle] = useState(false);
 
+  const [editingAbstract, setEditingAbstract] = useState(false);
+  const [editAbstract, setEditAbstract] = useState(submission.abstract || "");
+  const [editAbstractEn, setEditAbstractEn] = useState(submission.abstractEn || "");
+  const [savingAbstract, setSavingAbstract] = useState(false);
+
   // Advisor management state (admin)
   const [showEditAdvisorModal, setShowEditAdvisorModal] = useState(false);
   const [editAdvisorName, setEditAdvisorName] = useState(submission.advisorName || "");
@@ -218,6 +224,11 @@ export function SubmissionDetail({
     setEditTitle(submission.title);
     setEditTitleEn(submission.titleEn || "");
   }, [submission.title, submission.titleEn]);
+
+  useEffect(() => {
+    setEditAbstract(submission.abstract || "");
+    setEditAbstractEn(submission.abstractEn || "");
+  }, [submission.abstract, submission.abstractEn]);
 
   // Manuscript preview modal
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -676,6 +687,29 @@ export function SubmissionDetail({
       setMessage(t("detail.titleEditError"));
     } finally {
       setSavingTitle(false);
+    }
+  }
+
+  async function handleSaveAbstract() {
+    setSavingAbstract(true);
+    try {
+      const res = await fetch(`/api/submissions/${submission.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ abstract: editAbstract.trim(), abstractEn: editAbstractEn.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || t("detail.abstractEditError"));
+        return;
+      }
+      setMessage(t("detail.abstractEditSuccess"));
+      setEditingAbstract(false);
+      router.refresh();
+    } catch {
+      setMessage(t("detail.abstractEditError"));
+    } finally {
+      setSavingAbstract(false);
     }
   }
 
@@ -1319,25 +1353,84 @@ export function SubmissionDetail({
               )}
 
               {(submission.abstract || submission.abstractEn) && (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {submission.abstract && (
-                    <div>
-                      <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
-                        {t("detail.abstractTh")}
-                      </p>
-                      <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
-                        {submission.abstract}
-                      </p>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">
+                      {t("detail.abstractTh")} / {t("detail.abstractEn")}
+                    </p>
+                    {canEditRevisionAbstract && !editingAbstract && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setEditingAbstract(true)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        {t("detail.editAbstractAction")}
+                      </Button>
+                    )}
+                  </div>
+                  {editingAbstract ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                      <div className="grid gap-3">
+                        <Field label={t("detail.abstractEditTh")} htmlFor="revision-abstract-th" hint={t("detail.abstractEditHint")}>
+                          <Textarea
+                            id="revision-abstract-th"
+                            value={editAbstract}
+                            onChange={(e) => setEditAbstract(e.target.value)}
+                            rows={5}
+                          />
+                        </Field>
+                        <Field label={t("detail.abstractEditEn")} htmlFor="revision-abstract-en">
+                          <Textarea
+                            id="revision-abstract-en"
+                            value={editAbstractEn}
+                            onChange={(e) => setEditAbstractEn(e.target.value)}
+                            rows={5}
+                          />
+                        </Field>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setEditAbstract(submission.abstract || "");
+                              setEditAbstractEn(submission.abstractEn || "");
+                              setEditingAbstract(false);
+                            }}
+                            disabled={savingAbstract}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            {t("common.cancel")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleSaveAbstract}
+                            loading={savingAbstract}
+                          >
+                            {t("common.save")}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  {submission.abstractEn && (
-                    <div>
-                      <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
-                        {t("detail.abstractEn")}
-                      </p>
-                      <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
-                        {submission.abstractEn}
-                      </p>
+                  ) : (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {submission.abstract && (
+                        <div>
+                          <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
+                            {submission.abstract}
+                          </p>
+                        </div>
+                      )}
+                      {submission.abstractEn && (
+                        <div>
+                          <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
+                            {submission.abstractEn}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

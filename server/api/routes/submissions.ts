@@ -492,17 +492,18 @@ app.patch("/:id", async (c) => {
     const authorPatchFields = Object.entries(parsed.data)
       .filter(([, value]) => value !== undefined)
       .map(([key]) => key);
-    const onlyTitleFields =
+    const revisionEditableFields = ["title", "titleEn", "abstract", "abstractEn"];
+    const onlyRevisionFields =
       authorPatchFields.length > 0 &&
-      authorPatchFields.every((field) => field === "title" || field === "titleEn");
+      authorPatchFields.every((field) => revisionEditableFields.includes(field));
 
     if (!hasAuthorSubmissionRole(currentUser)) {
       return c.json({ error: "Forbidden" }, 403);
     }
     if (!canAuthorEditSubmission(existing.status)) {
-      if (!canAuthorEditSubmissionTitle(existing.status) || !onlyTitleFields) {
+      if (!canAuthorEditSubmissionTitle(existing.status) || !onlyRevisionFields) {
         return c.json(
-          { error: "Authors can only edit the paper title while revision is required" },
+          { error: "Authors can only edit the paper title and abstract while revision is required" },
           403
         );
       }
