@@ -1711,7 +1711,7 @@ export function SubmissionDetail({
       {/* Paper Info — hidden for reviewers because they see the prominent PaperDetails card above */}
       {!(isAssignedReviewer && !isOwner) && (
       <div id="section-paper-info">
-      <Collapsible title={t("detail.paperInfo")} defaultOpen={submission.status === "DRAFT"}>
+      <Collapsible title={t("detail.paperInfo")} defaultOpen={submission.status === "DRAFT" || submission.status === "REVISION_REQUIRED"}>
         <div className="space-y-4">
           <div>
             <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">{t("detail.authorLabel")}</h3>
