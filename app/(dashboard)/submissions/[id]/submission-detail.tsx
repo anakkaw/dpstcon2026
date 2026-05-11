@@ -1353,84 +1353,25 @@ export function SubmissionDetail({
               )}
 
               {(submission.abstract || submission.abstractEn) && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">
-                      {t("detail.abstractTh")} / {t("detail.abstractEn")}
-                    </p>
-                    {canEditRevisionAbstract && !editingAbstract && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setEditingAbstract(true)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        {t("detail.editAbstractAction")}
-                      </Button>
-                    )}
-                  </div>
-                  {editingAbstract ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-                      <div className="grid gap-3">
-                        <Field label={t("detail.abstractEditTh")} htmlFor="revision-abstract-th" hint={t("detail.abstractEditHint")}>
-                          <Textarea
-                            id="revision-abstract-th"
-                            value={editAbstract}
-                            onChange={(e) => setEditAbstract(e.target.value)}
-                            rows={5}
-                          />
-                        </Field>
-                        <Field label={t("detail.abstractEditEn")} htmlFor="revision-abstract-en">
-                          <Textarea
-                            id="revision-abstract-en"
-                            value={editAbstractEn}
-                            onChange={(e) => setEditAbstractEn(e.target.value)}
-                            rows={5}
-                          />
-                        </Field>
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              setEditAbstract(submission.abstract || "");
-                              setEditAbstractEn(submission.abstractEn || "");
-                              setEditingAbstract(false);
-                            }}
-                            disabled={savingAbstract}
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                            {t("common.cancel")}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={handleSaveAbstract}
-                            loading={savingAbstract}
-                          >
-                            {t("common.save")}
-                          </Button>
-                        </div>
-                      </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {submission.abstract && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
+                        {t("detail.abstractTh")}
+                      </p>
+                      <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
+                        {submission.abstract}
+                      </p>
                     </div>
-                  ) : (
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      {submission.abstract && (
-                        <div>
-                          <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
-                            {submission.abstract}
-                          </p>
-                        </div>
-                      )}
-                      {submission.abstractEn && (
-                        <div>
-                          <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
-                            {submission.abstractEn}
-                          </p>
-                        </div>
-                      )}
+                  )}
+                  {submission.abstractEn && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
+                        {t("detail.abstractEn")}
+                      </p>
+                      <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-lg bg-surface-alt p-3">
+                        {submission.abstractEn}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1792,12 +1733,79 @@ export function SubmissionDetail({
             </div>
           )}
 
-          {submission.abstract && (
+          {(submission.abstract || submission.abstractEn) && (
             <>
               <Divider />
-              <div>
-                <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1">{t("detail.abstract")}</h3>
-                <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed">{submission.abstract}</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">{t("detail.abstract")}</h3>
+                  {canEditRevisionAbstract && !editingAbstract && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setEditingAbstract(true)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      {t("detail.editAbstractAction")}
+                    </Button>
+                  )}
+                </div>
+                {editingAbstract ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                    <div className="grid gap-3">
+                      <Field label={t("detail.abstractEditTh")} htmlFor="revision-abstract-th" hint={t("detail.abstractEditHint")}>
+                        <Textarea
+                          id="revision-abstract-th"
+                          value={editAbstract}
+                          onChange={(e) => setEditAbstract(e.target.value)}
+                          rows={5}
+                        />
+                      </Field>
+                      <Field label={t("detail.abstractEditEn")} htmlFor="revision-abstract-en">
+                        <Textarea
+                          id="revision-abstract-en"
+                          value={editAbstractEn}
+                          onChange={(e) => setEditAbstractEn(e.target.value)}
+                          rows={5}
+                        />
+                      </Field>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setEditAbstract(submission.abstract || "");
+                            setEditAbstractEn(submission.abstractEn || "");
+                            setEditingAbstract(false);
+                          }}
+                          disabled={savingAbstract}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          {t("common.cancel")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleSaveAbstract}
+                          loading={savingAbstract}
+                        >
+                          {t("common.save")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {submission.abstract && (
+                      <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed">{submission.abstract}</p>
+                    )}
+                    {submission.abstractEn && (
+                      <p className="text-sm text-ink-muted whitespace-pre-wrap leading-relaxed italic">{submission.abstractEn}</p>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}
