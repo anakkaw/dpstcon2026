@@ -49,7 +49,12 @@ export async function deleteFile(key: string): Promise<void> {
 export function generateFileKey(
   submissionId: string,
   fileName: string,
-  kind: "manuscript" | "camera-ready" | "supplementary" | "review-attachments"
+  kind:
+    | "manuscript"
+    | "camera-ready"
+    | "supplementary"
+    | "review-attachments"
+    | "e-abstract"
 ): string {
   const timestamp = Date.now();
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");

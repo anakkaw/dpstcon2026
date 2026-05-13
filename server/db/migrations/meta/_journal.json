@@ -106,6 +106,20 @@
       "when": 1778041134000,
       "tag": "0014_normalize_all_camera_ready_pending",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1778500000000,
+      "tag": "0015_restore_missing_unique_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778976000000,
+      "tag": "0016_e_abstract_publish",
+      "breakpoints": true
     }
   ]
 }

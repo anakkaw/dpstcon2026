@@ -85,8 +85,15 @@ export default async function HomePage() {
             {/* CTA buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Link
-                href="/login"
+                href="/conference"
                 className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-brand-500 to-brand-600 text-white font-bold text-base hover:from-brand-600 hover:to-brand-700 transition-all duration-300 shadow-xl shadow-brand-500/30 hover:shadow-2xl hover:shadow-brand-500/40 hover:-translate-y-1 active:translate-y-0"
+              >
+                {t("conference.nav.program")}
+                <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <Link
+                href="/login"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 text-white font-bold text-base backdrop-blur-sm border border-white/15 hover:bg-white/20 transition-all duration-300"
               >
                 {t("common.signIn")}
                 <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />

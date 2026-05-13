@@ -5,6 +5,10 @@ import { db } from "@/server/db";
 import { settings } from "@/server/db/schema";
 import { authMiddleware, requireRole } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
+import {
+  getConferenceInfo,
+  updateConferenceInfo,
+} from "@/server/conference-info-data";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -93,5 +97,40 @@ app.put("/deadlines", requireRole("ADMIN", "PROGRAM_CHAIR"), async (c) => {
 
   return c.json({ deadlines });
 });
+
+// ─── Conference info (date, venue) ────────────────────────────
+
+const bilingualLabelSchema = z.object({
+  th: z.string().trim().min(1).max(200),
+  en: z.string().trim().max(200).nullable(),
+});
+
+const conferenceInfoSchema = z.object({
+  dateLabel: bilingualLabelSchema,
+  venueName: bilingualLabelSchema,
+  venueDetail: bilingualLabelSchema,
+});
+
+app.get("/conference-info", async (c) => {
+  const info = await getConferenceInfo();
+  return c.json({ info });
+});
+
+app.put(
+  "/conference-info",
+  requireRole("ADMIN", "PROGRAM_CHAIR"),
+  async (c) => {
+    const body = await c.req.json();
+    const parsed = conferenceInfoSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { error: "Validation error", details: parsed.error.flatten().fieldErrors },
+        400
+      );
+    }
+    const info = await updateConferenceInfo(parsed.data);
+    return c.json({ info });
+  }
+);
 
 export { app as settingsRoutes };

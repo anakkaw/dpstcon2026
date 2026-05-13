@@ -17,6 +17,7 @@ import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import { isAcceptedSubmissionStatus, normalizeSubmissionStatus } from "@/lib/submission-status";
 import { isDuplicateReviewRound } from "@/server/access-policies";
 import { ensureSubmissionPaperCode } from "@/server/paper-code-service";
+import { publicationPatchOnStatusChange } from "@/server/e-abstract-policy";
 import {
   canMakeSubmissionDecision,
   canSubmitReviewForAssignment,
@@ -633,7 +634,11 @@ app.post("/decisions", async (c) => {
 
     await db
       .update(submissions)
-      .set({ status: newStatus, updatedAt: new Date() })
+      .set({
+        status: newStatus,
+        ...publicationPatchOnStatusChange(newStatus),
+        updatedAt: new Date(),
+      })
       .where(eq(submissions.id, data.submissionId));
 
     if (isAcceptedSubmissionStatus(newStatus)) {

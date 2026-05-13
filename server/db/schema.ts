@@ -11,6 +11,7 @@ import {
   index,
   check,
   uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -51,6 +52,7 @@ export const fileKindEnum = pgEnum("file_kind", [
   "SUPPLEMENTARY",
   "CAMERA_READY",
   "REVIEW_ATTACHMENT",
+  "E_ABSTRACT",
 ]);
 
 export const assignmentStatusEnum = pgEnum("assignment_status", [
@@ -275,6 +277,11 @@ export const submissions = pgTable(
     advisorApprovalAt: timestamp("advisor_approval_at"),
     advisorAutoResendCount: integer("advisor_auto_resend_count").default(0).notNull(),
     rebuttalText: text("rebuttal_text"),
+    isPublished: boolean("is_published").default(false).notNull(),
+    eAbstractFileId: uuid("e_abstract_file_id").references(
+      (): AnyPgColumn => storedFiles.id,
+      { onDelete: "set null" }
+    ),
     submittedAt: timestamp("submitted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -284,6 +291,7 @@ export const submissions = pgTable(
     index("submissions_author_idx").on(table.authorId),
     index("submissions_track_idx").on(table.trackId),
     index("submissions_advisor_token_idx").on(table.advisorApprovalToken),
+    index("submissions_is_published_idx").on(table.isPublished),
     uniqueIndex("submissions_paper_code_unique").on(table.paperCode),
     check(
       "submissions_no_legacy_accepted_status_check",
@@ -457,14 +465,28 @@ export const storedFiles = pgTable(
   (table) => [index("stored_files_submission_idx").on(table.submissionId)]
 );
 
-export const templates = pgTable("templates", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: varchar("name", { length: 255 }).notNull(),
-  description: text("description"),
-  fileKey: varchar("file_key", { length: 1000 }).notNull(),
-  mimeType: varchar("mime_type", { length: 100 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const templates = pgTable(
+  "templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 255 }).notNull(),
+    nameEn: varchar("name_en", { length: 255 }),
+    description: text("description"),
+    descriptionEn: text("description_en"),
+    fileKey: varchar("file_key", { length: 1000 }).notNull(),
+    mimeType: varchar("mime_type", { length: 100 }),
+    isPublic: boolean("is_public").default(false).notNull(),
+    orderIndex: integer("order_index").default(0).notNull(),
+    slug: varchar("slug", { length: 100 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("templates_slug_unique")
+      .on(table.slug)
+      .where(sql`${table.slug} IS NOT NULL`),
+    index("templates_is_public_idx").on(table.isPublic),
+  ]
+);
 
 export const notifications = pgTable(
   "notifications",

@@ -30,6 +30,8 @@ import {
   X,
   Layers,
   Star,
+  Globe,
+  BarChart2,
 } from "lucide-react";
 
 export interface AppShellNavItem {
@@ -63,8 +65,10 @@ const iconMap: Record<string, React.ReactNode> = {
   Users: <Users className="h-5 w-5" />,
   Files: <Files className="h-5 w-5" />,
   BarChart3: <BarChart3 className="h-5 w-5" />,
+  BarChart2: <BarChart2 className="h-5 w-5" />,
   Layers: <Layers className="h-5 w-5" />,
   Star: <Star className="h-5 w-5" />,
+  Globe: <Globe className="h-5 w-5" />,
 };
 
 export function AppShellClient({

@@ -14,6 +14,7 @@ import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
+import { parseScheduledAt } from "@/lib/conference-tz";
 import {
   getPosterPlannerPageData,
   getPosterSessionSettings,
@@ -61,19 +62,6 @@ async function canManagePresentation(
 
   if (!presentation) return false;
   return canManageSubmissionPresentation(currentUser, presentation.submissionId);
-}
-
-function parseScheduledAt(value: string | null | undefined) {
-  if (value == null || value === "") {
-    return { value: null as Date | null };
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return { error: "Invalid scheduledAt" as const };
-  }
-
-  return { value: parsed };
 }
 
 const posterSlotTemplateSchema = z.object({

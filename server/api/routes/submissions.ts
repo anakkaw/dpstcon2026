@@ -42,6 +42,11 @@ import {
 } from "@/server/submission-workflow";
 import { isAcceptedSubmissionStatus, normalizeSubmissionStatus } from "@/lib/submission-status";
 import { advisorApprovalEmail, queueEmail } from "@/server/email";
+import {
+  canPickFileAsEAbstract,
+  canPublishSubmission,
+  publicationPatchOnStatusChange,
+} from "@/server/e-abstract-policy";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -826,7 +831,11 @@ app.post("/:id/withdraw", async (c) => {
 
   const [updated] = await db
     .update(submissions)
-    .set({ status: "WITHDRAWN", updatedAt: new Date() })
+    .set({
+      status: "WITHDRAWN",
+      ...publicationPatchOnStatusChange("WITHDRAWN"),
+      updatedAt: new Date(),
+    })
     .where(eq(submissions.id, id))
     .returning();
 
@@ -1334,6 +1343,164 @@ app.post("/:id/discussion", async (c) => {
     .returning();
 
   return c.json({ discussion: disc }, 201);
+});
+
+// ─── Admin publication endpoints ──────────────────────────────
+// Toggle isPublished + select/upload the public e-abstract file.
+
+const publicationPatchSchema = z
+  .object({
+    isPublished: z.boolean().optional(),
+    eAbstractFileId: z.string().uuid().nullable().optional(),
+  })
+  .refine(
+    (v) => v.isPublished !== undefined || v.eAbstractFileId !== undefined,
+    { message: "No fields to update" }
+  );
+
+app.patch("/:id/publication", async (c) => {
+  const { id } = c.req.param();
+  const currentUser = c.get("user");
+  if (!hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const body = await c.req.json();
+  const parsed = publicationPatchSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation error", details: parsed.error.flatten().fieldErrors },
+      400
+    );
+  }
+
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, id),
+    columns: { id: true, status: true },
+  });
+  if (!submission) return c.json({ error: "Not found" }, 404);
+
+  const publishGuard = canPublishSubmission({
+    currentStatus: submission.status,
+    requestedPublished: parsed.data.isPublished,
+  });
+  if (!publishGuard.ok) {
+    return c.json(
+      { error: "Only ACCEPTED submissions can be published" },
+      400
+    );
+  }
+
+  if (parsed.data.eAbstractFileId) {
+    const [file] = await db
+      .select({
+        kind: storedFiles.kind,
+        mimeType: storedFiles.mimeType,
+        submissionId: storedFiles.submissionId,
+      })
+      .from(storedFiles)
+      .where(eq(storedFiles.id, parsed.data.eAbstractFileId))
+      .limit(1);
+    if (!file) {
+      return c.json({ error: "File not found" }, 404);
+    }
+    const pickGuard = canPickFileAsEAbstract({
+      submissionId: id,
+      fileSubmissionId: file.submissionId,
+      fileKind: file.kind,
+      fileMimeType: file.mimeType,
+    });
+    if (!pickGuard.ok) {
+      const errMsg =
+        pickGuard.reason === "FILE_NOT_OWNED_BY_SUBMISSION"
+          ? "File does not belong to this submission"
+          : pickGuard.reason === "FILE_KIND_NOT_ELIGIBLE"
+          ? "File kind not eligible as e-abstract"
+          : "เอกสาร e-abstract ต้องเป็นไฟล์ PDF";
+      return c.json({ error: errMsg }, 400);
+    }
+  }
+
+  const patch: { isPublished?: boolean; eAbstractFileId?: string | null; updatedAt: Date } = {
+    updatedAt: new Date(),
+  };
+  if (parsed.data.isPublished !== undefined) patch.isPublished = parsed.data.isPublished;
+  if (parsed.data.eAbstractFileId !== undefined) {
+    patch.eAbstractFileId = parsed.data.eAbstractFileId;
+  }
+
+  const [updated] = await db
+    .update(submissions)
+    .set(patch)
+    .where(eq(submissions.id, id))
+    .returning({
+      id: submissions.id,
+      isPublished: submissions.isPublished,
+      eAbstractFileId: submissions.eAbstractFileId,
+    });
+
+  return c.json({ submission: updated });
+});
+
+// POST /:id/e-abstract-upload — request a presigned upload URL for an
+// admin override file. Creates the storedFiles row so the client can
+// reference it after a successful PUT; the client is responsible for
+// calling PATCH /:id/publication with eAbstractFileId to publish it.
+// Rationale: if the R2 PUT fails, the submission still points to its
+// previous file rather than to a half-uploaded one.
+
+const eAbstractUploadSchema = z.object({
+  fileName: z.string().min(1).max(500),
+  mimeType: z.literal("application/pdf"),
+  fileSize: z.number().positive().max(MAX_UPLOAD_SIZE),
+});
+
+app.post("/:id/e-abstract-upload", async (c) => {
+  const { id } = c.req.param();
+  const currentUser = c.get("user");
+  if (!hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const body = await c.req.json();
+  const parsed = eAbstractUploadSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation error", details: parsed.error.flatten().fieldErrors },
+      400
+    );
+  }
+
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, id),
+    columns: { id: true },
+  });
+  if (!submission) return c.json({ error: "Not found" }, 404);
+
+  const { fileName, mimeType, fileSize } = parsed.data;
+  const fileKey = generateFileKey(id, fileName, "e-abstract");
+
+  let uploadUrl: string;
+  try {
+    uploadUrl = await getUploadUrl(fileKey, mimeType);
+  } catch {
+    return c.json({ error: "File storage not configured" }, 503);
+  }
+
+  const [file] = await db
+    .insert(storedFiles)
+    .values({
+      originalName: fileName,
+      storedKey: fileKey,
+      mimeType,
+      size: fileSize,
+      kind: "E_ABSTRACT",
+      submissionId: id,
+      uploadedById: currentUser.id,
+    })
+    .returning();
+
+  return c.json({ file, uploadUrl }, 201);
 });
 
 export { app as submissionRoutes };

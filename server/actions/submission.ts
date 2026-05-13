@@ -8,6 +8,7 @@ import { requireActiveServerAuthContext } from "@/server/auth-helpers";
 import { advisorApprovalEmail, queueEmail, reviewAssignmentEmail } from "@/server/email";
 import { hasRole } from "@/lib/permissions";
 import { canAuthorEditSubmission, getSubmissionValidationError } from "@/server/submission-workflow";
+import { publicationPatchOnStatusChange } from "@/server/e-abstract-policy";
 
 function ensureAuthorRole(user: { roles?: string[]; role?: string }) {
   if (!hasRole(user, "AUTHOR")) {
@@ -266,7 +267,11 @@ export async function withdrawPaper(id: string) {
 
   const [updated] = await db
     .update(submissions)
-    .set({ status: "WITHDRAWN", updatedAt: new Date() })
+    .set({
+      status: "WITHDRAWN",
+      ...publicationPatchOnStatusChange("WITHDRAWN"),
+      updatedAt: new Date(),
+    })
     .where(eq(submissions.id, id))
     .returning();
 

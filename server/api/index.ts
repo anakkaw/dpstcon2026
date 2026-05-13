@@ -16,6 +16,7 @@ import { trackRoutes } from "./routes/tracks";
 import { activateRoutes } from "./routes/activate";
 import { emailLogRoutes } from "./routes/email-logs";
 import { settingsRoutes } from "./routes/settings";
+import { publicRoutes } from "./routes/public";
 
 const app = new OpenAPIHono().basePath("/api");
 
@@ -54,6 +55,7 @@ app.use("/*", csrf({
   },
 }));
 
+app.route("/public", publicRoutes);
 app.route("/submissions", submissionRoutes);
 app.route("/reviews", reviewRoutes);
 app.route("/users", userRoutes);

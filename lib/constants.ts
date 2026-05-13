@@ -34,6 +34,9 @@ export const NAV_ITEMS = {
     { href: "/admin/authors", label: "nav.authorStatus", icon: "BarChart2" },
     { href: "/admin/users", label: "nav.userManagement", icon: "Users" },
     { href: "/admin/tracks", label: "nav.trackManagement", icon: "Layers" },
+    { href: "/admin/publications", label: "nav.publications", icon: "Globe" },
+    { href: "/admin/conference-docs", label: "nav.conferenceDocs", icon: "Files" },
+    { href: "/admin/conference-info", label: "nav.conferenceInfo", icon: "Calendar" },
   ],
   PROGRAM_CHAIR: [
     { href: "/dashboard", label: "nav.dashboard", icon: "LayoutDashboard" },
