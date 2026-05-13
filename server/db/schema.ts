@@ -283,7 +283,6 @@ export const submissions = pgTable(
       { onDelete: "set null" }
     ),
     submittedAt: timestamp("submitted_at"),
-    resubmittedAt: timestamp("resubmitted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -359,6 +358,9 @@ export const reviews = pgTable(
     commentsToAuthor: text("comments_to_author"),
     commentsToChair: text("comments_to_chair"),
     recommendation: reviewRecommendationEnum("recommendation"),
+    // Revision round the review was written for. 1 = original submission,
+    // 2 = first revision, 3 = second revision, etc.
+    round: integer("round").default(1).notNull(),
     completedAt: timestamp("completed_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -366,6 +368,7 @@ export const reviews = pgTable(
   (table) => [
     index("reviews_submission_idx").on(table.submissionId),
     index("reviews_reviewer_idx").on(table.reviewerId),
+    index("reviews_submission_round_idx").on(table.submissionId, table.round),
   ]
 );
 
@@ -387,6 +390,58 @@ export const decisions = pgTable(
   (table) => [
     index("decisions_submission_idx").on(table.submissionId),
     uniqueIndex("decisions_submission_unique").on(table.submissionId),
+  ]
+);
+
+// Append-only audit log of every decision the admin records for a submission.
+// The `decisions` table still holds the *current* decision (one row per
+// submission), but every insert/update there also appends a row here so the
+// timeline can show all CONDITIONAL_ACCEPT → final-decision cycles.
+export const decisionHistory = pgTable(
+  "decision_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .references(() => submissions.id, { onDelete: "cascade" })
+      .notNull(),
+    decidedBy: text("decided_by")
+      .references(() => user.id, { onDelete: "cascade" })
+      .notNull(),
+    outcome: decisionOutcomeEnum("outcome").notNull(),
+    comments: text("comments"),
+    conditions: text("conditions"),
+    round: integer("round").default(1).notNull(),
+    decidedAt: timestamp("decided_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("decision_history_submission_idx").on(table.submissionId),
+    index("decision_history_submission_decided_idx").on(
+      table.submissionId,
+      table.decidedAt
+    ),
+  ]
+);
+
+// One row per resubmit. Read together with the submission's first
+// `submittedAt` to enumerate the author's complete submission history.
+export const submissionResubmissions = pgTable(
+  "submission_resubmissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .references(() => submissions.id, { onDelete: "cascade" })
+      .notNull(),
+    // The round the author is submitting FOR (i.e. round 2 = first revision
+    // submitted after the first CONDITIONAL_ACCEPT).
+    round: integer("round").notNull(),
+    resubmittedAt: timestamp("resubmitted_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("submission_resubmissions_submission_idx").on(table.submissionId),
+    uniqueIndex("submission_resubmissions_submission_round_unique").on(
+      table.submissionId,
+      table.round
+    ),
   ]
 );
 

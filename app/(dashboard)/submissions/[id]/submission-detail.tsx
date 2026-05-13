@@ -94,7 +94,6 @@ interface Props {
     advisorApprovalStatus: string | null;
     rebuttalText: string | null;
     submittedAt: Date | null;
-    resubmittedAt: Date | null;
     createdAt: Date;
     author: { id: string; name: string; email: string; affiliation: string | null };
     track: { id: string; name: string } | null;
@@ -105,6 +104,7 @@ interface Props {
       commentsToAuthor: string | null;
       commentsToChair: string | null;
       completedAt: Date | null;
+      round: number;
       reviewer: { id: string; name: string };
     }[];
     discussions: {
@@ -137,10 +137,22 @@ interface Props {
     decidedAt: string;
   } | null;
   /**
-   * Timestamp of the CONDITIONAL_ACCEPT decision, kept even after the final
-   * decision overwrites the row's outcome — used to bucket files into rounds.
+   * Append-only audit log of every admin decision (oldest first). Used by the
+   * timeline so all CONDITIONAL_ACCEPT → final-decision cycles stay visible
+   * even after the current `decisions` row is updated in place.
    */
-  revisionRequestedAt?: string | null;
+  decisionHistory?: {
+    outcome: string;
+    comments: string | null;
+    conditions: string | null;
+    round: number;
+    decidedAt: string;
+  }[];
+  /** One row per author resubmit. Ordered by round ascending. */
+  resubmissions?: {
+    round: number;
+    resubmittedAt: string;
+  }[];
   presentations?: {
     type: string;
     status: string;
@@ -168,7 +180,9 @@ interface Props {
 export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
   canManageSubmission = false,
-  reviewCounts, canMakeDecision, decision, revisionRequestedAt = null, presentations, criteriaByType, deadlines,
+  reviewCounts, canMakeDecision, decision,
+  decisionHistory = [], resubmissions = [],
+  presentations, criteriaByType, deadlines,
   isAssignedReviewer, reviewerAssignmentId, reviewerAssignmentStatus, reviewerAssignmentAssignedAt,
   assignedReviewerIds = [], lastAdvisorEmail, submissionListHref = "/submissions",
 }: Props) {
@@ -186,6 +200,18 @@ export function SubmissionDetail({
   // Admin + assigned-reviewer get extra metadata on files (upload date, round badge).
   // Authors only see the basics.
   const canViewRevisionMeta = isAdmin || !!isAssignedReviewer;
+
+  // Round cutoffs derived from decision history (oldest → newest). Each
+  // CONDITIONAL_ACCEPT bumps the round for anything uploaded after it.
+  const revisionCutoffs = canViewRevisionMeta
+    ? decisionHistory
+        .filter((d) => d.outcome === "CONDITIONAL_ACCEPT")
+        .map((d) => new Date(d.decidedAt).toISOString())
+    : [];
+  const latestResubmittedAt =
+    resubmissions.length > 0
+      ? resubmissions[resubmissions.length - 1].resubmittedAt
+      : null;
   const canManageOwnSubmission = isOwner && isAuthor;
   const canDeleteFiles = isAdmin || (canManageOwnSubmission && submission.status === "DRAFT");
   const canDeleteSubmission = currentUserRoles.includes("ADMIN");
@@ -1415,7 +1441,7 @@ export function SubmissionDetail({
                     canDelete={false}
                     currentUserId={currentUserId}
                     showUploadedAt={canViewRevisionMeta}
-                    revisionCutoff={canViewRevisionMeta ? revisionRequestedAt : null}
+                    revisionCutoffs={revisionCutoffs}
                   />
                 </div>
               )}
@@ -1835,8 +1861,8 @@ export function SubmissionDetail({
           <div className="text-xs text-ink-muted pt-1">
             {t("detail.createdAt")} {formatDateTime(submission.createdAt)}
             {submission.submittedAt && ` — ${t("detail.submittedAt")} ${formatDateTime(submission.submittedAt)}`}
-            {canViewRevisionMeta && submission.resubmittedAt && (
-              <> — {t("detail.resubmittedAt")} {formatDateTime(submission.resubmittedAt)}</>
+            {canViewRevisionMeta && latestResubmittedAt && (
+              <> — {t("detail.resubmittedAt")} {formatDateTime(latestResubmittedAt)}</>
             )}
           </div>
         </div>
@@ -1846,25 +1872,49 @@ export function SubmissionDetail({
 
       {/* Revision history timeline — visible to admin/track-head + assigned reviewers. */}
       {canViewRevisionMeta && (() => {
-        type Event = { at: Date; labelKey: Parameters<typeof t>[0]; tone: "neutral" | "info" | "warning" | "success" | "danger"; detail?: string };
+        type Event = {
+          at: Date;
+          label: string;
+          tone: "neutral" | "info" | "warning" | "success" | "danger";
+          detail?: string;
+        };
         const events: Event[] = [];
-        events.push({ at: submission.createdAt, labelKey: "detail.timelineCreated", tone: "neutral" });
+        events.push({ at: submission.createdAt, label: t("detail.timelineCreated"), tone: "neutral" });
         if (submission.submittedAt) {
-          events.push({ at: submission.submittedAt, labelKey: "detail.timelineSubmitted", tone: "info" });
-        }
-        if (revisionRequestedAt) {
-          events.push({ at: new Date(revisionRequestedAt), labelKey: "detail.timelineRevisionRequested", tone: "warning" });
-        }
-        if (submission.resubmittedAt) {
-          events.push({ at: submission.resubmittedAt, labelKey: "detail.timelineResubmitted", tone: "info" });
-        }
-        if (decision && decision.outcome !== "CONDITIONAL_ACCEPT") {
-          const outcomeLabel = RECOMMENDATION_LABELS[decision.outcome] || decision.outcome;
           events.push({
-            at: new Date(decision.decidedAt),
-            labelKey: "detail.timelineDecision",
-            tone: decision.outcome === "ACCEPT" ? "success" : decision.outcome === "REJECT" ? "danger" : "warning",
-            detail: outcomeLabel,
+            at: submission.submittedAt,
+            label: t("detail.timelineSubmittedRoundN", { n: 1 }),
+            tone: "info",
+          });
+        }
+        for (const dh of decisionHistory) {
+          const at = new Date(dh.decidedAt);
+          if (dh.outcome === "CONDITIONAL_ACCEPT") {
+            events.push({
+              at,
+              label: t("detail.timelineRevisionRequestedRoundN", { n: dh.round }),
+              tone: "warning",
+              detail: dh.conditions || dh.comments || undefined,
+            });
+          } else {
+            events.push({
+              at,
+              label: t("detail.timelineDecisionRoundN", { n: dh.round }),
+              tone:
+                dh.outcome === "ACCEPT"
+                  ? "success"
+                  : dh.outcome === "REJECT"
+                    ? "danger"
+                    : "warning",
+              detail: RECOMMENDATION_LABELS[dh.outcome] || dh.outcome,
+            });
+          }
+        }
+        for (const r of resubmissions) {
+          events.push({
+            at: new Date(r.resubmittedAt),
+            label: t("detail.timelineResubmittedRoundN", { n: r.round }),
+            tone: "info",
           });
         }
         events.sort((a, b) => a.at.getTime() - b.at.getTime());
@@ -1893,7 +1943,7 @@ export function SubmissionDetail({
                       aria-hidden
                     />
                     <p className="text-sm font-medium text-ink">
-                      {t(ev.labelKey)}
+                      {ev.label}
                       {ev.detail && <span className="ml-1.5 text-ink-muted">— {ev.detail}</span>}
                     </p>
                     <p className="text-xs text-ink-muted">{formatDateTime(ev.at)}</p>
@@ -1922,7 +1972,7 @@ export function SubmissionDetail({
             currentUserId={currentUserId}
             onDeleteComplete={() => router.refresh()}
             showUploadedAt={canViewRevisionMeta}
-            revisionCutoff={canViewRevisionMeta ? revisionRequestedAt : null}
+            revisionCutoffs={revisionCutoffs}
           />
 
           {canManageOwnSubmission && submission.status === "DRAFT" && (
@@ -1964,13 +2014,31 @@ export function SubmissionDetail({
               <ReviewProgress completed={reviewCounts.completed} total={reviewCounts.total} />
             )}
 
-            {submission.reviews.length > 0 && (
+            {submission.reviews.length > 0 && (() => {
+              // Stable per-reviewer index so the same reviewer keeps the same
+              // "Reviewer N" label across rounds.
+              const reviewerIndex = new Map<string, number>();
+              for (const r of submission.reviews) {
+                if (!reviewerIndex.has(r.reviewer.id)) {
+                  reviewerIndex.set(r.reviewer.id, reviewerIndex.size + 1);
+                }
+              }
+              // Group: round 1 first, then round 2, etc. Latest round opens by default.
+              const sorted = [...submission.reviews].sort((a, b) => {
+                if (a.round !== b.round) return a.round - b.round;
+                return (reviewerIndex.get(a.reviewer.id) ?? 0) - (reviewerIndex.get(b.reviewer.id) ?? 0);
+              });
+              const maxRound = Math.max(1, ...sorted.map((r) => r.round));
+              return (
               <div className="space-y-3">
-                {submission.reviews.map((review, i) => (
+                {sorted.map((review) => {
+                  const reviewerN = reviewerIndex.get(review.reviewer.id) ?? 0;
+                  const roundLabel = t("detail.reviewRoundLabel", { n: review.round });
+                  return (
                   <Collapsible
                     key={review.id}
-                    title={`Reviewer ${i + 1}${isAdmin ? ` (${displayNameTh(review.reviewer)})` : ""} ${review.completedAt ? `— ${RECOMMENDATION_LABELS[review.recommendation ?? ""] || t("detail.reviewed")}` : `— ${t("detail.notReviewed")}`}`}
-                    defaultOpen={i === 0}
+                    title={`${roundLabel} · Reviewer ${reviewerN}${isAdmin ? ` (${displayNameTh(review.reviewer)})` : ""} ${review.completedAt ? `— ${RECOMMENDATION_LABELS[review.recommendation ?? ""] || t("detail.reviewed")}` : `— ${t("detail.notReviewed")}`}`}
+                    defaultOpen={review.round === maxRound}
                   >
                     {review.completedAt ? (
                       <div className="space-y-3">
@@ -2018,9 +2086,11 @@ export function SubmissionDetail({
                       </p>
                     )}
                   </Collapsible>
-                ))}
+                  );
+                })}
               </div>
-            )}
+              );
+            })()}
           </CardBody>
         </Card>
       )}

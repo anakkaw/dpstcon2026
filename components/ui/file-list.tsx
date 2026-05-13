@@ -29,11 +29,11 @@ interface FileListProps {
   /** When true, display each file's upload timestamp (for admin/reviewer views). */
   showUploadedAt?: boolean;
   /**
-   * Timestamp (ISO or Date) of the CONDITIONAL_ACCEPT decision. Files uploaded
-   * after this timestamp are tagged "Round 2"; earlier ones are "Round 1".
-   * Pass null/undefined to hide round badges entirely.
+   * Timestamps (ISO or Date) of each CONDITIONAL_ACCEPT decision, oldest first.
+   * Round number for a file = 1 + (cutoffs less than file.uploadedAt). Pass an
+   * empty array (the default) to hide round badges entirely.
    */
-  revisionCutoff?: string | Date | null;
+  revisionCutoffs?: Array<string | Date>;
 }
 
 const KIND_KEYS: Record<string, string> = {
@@ -70,7 +70,7 @@ export function FileList({
   currentUserId,
   onDeleteComplete,
   showUploadedAt = false,
-  revisionCutoff = null,
+  revisionCutoffs = [],
 }: FileListProps) {
   const { t } = useI18n();
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -79,12 +79,10 @@ export function FileList({
   const [previewFile, setPreviewFile] = useState<StoredFile | null>(null);
   const [error, setError] = useState("");
 
-  const cutoffMs = (() => {
-    if (!revisionCutoff) return null;
-    const d = revisionCutoff instanceof Date ? revisionCutoff : new Date(revisionCutoff);
-    const ms = d.getTime();
-    return Number.isNaN(ms) ? null : ms;
-  })();
+  const cutoffsMs = revisionCutoffs
+    .map((c) => (c instanceof Date ? c : new Date(c)).getTime())
+    .filter((ms) => !Number.isNaN(ms))
+    .sort((a, b) => a - b);
 
   function isPreviewable(file: StoredFile) {
     if (file.mimeType === "application/pdf") return true;
@@ -156,8 +154,11 @@ export function FileList({
       {files.map((file) => {
         const uploadedMs = new Date(file.uploadedAt).getTime();
         const showRoundBadge =
-          cutoffMs !== null && ROUND_BADGEABLE_KINDS.has(file.kind) && !Number.isNaN(uploadedMs);
-        const isRound2 = showRoundBadge && uploadedMs > cutoffMs!;
+          cutoffsMs.length > 0 && ROUND_BADGEABLE_KINDS.has(file.kind) && !Number.isNaN(uploadedMs);
+        // Round = 1 + (number of cutoffs strictly before uploadedAt).
+        const roundNumber = showRoundBadge
+          ? 1 + cutoffsMs.filter((c) => uploadedMs > c).length
+          : 1;
         return (
         <div
           key={file.id}
@@ -172,12 +173,12 @@ export function FileList({
                   <span
                     className={cn(
                       "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                      isRound2
-                        ? "bg-amber-100 text-amber-800"
-                        : "bg-slate-200 text-slate-700"
+                      roundNumber === 1
+                        ? "bg-slate-200 text-slate-700"
+                        : "bg-amber-100 text-amber-800"
                     )}
                   >
-                    {isRound2 ? t("fileUpload.round2") : t("fileUpload.round1")}
+                    {t("fileUpload.roundN", { n: roundNumber })}
                   </span>
                 )}
               </div>

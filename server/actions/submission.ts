@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/server/db";
-import { submissions, reviewAssignments, user as userTable, decisions, storedFiles } from "@/server/db/schema";
-import { eq, and, inArray, desc, gt } from "drizzle-orm";
+import { submissions, reviewAssignments, user as userTable, decisions, storedFiles, submissionResubmissions } from "@/server/db/schema";
+import { eq, and, inArray, desc, gt, count } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireActiveServerAuthContext } from "@/server/auth-helpers";
 import { advisorApprovalEmail, queueEmail, reviewAssignmentEmail } from "@/server/email";
@@ -220,11 +220,27 @@ export async function resubmitPaper(id: string) {
     .update(submissions)
     .set({
       status: "UNDER_REVIEW",
-      resubmittedAt: now,
       updatedAt: now,
     })
     .where(eq(submissions.id, id))
     .returning();
+
+  // Append to resubmission history. Round N+1 where N = number of prior
+  // resubmits — so the first resubmit is round 2.
+  const [{ priorResubmits }] = await db
+    .select({ priorResubmits: count() })
+    .from(submissionResubmissions)
+    .where(eq(submissionResubmissions.submissionId, id));
+  const newRound = Number(priorResubmits) + 2;
+  await db
+    .insert(submissionResubmissions)
+    .values({ submissionId: id, round: newRound, resubmittedAt: now })
+    .onConflictDoNothing({
+      target: [
+        submissionResubmissions.submissionId,
+        submissionResubmissions.round,
+      ],
+    });
 
   // Notify reviewers that a revised manuscript is ready for round-2 review
   if (reopened.length > 0) {

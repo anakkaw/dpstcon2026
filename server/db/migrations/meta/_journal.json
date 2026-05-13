@@ -127,6 +127,13 @@
       "when": 1779148800000,
       "tag": "0017_resubmitted_at",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779235200000,
+      "tag": "0018_revision_history",
+      "breakpoints": true
     }
   ]
 }

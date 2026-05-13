@@ -5,11 +5,13 @@ import {
   reviewAssignments,
   submissions,
   decisions,
+  decisionHistory,
+  submissionResubmissions,
   presentationAssignments,
   user,
   userRoles,
 } from "@/server/db/schema";
-import { eq, and, inArray, isNotNull } from "drizzle-orm";
+import { eq, and, inArray, isNotNull, count } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -432,6 +434,14 @@ app.post("/reviews", async (c) => {
     return c.json({ error: "มีรีวิวสำหรับรอบการพิจารณานี้แล้ว" }, 409);
   }
 
+  // Round = 1 + how many times the author has already resubmitted. The
+  // reviewer is writing this review for whatever the latest manuscript is.
+  const [{ priorResubmits }] = await db
+    .select({ priorResubmits: count() })
+    .from(submissionResubmissions)
+    .where(eq(submissionResubmissions.submissionId, data.submissionId));
+  const reviewRound = Number(priorResubmits) + 1;
+
   const [review] = await db
     .insert(reviews)
     .values({
@@ -441,6 +451,7 @@ app.post("/reviews", async (c) => {
       commentsToAuthor: data.commentsToAuthor,
       commentsToChair: data.commentsToChair,
       recommendation: data.recommendation,
+      round: reviewRound,
       completedAt: new Date(),
     })
     .returning();
@@ -629,6 +640,22 @@ app.post("/decisions", async (c) => {
     if (!decision) {
       return { error: "บทความนี้มีการตัดสินแล้ว", status: 409 as const };
     }
+
+    // Append to decision history (one row per decision event, never updated).
+    // Round = 1 + how many times the author has already resubmitted.
+    const [{ priorResubmits }] = await db
+      .select({ priorResubmits: count() })
+      .from(submissionResubmissions)
+      .where(eq(submissionResubmissions.submissionId, data.submissionId));
+    await db.insert(decisionHistory).values({
+      submissionId: data.submissionId,
+      decidedBy: decisionValues.decidedBy,
+      outcome: decisionValues.outcome,
+      comments: decisionValues.comments,
+      conditions: decisionValues.conditions,
+      round: Number(priorResubmits) + 1,
+      decidedAt: decisionValues.decidedAt,
+    });
 
     const newStatus = getDecisionSubmissionStatus(data.outcome);
 

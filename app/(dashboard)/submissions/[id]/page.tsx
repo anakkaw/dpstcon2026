@@ -5,13 +5,15 @@ import {
   user,
   storedFiles,
   decisions,
+  decisionHistory,
+  submissionResubmissions,
   presentationAssignments,
   reviewAssignments,
   settings,
   userRoles,
   outgoingEmails,
 } from "@/server/db/schema";
-import { eq, sql, and, inArray, desc, count } from "drizzle-orm";
+import { eq, sql, and, inArray, desc, asc, count } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasTrackRole, hasRole } from "@/lib/permissions";
@@ -121,8 +123,18 @@ export default async function SubmissionDetailPage({
     }));
   }
 
-  // Fetch all supplementary data in parallel (was 7 sequential queries)
-  const [reviewers, files, assignmentRows, decision, presRows, deadlineRows, lastAdvisorEmailRows] = await Promise.all([
+  // Fetch all supplementary data in parallel
+  const [
+    reviewers,
+    files,
+    assignmentRows,
+    decision,
+    presRows,
+    deadlineRows,
+    lastAdvisorEmailRows,
+    decisionHistoryRows,
+    resubmissionRows,
+  ] = await Promise.all([
     // Reviewers list (only needed for admin on SUBMITTED/UNDER_REVIEW status)
     canManageSubmission && ["SUBMITTED", "UNDER_REVIEW"].includes(submissionStatus)
       ? (async () => {
@@ -241,6 +253,27 @@ export default async function SubmissionDetailPage({
           .orderBy(desc(outgoingEmails.createdAt))
           .limit(1)
       : Promise.resolve([] as Array<{ status: string; sentAt: Date | null; error: string | null; createdAt: Date }>),
+    // Decision history (append-only audit log of every admin decision)
+    db
+      .select({
+        outcome: decisionHistory.outcome,
+        comments: decisionHistory.comments,
+        conditions: decisionHistory.conditions,
+        round: decisionHistory.round,
+        decidedAt: decisionHistory.decidedAt,
+      })
+      .from(decisionHistory)
+      .where(eq(decisionHistory.submissionId, id))
+      .orderBy(asc(decisionHistory.decidedAt)),
+    // Resubmission history (one row per author resubmit)
+    db
+      .select({
+        round: submissionResubmissions.round,
+        resubmittedAt: submissionResubmissions.resubmittedAt,
+      })
+      .from(submissionResubmissions)
+      .where(eq(submissionResubmissions.submissionId, id))
+      .orderBy(asc(submissionResubmissions.round)),
   ]);
 
   const presentationTypes = Array.from(
@@ -364,11 +397,17 @@ export default async function SubmissionDetailPage({
         conditions: visibleDecision.conditions,
         decidedAt: visibleDecision.decidedAt.toISOString(),
       } : null}
-      revisionRequestedAt={
-        decision?.outcome === "CONDITIONAL_ACCEPT"
-          ? decision.decidedAt.toISOString()
-          : null
-      }
+      decisionHistory={decisionHistoryRows.map((row) => ({
+        outcome: row.outcome,
+        comments: row.comments,
+        conditions: row.conditions,
+        round: row.round,
+        decidedAt: row.decidedAt.toISOString(),
+      }))}
+      resubmissions={resubmissionRows.map((row) => ({
+        round: row.round,
+        resubmittedAt: row.resubmittedAt.toISOString(),
+      }))}
       presentations={presRows.map((p) => ({
         type: p.type,
         status: p.status,
