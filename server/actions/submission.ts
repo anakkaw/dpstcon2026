@@ -2,12 +2,13 @@
 
 import { db } from "@/server/db";
 import { submissions, reviewAssignments, user as userTable, decisions, storedFiles, submissionResubmissions } from "@/server/db/schema";
-import { eq, and, inArray, desc, gt, count } from "drizzle-orm";
+import { eq, and, inArray, desc, gt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireActiveServerAuthContext } from "@/server/auth-helpers";
 import { advisorApprovalEmail, queueEmail, reviewAssignmentEmail } from "@/server/email";
 import { hasRole } from "@/lib/permissions";
 import { canAuthorEditSubmission, getSubmissionValidationError } from "@/server/submission-workflow";
+import { getCurrentSubmissionRound } from "@/server/submission-rounds";
 import { publicationPatchOnStatusChange } from "@/server/e-abstract-policy";
 
 function ensureAuthorRole(user: { roles?: string[]; role?: string }) {
@@ -225,16 +226,12 @@ export async function resubmitPaper(id: string) {
     .where(eq(submissions.id, id))
     .returning();
 
-  // Append to resubmission history. Round N+1 where N = number of prior
-  // resubmits — so the first resubmit is round 2.
-  const [{ priorResubmits }] = await db
-    .select({ priorResubmits: count() })
-    .from(submissionResubmissions)
-    .where(eq(submissionResubmissions.submissionId, id));
-  const newRound = Number(priorResubmits) + 2;
+  // Append to resubmission history. The round we're starting now is
+  // (current round) + 1 — current round is the one we're leaving behind.
+  const currentRound = await getCurrentSubmissionRound(id);
   await db
     .insert(submissionResubmissions)
-    .values({ submissionId: id, round: newRound, resubmittedAt: now })
+    .values({ submissionId: id, round: currentRound + 1, resubmittedAt: now })
     .onConflictDoNothing({
       target: [
         submissionResubmissions.submissionId,

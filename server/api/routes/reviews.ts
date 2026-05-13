@@ -6,12 +6,12 @@ import {
   submissions,
   decisions,
   decisionHistory,
-  submissionResubmissions,
   presentationAssignments,
   user,
   userRoles,
 } from "@/server/db/schema";
-import { eq, and, inArray, isNotNull, count } from "drizzle-orm";
+import { eq, and, inArray, isNotNull } from "drizzle-orm";
+import { getCurrentSubmissionRound } from "@/server/submission-rounds";
 import { authMiddleware } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
@@ -434,13 +434,8 @@ app.post("/reviews", async (c) => {
     return c.json({ error: "มีรีวิวสำหรับรอบการพิจารณานี้แล้ว" }, 409);
   }
 
-  // Round = 1 + how many times the author has already resubmitted. The
-  // reviewer is writing this review for whatever the latest manuscript is.
-  const [{ priorResubmits }] = await db
-    .select({ priorResubmits: count() })
-    .from(submissionResubmissions)
-    .where(eq(submissionResubmissions.submissionId, data.submissionId));
-  const reviewRound = Number(priorResubmits) + 1;
+  // The reviewer is writing for whatever the latest manuscript is.
+  const reviewRound = await getCurrentSubmissionRound(data.submissionId);
 
   const [review] = await db
     .insert(reviews)
@@ -642,20 +637,23 @@ app.post("/decisions", async (c) => {
     }
 
     // Append to decision history (one row per decision event, never updated).
-    // Round = 1 + how many times the author has already resubmitted.
-    const [{ priorResubmits }] = await db
-      .select({ priorResubmits: count() })
-      .from(submissionResubmissions)
-      .where(eq(submissionResubmissions.submissionId, data.submissionId));
-    await db.insert(decisionHistory).values({
-      submissionId: data.submissionId,
-      decidedBy: decisionValues.decidedBy,
-      outcome: decisionValues.outcome,
-      comments: decisionValues.comments,
-      conditions: decisionValues.conditions,
-      round: Number(priorResubmits) + 1,
-      decidedAt: decisionValues.decidedAt,
-    });
+    // onConflictDoNothing guards against the UPDATE branch re-running on the
+    // same `decided_at` — see decision_history_submission_decided_unique.
+    const decisionRound = await getCurrentSubmissionRound(data.submissionId);
+    await db
+      .insert(decisionHistory)
+      .values({
+        submissionId: data.submissionId,
+        decidedBy: decisionValues.decidedBy,
+        outcome: decisionValues.outcome,
+        comments: decisionValues.comments,
+        conditions: decisionValues.conditions,
+        round: decisionRound,
+        decidedAt: decisionValues.decidedAt,
+      })
+      .onConflictDoNothing({
+        target: [decisionHistory.submissionId, decisionHistory.decidedAt],
+      });
 
     const newStatus = getDecisionSubmissionStatus(data.outcome);
 

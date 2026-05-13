@@ -415,7 +415,11 @@ export const decisionHistory = pgTable(
   },
   (table) => [
     index("decision_history_submission_idx").on(table.submissionId),
-    index("decision_history_submission_decided_idx").on(
+    // Guards against the decision API appending duplicate rows when the
+    // current `decisions` row is UPDATEd in place (admin re-decides with the
+    // same timestamp). The decided_at is monotonic from `new Date()` so the
+    // (submission, decided_at) pair is effectively the natural key.
+    uniqueIndex("decision_history_submission_decided_unique").on(
       table.submissionId,
       table.decidedAt
     ),

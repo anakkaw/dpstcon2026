@@ -105,7 +105,16 @@ interface Props {
       commentsToChair: string | null;
       completedAt: Date | null;
       round: number;
-      reviewer: { id: string; name: string };
+      reviewer: {
+        id: string;
+        name: string;
+        prefixTh?: string | null;
+        firstNameTh?: string | null;
+        lastNameTh?: string | null;
+        prefixEn?: string | null;
+        firstNameEn?: string | null;
+        lastNameEn?: string | null;
+      };
     }[];
     discussions: {
       id: string;
@@ -201,17 +210,21 @@ export function SubmissionDetail({
   // Authors only see the basics.
   const canViewRevisionMeta = isAdmin || !!isAssignedReviewer;
 
-  // Round cutoffs derived from decision history (oldest → newest). Each
-  // CONDITIONAL_ACCEPT bumps the round for anything uploaded after it.
+  // Round cutoffs derived from the author's resubmits (oldest → newest). A
+  // file is "round N" if it was uploaded after the (N-1)th resubmit. We
+  // deliberately use resubmit timestamps (author actions) instead of
+  // decision timestamps (admin actions) so the badge reflects which
+  // submission cycle the file belongs to — matching the author's intent.
   const revisionCutoffs = canViewRevisionMeta
-    ? decisionHistory
-        .filter((d) => d.outcome === "CONDITIONAL_ACCEPT")
-        .map((d) => new Date(d.decidedAt).toISOString())
+    ? resubmissions.map((r) => r.resubmittedAt)
     : [];
   const latestResubmittedAt =
     resubmissions.length > 0
       ? resubmissions[resubmissions.length - 1].resubmittedAt
       : null;
+  // Which round the reviewer is currently writing FOR. Matches the server-side
+  // logic in routes/reviews.ts (round = priorResubmits + 1).
+  const currentReviewRound = resubmissions.length + 1;
   const canManageOwnSubmission = isOwner && isAuthor;
   const canDeleteFiles = isAdmin || (canManageOwnSubmission && submission.status === "DRAFT");
   const canDeleteSubmission = currentUserRoles.includes("ADMIN");
@@ -1024,14 +1037,14 @@ export function SubmissionDetail({
           <div className="min-w-0 flex-1">
             <p className="font-medium text-ink">
               {isRound2Active
-                ? t("detail.workflowRound2Title")
+                ? t("detail.workflowNewRoundTitle", { n: currentReviewRound })
                 : myCompletedReview
                   ? t("detail.workflowStep2Title")
                   : t("detail.workflowStep1Title")}
             </p>
             <p className="text-xs text-ink-muted">
               {isRound2Active
-                ? t("detail.workflowRound2Desc")
+                ? t("detail.workflowNewRoundDesc", { n: currentReviewRound })
                 : myCompletedReview
                   ? t("detail.workflowStep2Desc")
                   : t("detail.workflowStep1Desc")}
@@ -1450,14 +1463,18 @@ export function SubmissionDetail({
         );
       })()}
 
-      {/* Round 2 banner — prompts reviewer to re-evaluate the revised manuscript */}
+      {/* New-round banner — prompts the reviewer to re-evaluate the revised manuscript. */}
       {isRound2Active && !editReviewMode && (
         <Alert tone="info">
           <div className="flex items-start gap-2">
             <RotateCcw className="h-4 w-4 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-semibold">{t("reviewForm.round2Title")}</p>
-              <p className="mt-0.5 text-xs">{t("reviewForm.round2Desc")}</p>
+              <p className="font-semibold">
+                {t("reviewForm.newRoundTitle", { n: currentReviewRound })}
+              </p>
+              <p className="mt-0.5 text-xs">
+                {t("reviewForm.newRoundDesc", { n: currentReviewRound })}
+              </p>
             </div>
           </div>
         </Alert>

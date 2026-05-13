@@ -51,7 +51,20 @@ export default async function SubmissionDetailPage({
       track: { columns: { id: true, name: true } },
       coAuthors: true,
       reviews: {
-        with: { reviewer: { columns: { id: true, name: true } } },
+        with: {
+          reviewer: {
+            columns: {
+              id: true,
+              name: true,
+              prefixTh: true,
+              firstNameTh: true,
+              lastNameTh: true,
+              prefixEn: true,
+              firstNameEn: true,
+              lastNameEn: true,
+            },
+          },
+        },
       },
       discussions: {
         with: { author: { columns: { id: true, name: true } } },
@@ -116,11 +129,31 @@ export default async function SubmissionDetailPage({
     })
   ) {
     filteredDiscussions = submission.discussions.filter((d) => d.visibility === "AUTHOR_VISIBLE");
-    filteredReviews = submission.reviews.map((r) => ({
-      ...r,
-      reviewer: { id: "", name: "" },
-      commentsToChair: null,
-    }));
+    // Redact reviewer identity but keep a stable anonymous id per reviewer so
+    // the author still sees "Reviewer 1", "Reviewer 2" consistently across
+    // rounds. A single empty id would collapse every reviewer into one.
+    const anonIdByRealId = new Map<string, string>();
+    filteredReviews = submission.reviews.map((r) => {
+      let anonId = anonIdByRealId.get(r.reviewer.id);
+      if (!anonId) {
+        anonId = `anon-${anonIdByRealId.size + 1}`;
+        anonIdByRealId.set(r.reviewer.id, anonId);
+      }
+      return {
+        ...r,
+        reviewer: {
+          id: anonId,
+          name: "",
+          prefixTh: null,
+          firstNameTh: null,
+          lastNameTh: null,
+          prefixEn: null,
+          firstNameEn: null,
+          lastNameEn: null,
+        },
+        commentsToChair: null,
+      };
+    });
   }
 
   // Fetch all supplementary data in parallel
