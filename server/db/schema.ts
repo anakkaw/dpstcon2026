@@ -283,6 +283,7 @@ export const submissions = pgTable(
       { onDelete: "set null" }
     ),
     submittedAt: timestamp("submitted_at"),
+    resubmittedAt: timestamp("resubmitted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

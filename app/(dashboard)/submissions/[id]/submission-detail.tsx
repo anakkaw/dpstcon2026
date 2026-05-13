@@ -39,7 +39,7 @@ import {
   Gavel, Send, RotateCcw, Paperclip,
   FileText, Clock, CheckCircle2, XCircle, Zap, Calendar,
   Trash2, Pencil, Mail, UserCheck, MessageSquare, AlertCircle,
-  Save,
+  Save, History,
 } from "lucide-react";
 
 function StepHeader({
@@ -94,6 +94,7 @@ interface Props {
     advisorApprovalStatus: string | null;
     rebuttalText: string | null;
     submittedAt: Date | null;
+    resubmittedAt: Date | null;
     createdAt: Date;
     author: { id: string; name: string; email: string; affiliation: string | null };
     track: { id: string; name: string } | null;
@@ -135,6 +136,11 @@ interface Props {
     conditions: string | null;
     decidedAt: string;
   } | null;
+  /**
+   * Timestamp of the CONDITIONAL_ACCEPT decision, kept even after the final
+   * decision overwrites the row's outcome — used to bucket files into rounds.
+   */
+  revisionRequestedAt?: string | null;
   presentations?: {
     type: string;
     status: string;
@@ -162,7 +168,7 @@ interface Props {
 export function SubmissionDetail({
   submission, currentUserRoles, currentUserId, reviewers, files,
   canManageSubmission = false,
-  reviewCounts, canMakeDecision, decision, presentations, criteriaByType, deadlines,
+  reviewCounts, canMakeDecision, decision, revisionRequestedAt = null, presentations, criteriaByType, deadlines,
   isAssignedReviewer, reviewerAssignmentId, reviewerAssignmentStatus, reviewerAssignmentAssignedAt,
   assignedReviewerIds = [], lastAdvisorEmail, submissionListHref = "/submissions",
 }: Props) {
@@ -177,6 +183,9 @@ export function SubmissionDetail({
   const isAdmin = canManageSubmission;
   const isAuthor = currentUserRoles.includes("AUTHOR");
   const isReviewer = currentUserRoles.includes("REVIEWER");
+  // Admin + assigned-reviewer get extra metadata on files (upload date, round badge).
+  // Authors only see the basics.
+  const canViewRevisionMeta = isAdmin || !!isAssignedReviewer;
   const canManageOwnSubmission = isOwner && isAuthor;
   const canDeleteFiles = isAdmin || (canManageOwnSubmission && submission.status === "DRAFT");
   const canDeleteSubmission = currentUserRoles.includes("ADMIN");
@@ -1405,6 +1414,8 @@ export function SubmissionDetail({
                     files={paperFiles}
                     canDelete={false}
                     currentUserId={currentUserId}
+                    showUploadedAt={canViewRevisionMeta}
+                    revisionCutoff={canViewRevisionMeta ? revisionRequestedAt : null}
                   />
                 </div>
               )}
@@ -1824,11 +1835,75 @@ export function SubmissionDetail({
           <div className="text-xs text-ink-muted pt-1">
             {t("detail.createdAt")} {formatDateTime(submission.createdAt)}
             {submission.submittedAt && ` — ${t("detail.submittedAt")} ${formatDateTime(submission.submittedAt)}`}
+            {canViewRevisionMeta && submission.resubmittedAt && (
+              <> — {t("detail.resubmittedAt")} {formatDateTime(submission.resubmittedAt)}</>
+            )}
           </div>
         </div>
       </Collapsible>
       </div>
       )}
+
+      {/* Revision history timeline — visible to admin/track-head + assigned reviewers. */}
+      {canViewRevisionMeta && (() => {
+        type Event = { at: Date; labelKey: Parameters<typeof t>[0]; tone: "neutral" | "info" | "warning" | "success" | "danger"; detail?: string };
+        const events: Event[] = [];
+        events.push({ at: submission.createdAt, labelKey: "detail.timelineCreated", tone: "neutral" });
+        if (submission.submittedAt) {
+          events.push({ at: submission.submittedAt, labelKey: "detail.timelineSubmitted", tone: "info" });
+        }
+        if (revisionRequestedAt) {
+          events.push({ at: new Date(revisionRequestedAt), labelKey: "detail.timelineRevisionRequested", tone: "warning" });
+        }
+        if (submission.resubmittedAt) {
+          events.push({ at: submission.resubmittedAt, labelKey: "detail.timelineResubmitted", tone: "info" });
+        }
+        if (decision && decision.outcome !== "CONDITIONAL_ACCEPT") {
+          const outcomeLabel = RECOMMENDATION_LABELS[decision.outcome] || decision.outcome;
+          events.push({
+            at: new Date(decision.decidedAt),
+            labelKey: "detail.timelineDecision",
+            tone: decision.outcome === "ACCEPT" ? "success" : decision.outcome === "REJECT" ? "danger" : "warning",
+            detail: outcomeLabel,
+          });
+        }
+        events.sort((a, b) => a.at.getTime() - b.at.getTime());
+        if (events.length === 0) return null;
+        const dotTone = {
+          neutral: "bg-slate-300 ring-slate-100",
+          info: "bg-blue-500 ring-blue-100",
+          warning: "bg-amber-500 ring-amber-100",
+          success: "bg-emerald-500 ring-emerald-100",
+          danger: "bg-red-500 ring-red-100",
+        } as const;
+        return (
+          <Card id="section-history">
+            <CardHeader>
+              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <History className="h-4 w-4" />
+                {t("detail.revisionHistory")}
+              </h3>
+            </CardHeader>
+            <CardBody>
+              <ol className="relative ml-2 space-y-3 border-l-2 border-border pl-5">
+                {events.map((ev, i) => (
+                  <li key={i} className="relative">
+                    <span
+                      className={`absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ${dotTone[ev.tone]}`}
+                      aria-hidden
+                    />
+                    <p className="text-sm font-medium text-ink">
+                      {t(ev.labelKey)}
+                      {ev.detail && <span className="ml-1.5 text-ink-muted">— {ev.detail}</span>}
+                    </p>
+                    <p className="text-xs text-ink-muted">{formatDateTime(ev.at)}</p>
+                  </li>
+                ))}
+              </ol>
+            </CardBody>
+          </Card>
+        );
+      })()}
 
       {/* Files Section — hidden for reviewers because paper files already appear in the Paper Details card above */}
       {!(isAssignedReviewer && !isOwner) && (
@@ -1846,6 +1921,8 @@ export function SubmissionDetail({
             canDelete={canDeleteFiles}
             currentUserId={currentUserId}
             onDeleteComplete={() => router.refresh()}
+            showUploadedAt={canViewRevisionMeta}
+            revisionCutoff={canViewRevisionMeta ? revisionRequestedAt : null}
           />
 
           {canManageOwnSubmission && submission.status === "DRAFT" && (

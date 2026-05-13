@@ -364,6 +364,11 @@ export default async function SubmissionDetailPage({
         conditions: visibleDecision.conditions,
         decidedAt: visibleDecision.decidedAt.toISOString(),
       } : null}
+      revisionRequestedAt={
+        decision?.outcome === "CONDITIONAL_ACCEPT"
+          ? decision.decidedAt.toISOString()
+          : null
+      }
       presentations={presRows.map((p) => ({
         type: p.type,
         status: p.status,

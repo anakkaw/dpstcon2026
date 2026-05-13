@@ -220,6 +220,7 @@ export async function resubmitPaper(id: string) {
     .update(submissions)
     .set({
       status: "UNDER_REVIEW",
+      resubmittedAt: now,
       updatedAt: now,
     })
     .where(eq(submissions.id, id))

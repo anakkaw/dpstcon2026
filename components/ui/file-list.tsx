@@ -26,6 +26,14 @@ interface FileListProps {
   canDelete?: boolean;
   currentUserId?: string;
   onDeleteComplete?: (fileId: string) => void;
+  /** When true, display each file's upload timestamp (for admin/reviewer views). */
+  showUploadedAt?: boolean;
+  /**
+   * Timestamp (ISO or Date) of the CONDITIONAL_ACCEPT decision. Files uploaded
+   * after this timestamp are tagged "Round 2"; earlier ones are "Round 1".
+   * Pass null/undefined to hide round badges entirely.
+   */
+  revisionCutoff?: string | Date | null;
 }
 
 const KIND_KEYS: Record<string, string> = {
@@ -41,12 +49,28 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const ROUND_BADGEABLE_KINDS = new Set(["MANUSCRIPT", "SUPPLEMENTARY"]);
+
+function formatUploadedAt(value: string | Date) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function FileList({
   submissionId,
   files,
   canDelete = false,
   currentUserId,
   onDeleteComplete,
+  showUploadedAt = false,
+  revisionCutoff = null,
 }: FileListProps) {
   const { t } = useI18n();
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -54,6 +78,13 @@ export function FileList({
   const [pendingDelete, setPendingDelete] = useState<StoredFile | null>(null);
   const [previewFile, setPreviewFile] = useState<StoredFile | null>(null);
   const [error, setError] = useState("");
+
+  const cutoffMs = (() => {
+    if (!revisionCutoff) return null;
+    const d = revisionCutoff instanceof Date ? revisionCutoff : new Date(revisionCutoff);
+    const ms = d.getTime();
+    return Number.isNaN(ms) ? null : ms;
+  })();
 
   function isPreviewable(file: StoredFile) {
     if (file.mimeType === "application/pdf") return true;
@@ -122,7 +153,12 @@ export function FileList({
         onConfirm={() => pendingDelete && handleDelete(pendingDelete)}
       />
       {error && <Alert tone="danger">{error}</Alert>}
-      {files.map((file) => (
+      {files.map((file) => {
+        const uploadedMs = new Date(file.uploadedAt).getTime();
+        const showRoundBadge =
+          cutoffMs !== null && ROUND_BADGEABLE_KINDS.has(file.kind) && !Number.isNaN(uploadedMs);
+        const isRound2 = showRoundBadge && uploadedMs > cutoffMs!;
+        return (
         <div
           key={file.id}
           className="flex flex-col gap-3 rounded-lg bg-surface-alt px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
@@ -130,9 +166,26 @@ export function FileList({
           <div className="flex items-center gap-2.5 min-w-0">
             <FileText className={cn("h-4 w-4 shrink-0", file.kind === "REVIEW_ATTACHMENT" ? "text-violet-500" : "text-brand-500")} />
             <div className="min-w-0">
-              <p className="text-sm text-ink font-medium truncate">{file.originalName}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm text-ink font-medium truncate">{file.originalName}</p>
+                {showRoundBadge && (
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                      isRound2
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-slate-200 text-slate-700"
+                    )}
+                  >
+                    {isRound2 ? t("fileUpload.round2") : t("fileUpload.round1")}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-ink-muted">
                 {KIND_KEYS[file.kind] ? t(KIND_KEYS[file.kind] as Parameters<typeof t>[0]) : file.kind} · {formatFileSize(file.size)}
+                {showUploadedAt && file.uploadedAt && (
+                  <> · {formatUploadedAt(file.uploadedAt)}</>
+                )}
                 {file.uploaderName && file.kind === "REVIEW_ATTACHMENT" && (
                   <> · {t("fileUpload.uploadedBy")} {file.uploaderName}</>
                 )}
@@ -193,7 +246,8 @@ export function FileList({
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
       {previewFile && (
         <PdfPreviewModal
           open={!!previewFile}
