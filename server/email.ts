@@ -3,6 +3,7 @@ import { db } from "@/server/db";
 import { outgoingEmails } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "@/server/logger";
+import { getAppUrl } from "@/server/app-url";
 import {
   ADMIN_CONTACT_EMAIL,
   ADMIN_CONTACT_NAME_TH,
@@ -51,14 +52,6 @@ function footerText(opts: { auto?: boolean } = {}) {
 function getResend() {
   if (!process.env.RESEND_API_KEY) return null;
   return new Resend(process.env.RESEND_API_KEY);
-}
-
-function getAppUrl() {
-  return (
-    process.env.APP_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000"
-  );
 }
 
 /** Send email via Resend */

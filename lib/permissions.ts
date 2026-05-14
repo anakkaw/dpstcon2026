@@ -21,6 +21,10 @@ export type UserWithRoles = {
   roleAssignments?: RoleAssignment[];
 };
 
+export function normalizeRoleList(roles: string[]): string[] {
+  return Array.from(new Set(roles));
+}
+
 /** Check if user has ANY of the specified roles */
 export function hasRole(
   user: { roles?: string[]; role?: string },
@@ -78,7 +82,7 @@ export function getTrackRoleIds(
 /** Determine the highest-priority role from a list */
 export function getPrimaryRole(roles: string[]): string {
   if (roles.length === 0) return "AUTHOR";
-  return [...roles].sort(
+  return normalizeRoleList(roles).sort(
     (a, b) => (ROLE_PRIORITY[a] ?? 99) - (ROLE_PRIORITY[b] ?? 99)
   )[0];
 }

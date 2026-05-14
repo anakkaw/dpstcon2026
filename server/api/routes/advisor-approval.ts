@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getDownloadUrl } from "@/server/r2";
 import { rateLimit } from "../middleware/rate-limit";
 import { ADVISOR_TOKEN_EXPIRY_DAYS } from "@/lib/constants";
+import { getAppUrl } from "@/server/app-url";
 
 const app = new OpenAPIHono();
 
@@ -173,7 +174,7 @@ app.post("/:token/respond", async (c) => {
   // Send notification email to author
   try {
     const { queueEmail, advisorResponseEmail } = await import("@/server/email");
-    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = getAppUrl();
 
     // Fetch author info
     const author = await db.query.user.findFirst({

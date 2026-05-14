@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { and, count, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { getServerAuthContext } from "@/server/auth-helpers";
@@ -155,8 +155,8 @@ async function loadReviewerStats(userId: string): Promise<DashboardStats> {
         eq(reviewAssignments.reviewerId, userId),
         inArray(reviewAssignments.status, ["PENDING", "ACCEPTED"])
       ),
-      orderBy: (ra, { asc, desc }) => [
-        desc(ra.status), // PENDING before ACCEPTED
+      orderBy: (ra, { asc }) => [
+        sql`case ${ra.status} when 'PENDING' then 0 when 'ACCEPTED' then 1 else 2 end`,
         asc(ra.dueDate),
       ],
       limit: 5,

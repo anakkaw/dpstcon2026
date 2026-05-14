@@ -6,6 +6,7 @@ import {
   submissions,
   decisions,
   decisionHistory,
+  conflicts,
   presentationAssignments,
   user,
   userRoles,
@@ -26,6 +27,7 @@ import {
   getDecisionSubmissionStatus,
 } from "@/server/submission-workflow";
 import { logger } from "@/server/logger";
+import { getAppUrl } from "@/server/app-url";
 
 const app = new OpenAPIHono<AuthEnv>();
 const REVIEW_MANAGEMENT_STATUSES = ["SUBMITTED", "UNDER_REVIEW"] as const;
@@ -217,7 +219,6 @@ app.post("/assignments/manual", async (c) => {
   }
 
   // Check conflict of interest
-  const { conflicts } = await import("@/server/db/schema");
   const conflict = await db.query.conflicts.findFirst({
     where: and(
       eq(conflicts.submissionId, submissionId),
@@ -271,7 +272,7 @@ app.post("/assignments/manual", async (c) => {
 
   if (reviewer) {
     const { queueEmail, reviewAssignmentEmail } = await import("@/server/email");
-    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = getAppUrl();
     const emailContent = reviewAssignmentEmail({
       reviewerName: reviewer.name,
       paperTitle: assignmentSubmission.title,
@@ -706,7 +707,7 @@ app.post("/decisions", async (c) => {
 
   try {
     const { queueEmail, decisionEmail } = await import("@/server/email");
-    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = getAppUrl();
     const emailContent = decisionEmail({
       authorName: result.submission.author.name,
       paperTitle: result.submission.title,

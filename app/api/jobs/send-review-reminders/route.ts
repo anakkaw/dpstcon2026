@@ -3,6 +3,7 @@ import { reviewAssignments, submissions, user } from "@/server/db/schema";
 import { and, eq, isNotNull, lte, or, isNull, lt } from "drizzle-orm";
 import { queueEmail, reviewReminderEmail } from "@/server/email";
 import { logger } from "@/server/logger";
+import { getAppUrl } from "@/server/app-url";
 
 function verifyCronSecret(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -61,8 +62,7 @@ export async function POST(req: Request) {
       )
     );
 
-  const appUrl =
-    process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
   const loginUrl = `${appUrl}/reviews`;
 
   const results: Array<{ assignmentId: string; ok: boolean; error?: string }> = [];

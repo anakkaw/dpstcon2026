@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { hasRole } from "@/lib/permissions";
 import type { ServerAuthUser } from "@/server/auth-helpers";
 import { db } from "@/server/db";
@@ -157,9 +157,26 @@ async function getPresentations(currentUser: ServerAuthUser, type: PresentationT
 }
 
 async function getCommitteeUsers(currentUser: ServerAuthUser): Promise<CommitteeUser[]> {
-  if (!hasRole(currentUser, "ADMIN")) {
+  if (!hasRole(currentUser, "ADMIN", "PROGRAM_CHAIR")) {
     return [];
   }
+
+  const chairedTrackIds = currentUser.roleAssignments
+    .filter(
+      (assignment) => assignment.role === "PROGRAM_CHAIR" && assignment.trackId
+    )
+    .map((assignment) => assignment.trackId as string);
+
+  if (!hasRole(currentUser, "ADMIN") && chairedTrackIds.length === 0) {
+    return [];
+  }
+
+  const whereClause = hasRole(currentUser, "ADMIN")
+    ? eq(userRoles.role, "COMMITTEE")
+    : and(
+        eq(userRoles.role, "COMMITTEE"),
+        or(isNull(userRoles.trackId), inArray(userRoles.trackId, chairedTrackIds))
+      );
 
   return db
     .selectDistinct({
@@ -175,7 +192,7 @@ async function getCommitteeUsers(currentUser: ServerAuthUser): Promise<Committee
     })
     .from(user)
     .innerJoin(userRoles, eq(user.id, userRoles.userId))
-    .where(eq(userRoles.role, "COMMITTEE"));
+    .where(whereClause);
 }
 
 export async function getPresentationPageData(currentUser: ServerAuthUser, type: PresentationType) {

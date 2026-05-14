@@ -2,6 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "@/server/logger";
+import { getAppOrigin } from "@/server/app-url";
 import { submissionRoutes } from "./routes/submissions";
 import { reviewRoutes } from "./routes/reviews";
 import { userRoutes } from "./routes/users";
@@ -50,8 +51,7 @@ app.onError((err, c) => {
 // CSRF protection — allows same-origin requests only
 app.use("/*", csrf({
   origin: (origin) => {
-    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    return origin === new URL(appUrl).origin;
+    return origin === getAppOrigin();
   },
 }));
 

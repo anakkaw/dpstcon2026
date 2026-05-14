@@ -28,8 +28,10 @@ import { authMiddleware, requireRole } from "../middleware/auth";
 import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { queueEmail, inviteEmail } from "@/server/email";
-import { getPrimaryRole } from "@/lib/permissions";
+import { getPrimaryRole, normalizeRoleList } from "@/lib/permissions";
 import { mapWithConcurrencyLimit } from "@/server/concurrency";
+import { getAppUrl } from "@/server/app-url";
+import { mergeBulkImportUsersByEmail } from "@/server/user-import";
 
 const INVITE_EXPIRY_HOURS = 72;
 const BULK_IMPORT_EMAIL_CONCURRENCY = 5;
@@ -179,10 +181,11 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
 
   const results: { email: string; status: string }[] = [];
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
+  const importUsers = mergeBulkImportUsersByEmail(parsed.data.users);
 
   // Pre-fetch all existing users by email in a single query to avoid N+1
-  const importEmails = parsed.data.users.map((u) => u.email);
+  const importEmails = importUsers.map((u) => u.email);
   const existingUsers = importEmails.length > 0
     ? await db.select().from(user).where(inArray(user.email, importEmails))
     : [];
@@ -191,12 +194,29 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
   // Pre-fetch all roles for existing users in a single query
   const existingUserIds = existingUsers.map((u) => u.id);
   const existingRolesAll = existingUserIds.length > 0
-    ? await db.select({ userId: userRoles.userId, role: userRoles.role }).from(userRoles).where(inArray(userRoles.userId, existingUserIds))
+    ? await db
+        .select({
+          userId: userRoles.userId,
+          role: userRoles.role,
+          trackId: userRoles.trackId,
+        })
+        .from(userRoles)
+        .where(inArray(userRoles.userId, existingUserIds))
     : [];
-  const existingRolesMap = new Map<string, Set<string>>();
+  const existingAllRolesMap = new Map<string, Set<string>>();
+  const existingGlobalRolesMap = new Map<string, Set<string>>();
   for (const r of existingRolesAll) {
-    if (!existingRolesMap.has(r.userId)) existingRolesMap.set(r.userId, new Set());
-    existingRolesMap.get(r.userId)!.add(r.role);
+    if (!existingAllRolesMap.has(r.userId)) {
+      existingAllRolesMap.set(r.userId, new Set());
+    }
+    existingAllRolesMap.get(r.userId)!.add(r.role);
+
+    if (r.trackId === null) {
+      if (!existingGlobalRolesMap.has(r.userId)) {
+        existingGlobalRolesMap.set(r.userId, new Set());
+      }
+      existingGlobalRolesMap.get(r.userId)!.add(r.role);
+    }
   }
 
   // Collect batch inserts for new users
@@ -210,13 +230,17 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
     text: string;
   }[] = [];
 
-  for (const u of parsed.data.users) {
+  for (const u of importUsers) {
     try {
       const existing = existingByEmail.get(u.email);
+      const requestedRoles = normalizeRoleList(u.roles);
 
       if (existing) {
-        const existingRoleSet = existingRolesMap.get(existing.id) || new Set();
-        const newRoles = u.roles.filter((r) => !existingRoleSet.has(r));
+        const existingGlobalRoleSet = existingGlobalRolesMap.get(existing.id) || new Set<string>();
+        existingGlobalRolesMap.set(existing.id, existingGlobalRoleSet);
+        const newRoles = requestedRoles.filter(
+          (role) => !existingGlobalRoleSet.has(role)
+        );
         if (newRoles.length > 0) {
           await db.insert(userRoles).values(
             newRoles.map((role) => ({
@@ -224,8 +248,13 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
               role: role as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
             }))
           );
-          const allRoles = [...existingRoleSet, ...newRoles];
-          const primaryRole = getPrimaryRole(allRoles);
+          const existingAllRoleSet = existingAllRolesMap.get(existing.id) || new Set<string>();
+          existingAllRolesMap.set(existing.id, existingAllRoleSet);
+          newRoles.forEach((role) => {
+            existingGlobalRoleSet.add(role);
+            existingAllRoleSet.add(role);
+          });
+          const primaryRole = getPrimaryRole(Array.from(existingAllRoleSet));
           await db
             .update(user)
             .set({
@@ -242,7 +271,7 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
       const inviteExpiresAt = new Date(
         Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000
       );
-      const primaryRole = getPrimaryRole(u.roles);
+      const primaryRole = getPrimaryRole(requestedRoles);
       const userId = crypto.randomUUID();
 
       // Auto-compose name from structured fields (firstNameTh/lastNameTh required by schema)
@@ -275,7 +304,7 @@ app.post("/bulk-import", requireRole("ADMIN"), async (c) => {
         updatedAt: new Date(),
       });
 
-      for (const role of u.roles) {
+      for (const role of requestedRoles) {
         newRoleInserts.push({
           userId,
           role: role as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
@@ -355,7 +384,7 @@ app.post("/bulk-remind", requireRole("ADMIN"), async (c) => {
     return c.json({ ok: true, message: "ไม่มีผู้ใช้ที่รอเปิดใช้งาน", sent: 0 });
   }
 
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
   let sent = 0;
 
   for (const u of pendingUsers) {
@@ -481,7 +510,7 @@ app.patch("/:id/roles", requireRole("ADMIN"), async (c) => {
     return c.json({ error: "Invalid roles" }, 400);
   }
 
-  const globalRoles = Array.from(new Set(parsed.data.roles));
+  const globalRoles = normalizeRoleList(parsed.data.roles);
 
   // Replace only global roles; keep track-scoped assignments intact.
   await db
@@ -556,7 +585,8 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   const inviteExpiresAt = new Date(
     Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000
   );
-  const primaryRole = getPrimaryRole(parsed.data.roles);
+  const requestedRoles = normalizeRoleList(parsed.data.roles);
+  const primaryRole = getPrimaryRole(requestedRoles);
 
   // Auto-compose name from structured fields — always use structured fields as source of truth
   const displayName = composeName(parsed.data.prefixTh, parsed.data.firstNameTh, parsed.data.lastNameTh);
@@ -596,14 +626,14 @@ app.post("/", requireRole("ADMIN"), async (c) => {
 
   // Insert roles
   await db.insert(userRoles).values(
-    parsed.data.roles.map((role) => ({
+    requestedRoles.map((role) => ({
       userId,
       role: role as "ADMIN" | "PROGRAM_CHAIR" | "REVIEWER" | "COMMITTEE" | "AUTHOR",
     }))
   );
 
   // Send invite email
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
   const activationUrl = `${appUrl}/activate/${inviteToken}`;
   const emailContent = inviteEmail({
     userName: displayName,
@@ -618,7 +648,7 @@ app.post("/", requireRole("ADMIN"), async (c) => {
   });
 
   return c.json(
-    { user: { ...created, roles: parsed.data.roles } },
+    { user: { ...created, roles: requestedRoles } },
     201
   );
 });
@@ -647,7 +677,7 @@ app.post("/:id/resend-invite", requireRole("ADMIN"), async (c) => {
     .set({ inviteToken, inviteExpiresAt, updatedAt: new Date() })
     .where(eq(user.id, id));
 
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
   const activationUrl = `${appUrl}/activate/${inviteToken}`;
   const emailContent = inviteEmail({
     userName: found.name,

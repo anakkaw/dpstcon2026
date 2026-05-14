@@ -2,6 +2,7 @@ import "server-only";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
+import { getAppUrl } from "@/server/app-url";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
@@ -18,7 +19,7 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24, // refresh daily
     cookieCache: { enabled: true, maxAge: 60 * 5 }, // 5 min cache
   },
-  trustedOrigins: [process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"],
+  trustedOrigins: [getAppUrl()],
   user: {
     additionalFields: {
       role: {

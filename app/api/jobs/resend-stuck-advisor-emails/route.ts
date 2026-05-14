@@ -3,6 +3,7 @@ import { submissions, user } from "@/server/db/schema";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { advisorApprovalEmail, queueEmail } from "@/server/email";
 import { logger } from "@/server/logger";
+import { getAppUrl } from "@/server/app-url";
 
 function verifyCronSecret(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -45,8 +46,7 @@ export async function POST(req: Request) {
       )
     );
 
-  const appUrl =
-    process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
 
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
 

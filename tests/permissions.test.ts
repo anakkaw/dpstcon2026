@@ -5,6 +5,7 @@ import {
   getTrackRoleIds,
   hasRole,
   hasTrackRole,
+  normalizeRoleList,
 } from "../lib/permissions";
 
 test("falls back to primary/global roles when scoped assignments are absent", () => {
@@ -48,4 +49,11 @@ test("checks scoped track access using role assignments", () => {
   assert.equal(hasTrackRole(user, "track-a", "REVIEWER"), true);
   assert.equal(hasTrackRole(user, "track-b", "REVIEWER"), false);
   assert.equal(hasTrackRole(user, null, "REVIEWER"), false);
+});
+
+test("normalizes role lists without changing first-seen order", () => {
+  assert.deepEqual(
+    normalizeRoleList(["AUTHOR", "REVIEWER", "AUTHOR", "ADMIN", "REVIEWER"]),
+    ["AUTHOR", "REVIEWER", "ADMIN"]
+  );
 });

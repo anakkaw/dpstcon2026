@@ -47,6 +47,7 @@ import {
   canPublishSubmission,
   publicationPatchOnStatusChange,
 } from "@/server/e-abstract-policy";
+import { getAppUrl } from "@/server/app-url";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -543,13 +544,6 @@ app.patch("/:id", async (c) => {
     updatedAt: new Date(),
   };
 
-  if (
-    typeof updatePayload.status === "string" &&
-    isAcceptedSubmissionStatus(updatePayload.status)
-  ) {
-    updatePayload.status = normalizeSubmissionStatus(updatePayload.status);
-  }
-
   // Side-effect: advisor approval status override by admin
   if (parsed.data.advisorApprovalStatus && canManageAsStaff) {
     updatePayload.advisorApprovalAt = new Date();
@@ -575,7 +569,7 @@ app.patch("/:id", async (c) => {
 
     const targetEmail = parsed.data.advisorEmail || existing.advisorEmail!;
     const targetName = parsed.data.advisorName || existing.advisorName || "Advisor";
-    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = getAppUrl();
 
     const authorData = await db.query.submissions.findFirst({
       where: eq(submissions.id, id),
@@ -600,6 +594,12 @@ app.patch("/:id", async (c) => {
     } catch {
       return c.json({ error: "ไม่สามารถส่งอีเมลถึงอาจารย์ที่ปรึกษาได้" }, 500);
     }
+  }
+
+  if (typeof updatePayload.status === "string") {
+    const nextStatus = normalizeSubmissionStatus(updatePayload.status);
+    updatePayload.status = nextStatus;
+    Object.assign(updatePayload, publicationPatchOnStatusChange(nextStatus));
   }
 
   const [updated] = await db
@@ -670,7 +670,7 @@ app.post("/:id/submit", async (c) => {
     .where(eq(submissions.id, id))
     .returning();
 
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
   const emailContent = advisorApprovalEmail({
     advisorName: submission.advisorName || "Advisor",
     studentName: currentUser.name,
@@ -732,7 +732,7 @@ app.post("/:id/resend-advisor-approval", async (c) => {
     })
     .where(eq(submissions.id, id));
 
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
   const emailContent = advisorApprovalEmail({
     advisorName: submission.advisorName || "Advisor",
     studentName: submission.author.name,
@@ -1270,8 +1270,6 @@ app.post("/:id/conflicts", async (c) => {
   const parsed = conflictSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
 
-  const { conflicts } = await import("@/server/db/schema");
-
   const [conflict] = await db.insert(conflicts).values({ submissionId: id, userId: currentUser.id, reason: parsed.data.reason }).returning();
   return c.json({ conflict }, 201);
 });
@@ -1289,8 +1287,6 @@ app.post("/:id/bids", async (c) => {
   const { preference } = await c.req.json();
   const validPrefs = ["EAGER", "WILLING", "NEUTRAL", "NOT_PREFERRED", "CONFLICT"];
   if (!validPrefs.includes(preference)) return c.json({ error: "Invalid preference" }, 400);
-
-  const { bids } = await import("@/server/db/schema");
 
   const existing = await db.query.bids.findFirst({
     where: and(eq(bids.submissionId, id), eq(bids.reviewerId, currentUser.id)),
@@ -1334,8 +1330,6 @@ app.post("/:id/discussion", async (c) => {
   if (!allowedVisibilities.has(parsed.data.visibility)) {
     return c.json({ error: "Forbidden" }, 403);
   }
-
-  const { discussions } = await import("@/server/db/schema");
 
   const [disc] = await db
     .insert(discussions)

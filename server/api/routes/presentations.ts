@@ -471,7 +471,7 @@ app.patch("/:id/committee", async (c) => {
       .where(
         and(
           eq(userRoles.role, "COMMITTEE"),
-          eq(userRoles.trackId, submission.trackId)
+          or(isNull(userRoles.trackId), eq(userRoles.trackId, submission.trackId))
         )
       );
     allowedJudgeIds = Array.from(new Set(rows.map((row) => row.userId)));

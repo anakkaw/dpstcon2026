@@ -4,6 +4,7 @@ import { outgoingEmails } from "@/server/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { authMiddleware, requireRole } from "../middleware/auth";
 import { sendEmail } from "@/server/email";
+import { getAppUrl } from "@/server/app-url";
 
 const app = new OpenAPIHono();
 app.use("*", authMiddleware);
@@ -79,7 +80,7 @@ app.post("/:id/retry", requireRole("ADMIN"), async (c) => {
 
 // GET /api/email-logs/debug — check what URL would be used in emails (ADMIN only)
 app.get("/debug", requireRole("ADMIN"), async (c) => {
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
   return c.json({
     appUrl,
     envAppUrl: process.env.APP_URL ?? "(undefined)",

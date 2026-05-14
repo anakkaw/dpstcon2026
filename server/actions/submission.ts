@@ -10,6 +10,7 @@ import { hasRole } from "@/lib/permissions";
 import { canAuthorEditSubmission, getSubmissionValidationError } from "@/server/submission-workflow";
 import { getCurrentSubmissionRound } from "@/server/submission-rounds";
 import { publicationPatchOnStatusChange } from "@/server/e-abstract-policy";
+import { getAppUrl } from "@/server/app-url";
 
 function ensureAuthorRole(user: { roles?: string[]; role?: string }) {
   if (!hasRole(user, "AUTHOR")) {
@@ -139,7 +140,7 @@ export async function submitPaper(id: string) {
   // Send advisor approval email
   let emailSent = false;
   try {
-    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = getAppUrl();
     const emailContent = advisorApprovalEmail({
       advisorName: submission.advisorName || "Advisor",
       studentName: session.user.name,
@@ -247,7 +248,7 @@ export async function resubmitPaper(id: string) {
       .from(userTable)
       .where(inArray(userTable.id, reviewerIds));
 
-    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = getAppUrl();
     for (const reviewer of reviewerRows) {
       if (!reviewer.email) continue;
       const dueDate = reopened.find((r) => r.reviewerId === reviewer.id)?.dueDate;
