@@ -17,6 +17,7 @@ import { eq, sql, and, inArray, desc, asc, count } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasTrackRole, hasRole } from "@/lib/permissions";
+import { isPublishedPresentationStatus } from "@/lib/presentation-status";
 import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { canRevealReviewerIdentity } from "@/server/access-policies";
 import {
@@ -309,8 +310,14 @@ export default async function SubmissionDetailPage({
       .orderBy(asc(submissionResubmissions.round)),
   ]);
 
+  const visiblePresentationRows = canManageSubmission
+    ? presRows
+    : presRows.filter((presentation) =>
+        isPublishedPresentationStatus(presentation.status)
+      );
+
   const presentationTypes = Array.from(
-    new Set(presRows.map((presentation) => presentation.type as PresentationType))
+    new Set(visiblePresentationRows.map((presentation) => presentation.type as PresentationType))
   );
   const criteriaByType =
     presentationTypes.length > 0
@@ -441,7 +448,7 @@ export default async function SubmissionDetailPage({
         round: row.round,
         resubmittedAt: row.resubmittedAt.toISOString(),
       }))}
-      presentations={presRows.map((p) => ({
+      presentations={visiblePresentationRows.map((p) => ({
         type: p.type,
         status: p.status,
         paperCode: submission.paperCode,

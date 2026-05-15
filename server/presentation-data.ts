@@ -14,6 +14,10 @@ import {
   getPresentationRubric,
   type PresentationRubricCriterion,
 } from "@/server/presentation-rubrics";
+import {
+  PUBLISHED_POSTER_SLOT_STATUSES,
+  PUBLISHED_PRESENTATION_STATUSES,
+} from "@/lib/presentation-status";
 
 export type PresentationType = "ORAL" | "POSTER";
 
@@ -79,7 +83,13 @@ async function getManagedPresentationIds(currentUser: ServerAuthUser, type: Pres
       .select({ id: presentationAssignments.id })
       .from(presentationCommitteeAssignments)
       .innerJoin(presentationAssignments, eq(presentationCommitteeAssignments.presentationId, presentationAssignments.id))
-      .where(and(eq(presentationCommitteeAssignments.judgeId, currentUser.id), eq(presentationAssignments.type, type)));
+      .where(
+        and(
+          eq(presentationCommitteeAssignments.judgeId, currentUser.id),
+          eq(presentationAssignments.type, type),
+          inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+        )
+      );
 
     assignedRows.forEach((row) => presentationIds.add(row.id));
 
@@ -94,7 +104,13 @@ async function getManagedPresentationIds(currentUser: ServerAuthUser, type: Pres
             eq(presentationAssignments.type, "POSTER")
           )
         )
-        .where(eq(posterSlotJudges.judgeId, currentUser.id));
+        .where(
+          and(
+            eq(posterSlotJudges.judgeId, currentUser.id),
+            inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES),
+            inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+          )
+        );
       posterRows.forEach((row) => presentationIds.add(row.id));
     }
   }
@@ -104,7 +120,13 @@ async function getManagedPresentationIds(currentUser: ServerAuthUser, type: Pres
       .select({ id: presentationAssignments.id })
       .from(presentationAssignments)
       .innerJoin(submissions, eq(presentationAssignments.submissionId, submissions.id))
-      .where(and(eq(submissions.authorId, currentUser.id), eq(presentationAssignments.type, type)));
+      .where(
+        and(
+          eq(submissions.authorId, currentUser.id),
+          eq(presentationAssignments.type, type),
+          inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+        )
+      );
 
     ownRows.forEach((row) => presentationIds.add(row.id));
   }

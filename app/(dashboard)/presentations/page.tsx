@@ -44,6 +44,7 @@ export default async function PresentationsPage({
           initialCommitteeUsers={data.committeeUsers}
           canManage={canManage}
           canEditCriteria={canEditCriteria}
+          canPublish={canEditCriteria}
         />
       </PresentationsTabs>
     );
@@ -64,6 +65,7 @@ export default async function PresentationsPage({
           criteria={criteria}
           canEditCriteria={canEditCriteria}
           canEditSessionSettings={canEditCriteria}
+          canPublishSchedule={canEditCriteria}
         />
       </PresentationsTabs>
     );

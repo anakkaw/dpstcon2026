@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
+import {
+  PUBLISHED_POSTER_SLOT_STATUSES,
+  PUBLISHED_PRESENTATION_STATUSES,
+} from "@/lib/presentation-status";
 import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { db } from "@/server/db";
@@ -83,7 +87,12 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
             })
             .from(presentationAssignments)
             .innerJoin(submissions, eq(presentationAssignments.submissionId, submissions.id))
-            .where(inArray(presentationAssignments.submissionId, subIds)),
+            .where(
+              and(
+                inArray(presentationAssignments.submissionId, subIds),
+                inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+              )
+            ),
         ])
       : [[], []];
 
@@ -277,7 +286,12 @@ async function loadCommitteeStats(userId: string): Promise<DashboardStats> {
         presentationAssignments,
         eq(presentationCommitteeAssignments.presentationId, presentationAssignments.id)
       )
-      .where(eq(presentationCommitteeAssignments.judgeId, userId)),
+      .where(
+        and(
+          eq(presentationCommitteeAssignments.judgeId, userId),
+          inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+        )
+      ),
     db
       .select({
         presentationId: presentationAssignments.id,
@@ -292,7 +306,13 @@ async function loadCommitteeStats(userId: string): Promise<DashboardStats> {
           eq(presentationAssignments.type, "POSTER")
         )
       )
-      .where(eq(posterSlotJudges.judgeId, userId)),
+      .where(
+        and(
+          eq(posterSlotJudges.judgeId, userId),
+          inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES),
+          inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+        )
+      ),
   ]);
 
   const assignmentMap = new Map<

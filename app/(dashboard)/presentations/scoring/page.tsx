@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import { and, eq, inArray } from "drizzle-orm";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasRole } from "@/lib/permissions";
+import {
+  PUBLISHED_POSTER_SLOT_STATUSES,
+  PUBLISHED_PRESENTATION_STATUSES,
+} from "@/lib/presentation-status";
 import { db } from "@/server/db";
 import {
   posterSlotJudges,
@@ -35,7 +39,16 @@ export default async function ScoringHubPage() {
       db
         .select({ presentationId: presentationCommitteeAssignments.presentationId })
         .from(presentationCommitteeAssignments)
-        .where(eq(presentationCommitteeAssignments.judgeId, currentUser.id)),
+        .innerJoin(
+          presentationAssignments,
+          eq(presentationCommitteeAssignments.presentationId, presentationAssignments.id)
+        )
+        .where(
+          and(
+            eq(presentationCommitteeAssignments.judgeId, currentUser.id),
+            inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+          )
+        ),
       db
         .select({ presentationId: presentationAssignments.id })
         .from(posterSlotJudges)
@@ -46,7 +59,13 @@ export default async function ScoringHubPage() {
             eq(presentationAssignments.type, "POSTER")
           )
         )
-        .where(eq(posterSlotJudges.judgeId, currentUser.id)),
+        .where(
+          and(
+            eq(posterSlotJudges.judgeId, currentUser.id),
+            inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES),
+            inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+          )
+        ),
     ]);
     presentationIds = Array.from(
       new Set([

@@ -2,6 +2,11 @@ import { notFound, redirect } from "next/navigation";
 import { and, eq, inArray } from "drizzle-orm";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasRole } from "@/lib/permissions";
+import {
+  PUBLISHED_POSTER_SLOT_STATUSES,
+  PUBLISHED_PRESENTATION_STATUSES,
+  isPublishedPresentationStatus,
+} from "@/lib/presentation-status";
 import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { db } from "@/server/db";
 import {
@@ -50,6 +55,10 @@ export default async function ScorePresentationPage({
   if (!presentation) notFound();
 
   const isAdmin = hasRole(currentUser, "ADMIN");
+  if (!isAdmin && !isPublishedPresentationStatus(presentation.status)) {
+    redirect("/presentations/scoring");
+  }
+
   let assigned = isAdmin;
 
   if (!assigned) {
@@ -65,7 +74,8 @@ export default async function ScorePresentationPage({
       const posterSlot = await db.query.posterSlotJudges.findFirst({
         where: and(
           eq(posterSlotJudges.submissionId, presentation.submission.id),
-          eq(posterSlotJudges.judgeId, currentUser.id)
+          eq(posterSlotJudges.judgeId, currentUser.id),
+          inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES)
         ),
       });
       assigned = Boolean(posterSlot);
@@ -93,7 +103,16 @@ export default async function ScorePresentationPage({
       db
         .select({ id: presentationCommitteeAssignments.presentationId })
         .from(presentationCommitteeAssignments)
-        .where(eq(presentationCommitteeAssignments.judgeId, currentUser.id)),
+        .innerJoin(
+          presentationAssignments,
+          eq(presentationCommitteeAssignments.presentationId, presentationAssignments.id)
+        )
+        .where(
+          and(
+            eq(presentationCommitteeAssignments.judgeId, currentUser.id),
+            inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+          )
+        ),
       db
         .select({ id: presentationAssignments.id })
         .from(posterSlotJudges)
@@ -104,7 +123,13 @@ export default async function ScorePresentationPage({
             eq(presentationAssignments.type, "POSTER")
           )
         )
-        .where(eq(posterSlotJudges.judgeId, currentUser.id)),
+        .where(
+          and(
+            eq(posterSlotJudges.judgeId, currentUser.id),
+            inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES),
+            inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+          )
+        ),
     ]);
 
     const otherIds = Array.from(

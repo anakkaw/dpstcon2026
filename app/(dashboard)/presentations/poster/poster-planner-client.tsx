@@ -13,6 +13,7 @@ import { RubricManager } from "@/components/presentations/rubric-manager";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Select } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
+import { isPublishedPresentationStatus } from "@/lib/presentation-status";
 import type {
   PosterPlannerSubmission,
   PosterPlannerSessionSettings,
@@ -28,6 +29,7 @@ import {
   FolderKanban,
   LayoutPanelTop,
   LockKeyhole,
+  Megaphone,
   Plus,
   Star,
   Trash2,
@@ -51,6 +53,7 @@ interface PosterPlannerClientProps {
   criteria?: CriterionData[];
   canEditCriteria?: boolean;
   canEditSessionSettings?: boolean;
+  canPublishSchedule?: boolean;
 }
 
 type MessageTone = "success" | "danger";
@@ -83,6 +86,7 @@ function addMinutes(isoString: string, minutes: number): string {
 
 // ── Schedule row for the table ──
 interface ScheduleRow {
+  presentationStatus: string;
   submissionId: string;
   paperCode: string | null;
   title: string;
@@ -124,6 +128,7 @@ export function PosterPlannerClient({
   criteria = [],
   canEditCriteria = false,
   canEditSessionSettings = false,
+  canPublishSchedule = false,
 }: PosterPlannerClientProps) {
   const { t } = useI18n();
   const plannerId = useId();
@@ -171,6 +176,7 @@ export function PosterPlannerClient({
       }
 
       return {
+        presentationStatus: sub.presentationStatus,
         submissionId: sub.submissionId,
         paperCode: sub.paperCode,
         title: sub.title,
@@ -187,6 +193,18 @@ export function PosterPlannerClient({
     if (!selectedTrackId) return scheduleRows;
     return scheduleRows.filter((row) => row.trackId === selectedTrackId);
   }, [scheduleRows, selectedTrackId]);
+
+  const selectedTrackPublishState = useMemo(() => {
+    let draftCount = 0;
+    let publishableDraftCount = 0;
+    for (const row of filteredRows) {
+      const isDraft = !isPublishedPresentationStatus(row.presentationStatus);
+      const hasSlot = Object.keys(row.slotAssignments).length > 0;
+      if (isDraft) draftCount += 1;
+      if (isDraft && hasSlot) publishableDraftCount += 1;
+    }
+    return { draftCount, publishableDraftCount };
+  }, [filteredRows]);
 
   // ── Committee users for selected track ──
   const trackCommitteeUsers = useMemo(() => {
@@ -338,6 +356,24 @@ export function PosterPlannerClient({
     setRubricCriteria(data?.criteria || nextCriteria);
     setMessageTone("success");
     setMessage(t("poster.rubricUpdated"));
+  }
+
+  async function publishCurrentTrack() {
+    if (!selectedTrackId) return;
+
+    await runAction(`publish-${selectedTrackId}`, async () => {
+      const response = await fetch("/api/presentations/poster-publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId: selectedTrackId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || t("poster.publishError"));
+      }
+      await refreshPlanner();
+      setMessage(t("poster.publishSuccess", { n: data?.publishedCount ?? 0 }));
+    });
   }
 
   // ── Session settings ──
@@ -792,6 +828,32 @@ export function PosterPlannerClient({
             </div>
           )}
 
+          {canPublishSchedule && selectedTrackId && (
+            <Card>
+              <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-ink">{t("poster.publishPanelTitle")}</p>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    {t("poster.publishPanelDesc", {
+                      draft: selectedTrackPublishState.draftCount,
+                      ready: selectedTrackPublishState.publishableDraftCount,
+                    })}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={publishCurrentTrack}
+                  loading={savingKey === `publish-${selectedTrackId}`}
+                  disabled={selectedTrackPublishState.publishableDraftCount === 0}
+                >
+                  <Megaphone className="h-3.5 w-3.5" />
+                  {t("poster.publishTrack")}
+                </Button>
+              </CardBody>
+            </Card>
+          )}
+
           {/* ── Schedule Table ── */}
           {orphanAssignmentCount > 0 && (
             <Alert tone="warning">
@@ -840,6 +902,9 @@ export function PosterPlannerClient({
                         <td className="sticky left-0 z-10 bg-white px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <Badge>{row.paperCode || "NO-CODE"}</Badge>
+                            <Badge tone={isPublishedPresentationStatus(row.presentationStatus) ? "success" : "warning"}>
+                              {isPublishedPresentationStatus(row.presentationStatus) ? t("presentations.statusScheduled") : t("presentations.statusPending")}
+                            </Badge>
                             <span className="truncate font-medium text-ink max-w-[200px]" title={row.title}>{row.title}</span>
                           </div>
                         </td>

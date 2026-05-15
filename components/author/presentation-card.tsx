@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Collapsible } from "@/components/ui/collapsible";
 import { RubricManager } from "@/components/presentations/rubric-manager";
+import { isPublishedPresentationStatus } from "@/lib/presentation-status";
 import { formatDateTime } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import type { PresentationRubricCriterion } from "@/server/presentation-rubrics";
@@ -54,8 +55,12 @@ export function PresentationCard({
                   {pres.type === "ORAL" ? t("presentations.oral") : t("presentations.poster")}
                 </Badge>
                 {pres.paperCode && <Badge>{pres.paperCode}</Badge>}
-                <Badge tone={pres.status === "SCHEDULED" ? "success" : "warning"}>
-                  {pres.status === "SCHEDULED" ? t("presentations.statusScheduled") : pres.status === "COMPLETED" ? t("presentations.completedStatus") : t("presentations.statusPending")}
+                <Badge tone={isPublishedPresentationStatus(pres.status) ? "success" : "warning"}>
+                  {pres.status === "COMPLETED"
+                    ? t("presentations.completedStatus")
+                    : isPublishedPresentationStatus(pres.status)
+                      ? t("presentations.statusScheduled")
+                      : t("presentations.statusPending")}
                 </Badge>
               </div>
 

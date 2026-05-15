@@ -16,6 +16,7 @@ import {
 import { SubmissionPipeline } from "@/components/author/submission-pipeline";
 import { NextActionCard } from "@/components/author/next-action-card";
 import { getNextAction, getDaysUntil, getRelevantDeadlineKey } from "@/lib/author-utils";
+import { isPublishedPresentationStatus } from "@/lib/presentation-status";
 import { getAcceptedSubmissionCount } from "@/lib/submission-status";
 import { formatDate } from "@/lib/utils";
 
@@ -81,6 +82,12 @@ export default function AuthorDashboard({ stats }: { stats: Record<string, unkno
     title: subs.find((s) => s.id === p.submissionId)?.title || "",
     paperCode: p.paperCode || subs.find((s) => s.id === p.submissionId)?.paperCode || null,
   }));
+  const presentationStatusLabel = (status: string) => {
+    if (status === "COMPLETED") return t("presentations.completedStatus");
+    return isPublishedPresentationStatus(status)
+      ? t("dashboard.scheduled")
+      : t("dashboard.pendingSchedule");
+  };
 
   return (
     <>
@@ -168,8 +175,8 @@ export default function AuthorDashboard({ stats }: { stats: Record<string, unkno
                     {p.scheduledAt && <span className="text-xs text-ink-muted">{formatDate(p.scheduledAt, locale)}</span>}
                   </div>
                 </div>
-                <Badge tone={p.status === "SCHEDULED" ? "success" : "warning"}>
-                  {p.status === "SCHEDULED" ? t("dashboard.scheduled") : t("dashboard.pendingSchedule")}
+                <Badge tone={isPublishedPresentationStatus(p.status) ? "success" : "warning"}>
+                  {presentationStatusLabel(p.status)}
                 </Badge>
               </div>
             ))}

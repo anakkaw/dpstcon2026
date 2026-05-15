@@ -10,6 +10,12 @@ import {
   user,
   userRoles,
 } from "@/server/db/schema";
+import {
+  PUBLISHED_POSTER_SLOT_STATUSES,
+  PUBLISHED_PRESENTATION_STATUSES,
+  isPublishedPosterSlotStatus,
+  isPublishedPresentationStatus,
+} from "@/lib/presentation-status";
 
 const POSTER_SESSION_ROOM_KEY = "posterSessionRoom";
 const POSTER_SESSION_SLOTS_KEY = "posterSessionSlotTemplates";
@@ -35,6 +41,7 @@ export interface PosterSlotJudge {
 }
 
 export interface PosterPlannerSubmission {
+  presentationStatus: string;
   submissionId: string;
   paperCode: string | null;
   title: string;
@@ -222,6 +229,7 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
   }
 
   const posterSubmissions: PosterPlannerSubmission[] = filteredPosters.map((row) => ({
+    presentationStatus: row.status,
     submissionId: row.submissionId,
     paperCode: row.submission.paperCode,
     title: row.submission.title,
@@ -274,19 +282,25 @@ export async function getPosterSlotsForAuthor(
   });
 
   return posterRows
-    .filter((row) => row.submission.author.id === authorId)
+    .filter(
+      (row) =>
+        row.submission.author.id === authorId &&
+        isPublishedPresentationStatus(row.status)
+    )
     .map((row) => ({
       submissionId: row.submissionId,
       title: row.submission.title,
       paperCode: row.submission.paperCode,
       room: sessionSettings.room || "",
       trackName: row.submission.track?.name || "",
-      slotJudges: row.submission.posterSlotJudges.map((sj) => ({
-        judgeName: sj.judge.name,
-        startsAt: sj.startsAt.toISOString(),
-        endsAt: sj.endsAt.toISOString(),
-        status: sj.status,
-      })),
+      slotJudges: row.submission.posterSlotJudges
+        .filter((sj) => isPublishedPosterSlotStatus(sj.status))
+        .map((sj) => ({
+          judgeName: sj.judge.name,
+          startsAt: sj.startsAt.toISOString(),
+          endsAt: sj.endsAt.toISOString(),
+          status: sj.status,
+        })),
     }));
 }
 
@@ -310,7 +324,10 @@ export async function getPosterSlotsForCommittee(
   const sessionSettings = await getPosterSessionSettings();
 
   const slotRows = await db.query.posterSlotJudges.findMany({
-    where: eq(posterSlotJudges.judgeId, committeeId),
+    where: and(
+      eq(posterSlotJudges.judgeId, committeeId),
+      inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES)
+    ),
     with: {
       submission: {
         columns: { id: true, title: true, paperCode: true },
@@ -332,13 +349,16 @@ export async function getPosterSlotsForCommittee(
           .where(
             and(
               inArray(presentationAssignments.submissionId, submissionIds),
-              eq(presentationAssignments.type, "POSTER")
+              eq(presentationAssignments.type, "POSTER"),
+              inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
             )
           );
 
   const presentationBySubmission = new Map(posterAssignments.map((row) => [row.submissionId, row.id]));
 
-  return slotRows.map((row) => ({
+  return slotRows
+    .filter((row) => presentationBySubmission.has(row.submissionId))
+    .map((row) => ({
     slotId: row.id,
     submissionId: row.submissionId,
     presentationId: presentationBySubmission.get(row.submissionId) ?? null,

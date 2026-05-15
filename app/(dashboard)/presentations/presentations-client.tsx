@@ -4,7 +4,7 @@ import { Fragment, useState, useMemo, useCallback, memo } from "react";
 import Link from "next/link";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { useDashboardAuth } from "@/components/dashboard-auth-context";
-import { Image as ImageIcon, Calendar, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download, Mic, Star } from "lucide-react";
+import { Image as ImageIcon, Calendar, Users, ClipboardList, X, Check, MapPin, ChevronDown, ChevronUp, UserPlus, ArrowUpDown, BarChart3, Download, Mic, Star, Megaphone } from "lucide-react";
 import { TrackFilter } from "@/components/track-filter";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { SummaryStatCard } from "@/components/ui/summary-stat-card";
 import { displayNameTh } from "@/lib/display-name";
 import { useI18n } from "@/lib/i18n";
+import { isPublishedPresentationStatus } from "@/lib/presentation-status";
 import { formatDateTime, toDateTimeLocalValue } from "@/lib/utils";
 import type {
   CommitteeUser,
@@ -57,6 +58,7 @@ interface PresentationsClientProps {
   initialCommitteeUsers: CommitteeUser[];
   canManage: boolean;
   canEditCriteria: boolean;
+  canPublish: boolean;
 }
 
 export function PresentationsClient({
@@ -66,6 +68,7 @@ export function PresentationsClient({
   initialCommitteeUsers,
   canManage,
   canEditCriteria,
+  canPublish,
 }: PresentationsClientProps) {
   const { t } = useI18n();
   const { roles } = useDashboardAuth();
@@ -80,6 +83,7 @@ export function PresentationsClient({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ scheduledAt: "", room: "", duration: "" });
   const [saving, setSaving] = useState(false);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [trackFilter, setTrackFilter] = useState("");
   const [scoringLoaded, setScoringLoaded] = useState(false);
   const [assignPresId, setAssignPresId] = useState<string | null>(null);
@@ -94,6 +98,14 @@ export function PresentationsClient({
   const TitleIcon = type === "ORAL" ? Mic : ImageIcon;
   const presentationLabel = (presentation: PresentationData | ScoringPresentation) =>
     `${presentation.submission.paperCode || "NO-CODE"} · ${presentation.submission.title}`;
+  const presentationStatusLabel = (status: string) => {
+    if (status === "COMPLETED") return t("presentations.completedStatus");
+    return isPublishedPresentationStatus(status)
+      ? t("presentations.statusScheduled")
+      : t("presentations.statusPending");
+  };
+  const presentationStatusTone = (status: string) =>
+    isPublishedPresentationStatus(status) ? "success" : "warning";
 
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((prev) => {
@@ -154,7 +166,7 @@ export function PresentationsClient({
     let scheduled = 0;
     let pending = 0;
     for (const p of filteredPresentations) {
-      if (p.status === "SCHEDULED") scheduled++;
+      if (isPublishedPresentationStatus(p.status)) scheduled++;
       else pending++;
     }
     return { scheduledCount: scheduled, pendingCount: pending };
@@ -193,6 +205,32 @@ export function PresentationsClient({
     }
 
     setSaving(false);
+  }
+
+  async function handlePublish(presentationId: string) {
+    setPublishingId(presentationId);
+    setMessage("");
+
+    try {
+      const res = await fetch(`/api/presentations/${presentationId}/publish`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null);
+
+      if (res.ok) {
+        setMessageTone("success");
+        setMessage(t("presentations.publishSuccess"));
+        await reload();
+      } else {
+        setMessageTone("danger");
+        setMessage(data?.error || t("presentations.publishError"));
+      }
+    } catch {
+      setMessageTone("danger");
+      setMessage(t("presentations.publishError"));
+    }
+
+    setPublishingId(null);
   }
 
   async function handleSaveCriteria(nextCriteria: CriterionData[]) {
@@ -238,6 +276,7 @@ export function PresentationsClient({
         setMessage(t("presentations.committeeAssigned"));
         setAssignPresId(null);
         setSelectedJudges([]);
+        await reload();
       } else {
         setMessageTone("danger");
         setMessage(t("presentations.committeeAssignError"));
@@ -321,6 +360,11 @@ export function PresentationsClient({
       <TrackFilter value={trackFilter} onChange={setTrackFilter} counts={trackCounts} />
 
       {message && <Alert tone={messageTone}>{message}</Alert>}
+      {canManage && (
+        <Alert tone="info">
+          {t("presentations.draftPublishHint")}
+        </Alert>
+      )}
 
       <div className="flex gap-0.5 overflow-x-auto border-b border-border/60">
         {tabs.map((tab) => (
@@ -355,8 +399,8 @@ export function PresentationsClient({
                         <p className="text-base font-semibold text-ink">{presentationLabel(presentation)}</p>
                         <p className="mt-1 text-sm text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
                       </div>
-                      <Badge tone={presentation.status === "SCHEDULED" ? "success" : "warning"} dot>
-                        {presentation.status === "SCHEDULED" ? t("presentations.statusScheduled") : t("presentations.statusPending")}
+                      <Badge tone={presentationStatusTone(presentation.status)} dot>
+                        {presentationStatusLabel(presentation.status)}
                       </Badge>
                     </div>
 
@@ -396,20 +440,34 @@ export function PresentationsClient({
                         </div>
                       </div>
                     ) : canManage ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditingId(presentation.id);
-                          setEditForm({
-                            scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
-                            room: presentation.room || "",
-                            duration: presentation.duration?.toString() || "",
-                          });
-                        }}
-                      >
-                        {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingId(presentation.id);
+                            setEditForm({
+                              scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
+                              room: presentation.room || "",
+                              duration: presentation.duration?.toString() || "",
+                            });
+                          }}
+                        >
+                          {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
+                        </Button>
+                        {canPublish && !isPublishedPresentationStatus(presentation.status) && (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => handlePublish(presentation.id)}
+                            loading={publishingId === presentation.id}
+                            disabled={!presentation.scheduledAt}
+                          >
+                            <Megaphone className="h-3.5 w-3.5" />
+                            {t("presentations.publish")}
+                          </Button>
+                        )}
+                      </div>
                     ) : null}
                     {isCommittee && (
                       <Link href={`/presentations/${presentation.id}/score`}>
@@ -468,8 +526,8 @@ export function PresentationsClient({
                               {presentation.duration ? <span className="text-xs text-ink-light">{presentation.duration}</span> : <span className="text-xs text-ink-muted">—</span>}
                             </td>
                             <td className="px-4 py-3.5 text-center">
-                              <Badge tone={presentation.status === "SCHEDULED" ? "success" : "warning"} dot>
-                                {presentation.status === "SCHEDULED" ? t("presentations.statusScheduled") : t("presentations.statusPending")}
+                              <Badge tone={presentationStatusTone(presentation.status)} dot>
+                                {presentationStatusLabel(presentation.status)}
                               </Badge>
                             </td>
                             <td className="px-5 py-3.5 text-right">
@@ -480,21 +538,35 @@ export function PresentationsClient({
                                     <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
                                   </>
                                 ) : canManage ? (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
-                                    onClick={() => {
-                                      setEditingId(presentation.id);
-                                      setEditForm({
-                                        scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
-                                        room: presentation.room || "",
-                                        duration: presentation.duration?.toString() || "",
-                                      });
-                                    }}
-                                  >
-                                    {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
-                                  </Button>
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+                                      onClick={() => {
+                                        setEditingId(presentation.id);
+                                        setEditForm({
+                                          scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
+                                          room: presentation.room || "",
+                                          duration: presentation.duration?.toString() || "",
+                                        });
+                                      }}
+                                    >
+                                      {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
+                                    </Button>
+                                    {canPublish && !isPublishedPresentationStatus(presentation.status) && (
+                                      <Button
+                                        size="sm"
+                                        variant="primary"
+                                        onClick={() => handlePublish(presentation.id)}
+                                        loading={publishingId === presentation.id}
+                                        disabled={!presentation.scheduledAt}
+                                      >
+                                        <Megaphone className="h-3.5 w-3.5" />
+                                        {t("presentations.publish")}
+                                      </Button>
+                                    )}
+                                  </>
                                 ) : null}
                                 {isCommittee && (
                                   <Link href={`/presentations/${presentation.id}/score`}>

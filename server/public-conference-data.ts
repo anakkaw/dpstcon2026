@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, ilike, isNotNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNotNull, or } from "drizzle-orm";
 import { db } from "@/server/db";
 import {
   presentationAssignments,
@@ -14,6 +14,7 @@ import {
   isPdfMime,
   isSubmissionFilePubliclyVisible,
 } from "@/server/e-abstract-policy";
+import { PUBLISHED_PRESENTATION_STATUSES } from "@/lib/presentation-status";
 
 export type PublicAbstractListItem = {
   id: string;
@@ -270,7 +271,12 @@ export async function getPublicAbstractByPaperCode(
       status: presentationAssignments.status,
     })
     .from(presentationAssignments)
-    .where(eq(presentationAssignments.submissionId, row.id))
+    .where(
+      and(
+        eq(presentationAssignments.submissionId, row.id),
+        inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+      )
+    )
     .orderBy(asc(presentationAssignments.scheduledAt));
 
   const presentations: PublicPresentationSlot[] = presRows.map((p) => ({
@@ -342,6 +348,7 @@ export async function getPublicProgram(opts: {
   const conditions = [
     eq(submissions.isPublished, true),
     isNotNull(presentationAssignments.scheduledAt),
+    inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES),
   ];
   if (opts.trackId) conditions.push(eq(submissions.trackId, opts.trackId));
   if (opts.type) conditions.push(eq(presentationAssignments.type, opts.type));
@@ -568,4 +575,3 @@ export async function getPublicTemplateFile(
     originalName: `${row.name}${ext}`,
   };
 }
-

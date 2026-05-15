@@ -5,6 +5,7 @@ import {
   presentationCommitteeAssignments,
   presentationEvaluations,
   posterSlotJudges,
+  notifications,
   settings,
   submissions,
   userRoles,
@@ -25,6 +26,11 @@ import {
   savePresentationRubric,
   type PresentationRubricCriterion,
 } from "@/server/presentation-rubrics";
+import {
+  PUBLISHED_POSTER_SLOT_STATUSES,
+  PUBLISHED_PRESENTATION_STATUSES,
+  isPublishedPresentationStatus,
+} from "@/lib/presentation-status";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -166,6 +172,162 @@ async function findPosterJudgeTimeConflict(input: {
   });
 }
 
+function formatScheduleSummary(input: {
+  scheduledAt: Date | null;
+  room: string | null;
+  duration: number | null;
+}) {
+  const dateText = input.scheduledAt
+    ? new Intl.DateTimeFormat("th-TH", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Bangkok",
+      }).format(input.scheduledAt)
+    : "รอระบุเวลา";
+  const roomText = input.room ? ` ห้อง ${input.room}` : "";
+  const durationText = input.duration ? ` (${input.duration} นาที)` : "";
+  return `${dateText}${roomText}${durationText}`;
+}
+
+function paperLabel(input: { paperCode: string | null; title: string }) {
+  return input.paperCode ? `${input.paperCode} · ${input.title}` : input.title;
+}
+
+function posterSlotWindow<T extends { startsAt: Date; endsAt: Date }>(slots: T[]) {
+  const sortedSlots = slots
+    .slice()
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const firstSlot = sortedSlots[0];
+  if (!firstSlot) {
+    throw new Error("posterSlotWindow requires at least one slot");
+  }
+  const lastSlot = sortedSlots.reduce((latest, slot) =>
+    slot.endsAt > latest.endsAt ? slot : latest
+  );
+
+  return {
+    sortedSlots,
+    scheduledAt: firstSlot.startsAt,
+    duration: Math.max(
+      1,
+      Math.round((lastSlot.endsAt.getTime() - firstSlot.startsAt.getTime()) / 60000)
+    ),
+  };
+}
+
+async function createPresentationNotifications(
+  items: Array<{
+    userId: string;
+    type?: "ASSIGNMENT" | "SYSTEM";
+    title: string;
+    message: string;
+    linkUrl: string;
+  }>
+) {
+  const deduped = new Map<string, (typeof items)[number]>();
+  for (const item of items) {
+    deduped.set(
+      `${item.userId}:${item.title}:${item.message}:${item.linkUrl}`,
+      item
+    );
+  }
+
+  const values = Array.from(deduped.values());
+  if (values.length === 0) return 0;
+
+  await db.insert(notifications).values(
+    values.map((item) => ({
+      userId: item.userId,
+      type: item.type ?? "SYSTEM",
+      title: item.title,
+      message: item.message,
+      linkUrl: item.linkUrl,
+      isRead: false,
+    }))
+  );
+
+  return values.length;
+}
+
+async function notifyOralSchedulePublished(presentationId: string) {
+  const presentation = await db.query.presentationAssignments.findFirst({
+    where: eq(presentationAssignments.id, presentationId),
+    with: {
+      submission: {
+        columns: { id: true, authorId: true, title: true, paperCode: true },
+      },
+      committeeAssignments: true,
+    },
+  });
+
+  if (!presentation) return 0;
+
+  const label = paperLabel(presentation.submission);
+  const summary = formatScheduleSummary({
+    scheduledAt: presentation.scheduledAt,
+    room: presentation.room,
+    duration: presentation.duration,
+  });
+
+  return createPresentationNotifications([
+    {
+      userId: presentation.submission.authorId,
+      title: "เผยแพร่ตารางนำเสนอแล้ว",
+      message: `ตารางนำเสนอแบบบรรยายของ "${label}" เผยแพร่แล้ว: ${summary}`,
+      linkUrl: "/presentations?tab=oral",
+    },
+    ...presentation.committeeAssignments.map((assignment) => ({
+      userId: assignment.judgeId,
+      type: "ASSIGNMENT" as const,
+      title: "ได้รับมอบหมายประเมินการนำเสนอ",
+      message: `คุณได้รับมอบหมายประเมิน "${label}" แบบบรรยาย: ${summary}`,
+      linkUrl: "/presentations/scoring",
+    })),
+  ]);
+}
+
+async function markPosterPresentationDraft(submissionId: string) {
+  await db
+    .update(presentationAssignments)
+    .set({ status: "PENDING" })
+    .where(
+      and(
+        eq(presentationAssignments.submissionId, submissionId),
+        eq(presentationAssignments.type, "POSTER"),
+        ne(presentationAssignments.status, "COMPLETED")
+      )
+    );
+}
+
+async function markAllPosterSchedulesDraft() {
+  const now = new Date();
+  await Promise.all([
+    db
+      .update(presentationAssignments)
+      .set({ status: "PENDING" })
+      .where(
+        and(
+          eq(presentationAssignments.type, "POSTER"),
+          ne(presentationAssignments.status, "COMPLETED")
+        )
+      ),
+    db
+      .update(posterSlotJudges)
+      .set({ status: "PLANNED", updatedAt: now })
+      .where(ne(posterSlotJudges.status, "COMPLETED")),
+  ]);
+}
+
+function sessionSettingsChanged(
+  before: Awaited<ReturnType<typeof getPosterSessionSettings>>,
+  after: Awaited<ReturnType<typeof getPosterSessionSettings>>
+) {
+  return (
+    before.room !== after.room ||
+    JSON.stringify(before.slotTemplates) !== JSON.stringify(after.slotTemplates)
+  );
+}
+
 async function isValidPosterJudgeForSubmission(input: {
   judgeId: string;
   submissionTrackId: string | null;
@@ -228,6 +390,10 @@ app.get("/", async (c) => {
         .where(
           and(
             eq(presentationCommitteeAssignments.judgeId, currentUser.id),
+            inArray(
+              presentationAssignments.status,
+              PUBLISHED_PRESENTATION_STATUSES
+            ),
             typeFilter
               ? eq(presentationAssignments.type, typeFilter)
               : undefined
@@ -235,6 +401,27 @@ app.get("/", async (c) => {
         );
 
       assignedRows.forEach((row) => presentationIds.add(row.id));
+
+      if (!typeFilter || typeFilter === "POSTER") {
+        const posterRows = await db
+          .select({ id: presentationAssignments.id })
+          .from(posterSlotJudges)
+          .innerJoin(
+            presentationAssignments,
+            and(
+              eq(posterSlotJudges.submissionId, presentationAssignments.submissionId),
+              eq(presentationAssignments.type, "POSTER")
+            )
+          )
+          .where(
+            and(
+              eq(posterSlotJudges.judgeId, currentUser.id),
+              inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES),
+              inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES)
+            )
+          );
+        posterRows.forEach((row) => presentationIds.add(row.id));
+      }
     }
 
     if (hasRole(currentUser, "AUTHOR")) {
@@ -248,6 +435,10 @@ app.get("/", async (c) => {
         .where(
           and(
             eq(submissions.authorId, currentUser.id),
+            inArray(
+              presentationAssignments.status,
+              PUBLISHED_PRESENTATION_STATUSES
+            ),
             typeFilter
               ? eq(presentationAssignments.type, typeFilter)
               : undefined
@@ -362,7 +553,7 @@ app.post("/schedule", async (c) => {
         scheduledAt: scheduledAt.value,
         room: parsed.data.room ?? null,
         duration: parsed.data.duration ?? null,
-        status: scheduledAt.value ? "SCHEDULED" : "PENDING",
+        status: "PENDING",
       })
       .where(eq(presentationAssignments.id, existing.id))
       .returning();
@@ -378,7 +569,7 @@ app.post("/schedule", async (c) => {
       scheduledAt: scheduledAt.value,
       room: parsed.data.room ?? null,
       duration: parsed.data.duration ?? null,
-      status: scheduledAt.value ? "SCHEDULED" : "PENDING",
+      status: "PENDING",
     })
     .returning();
 
@@ -412,13 +603,55 @@ app.patch("/:id/schedule", async (c) => {
       scheduledAt: scheduledAt.value,
       room: parsed.data.room ?? null,
       duration: parsed.data.duration ?? null,
-      status: scheduledAt.value ? "SCHEDULED" : "PENDING",
+      status: "PENDING",
     })
     .where(eq(presentationAssignments.id, id))
     .returning();
 
   if (!updated) return c.json({ error: "Not found" }, 404);
   return c.json({ presentation: updated });
+});
+
+app.post("/:id/publish", async (c) => {
+  const currentUser = c.get("user");
+  const { id } = c.req.param();
+
+  if (!hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const presentation = await db.query.presentationAssignments.findFirst({
+    where: eq(presentationAssignments.id, id),
+    columns: {
+      id: true,
+      type: true,
+      status: true,
+      scheduledAt: true,
+      submissionId: true,
+    },
+  });
+
+  if (!presentation) return c.json({ error: "Not found" }, 404);
+  if (presentation.type === "POSTER") {
+    return c.json(
+      { error: "Use the poster planner publish action for poster schedules" },
+      400
+    );
+  }
+  if (!presentation.scheduledAt) {
+    return c.json({ error: "Please set the presentation time before publishing" }, 400);
+  }
+
+  let notificationCount = 0;
+  if (!isPublishedPresentationStatus(presentation.status)) {
+    await db
+      .update(presentationAssignments)
+      .set({ status: "SCHEDULED" })
+      .where(eq(presentationAssignments.id, id));
+    notificationCount = await notifyOralSchedulePublished(id);
+  }
+
+  return c.json({ ok: true, notificationCount });
 });
 
 // M9: Validate judgeIds with Zod
@@ -487,6 +720,16 @@ app.patch("/:id/committee", async (c) => {
     await db.insert(presentationCommitteeAssignments).values(judgeIds.map((judgeId) => ({ presentationId: id, judgeId })));
   }
 
+  await db
+    .update(presentationAssignments)
+    .set({ status: "PENDING" })
+    .where(
+      and(
+        eq(presentationAssignments.id, id),
+        ne(presentationAssignments.status, "COMPLETED")
+      )
+    );
+
   return c.json({ ok: true, count: judgeIds.length });
 });
 
@@ -499,6 +742,134 @@ app.get("/poster-planner", async (c) => {
 
   const data = await getPosterPlannerPageData(currentUser as ServerAuthUser);
   return c.json(data);
+});
+
+app.post("/poster-publish", async (c) => {
+  const currentUser = c.get("user");
+  if (!hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const body = await c.req.json();
+  const schema = z.object({
+    trackId: z.string().uuid(),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const [sessionSettings, posterRows] = await Promise.all([
+    getPosterSessionSettings(),
+    db.query.presentationAssignments.findMany({
+      where: eq(presentationAssignments.type, "POSTER"),
+      with: {
+        submission: {
+          columns: {
+            id: true,
+            authorId: true,
+            title: true,
+            paperCode: true,
+            trackId: true,
+          },
+          with: {
+            posterSlotJudges: {
+              with: {
+                judge: { columns: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const targetRows = posterRows.filter(
+    (row) =>
+      row.submission.trackId === parsed.data.trackId &&
+      !isPublishedPresentationStatus(row.status) &&
+      row.submission.posterSlotJudges.length > 0
+  );
+
+  if (targetRows.length === 0) {
+    return c.json(
+      { error: "No draft poster assignments with judge slots were found for this track" },
+      400
+    );
+  }
+
+  const now = new Date();
+  await Promise.all(
+    targetRows.map((row) => {
+      const { scheduledAt, duration } = posterSlotWindow(row.submission.posterSlotJudges);
+
+      return db
+        .update(presentationAssignments)
+        .set({
+          status: "SCHEDULED",
+          scheduledAt,
+          room: sessionSettings.room || null,
+          duration,
+        })
+        .where(eq(presentationAssignments.id, row.id));
+    })
+  );
+
+  const slotIds = targetRows.flatMap((row) =>
+    row.submission.posterSlotJudges
+      .filter((slot) => slot.status !== "COMPLETED")
+      .map((slot) => slot.id)
+  );
+
+  if (slotIds.length > 0) {
+    await db
+      .update(posterSlotJudges)
+      .set({ status: "CONFIRMED", updatedAt: now })
+      .where(inArray(posterSlotJudges.id, slotIds));
+  }
+
+  const notificationsToCreate: Parameters<typeof createPresentationNotifications>[0] = [];
+  for (const row of targetRows) {
+    const label = paperLabel(row.submission);
+    const { sortedSlots, scheduledAt, duration } = posterSlotWindow(row.submission.posterSlotJudges);
+    const authorSummary = formatScheduleSummary({
+      scheduledAt,
+      room: sessionSettings.room || null,
+      duration,
+    });
+
+    notificationsToCreate.push({
+      userId: row.submission.authorId,
+      title: "เผยแพร่ตารางนำเสนอแล้ว",
+      message: `ตารางนำเสนอแบบโปสเตอร์ของ "${label}" เผยแพร่แล้ว: ${authorSummary}`,
+      linkUrl: "/presentations?tab=poster",
+    });
+
+    for (const slot of sortedSlots) {
+      const slotSummary = formatScheduleSummary({
+        scheduledAt: slot.startsAt,
+        room: sessionSettings.room || null,
+        duration: Math.max(
+          1,
+          Math.round((slot.endsAt.getTime() - slot.startsAt.getTime()) / 60000)
+        ),
+      });
+      notificationsToCreate.push({
+        userId: slot.judgeId,
+        type: "ASSIGNMENT",
+        title: "ได้รับมอบหมายตรวจโปสเตอร์",
+        message: `คุณได้รับมอบหมายตรวจ "${label}" แบบโปสเตอร์: ${slotSummary}`,
+        linkUrl: "/presentations/scoring",
+      });
+    }
+  }
+
+  const notificationCount = await createPresentationNotifications(notificationsToCreate);
+
+  return c.json({
+    ok: true,
+    publishedCount: targetRows.length,
+    notificationCount,
+  });
 });
 
 // ── Poster Slot-Judge Endpoints ──
@@ -567,6 +938,8 @@ app.post("/poster-slots", async (c) => {
     })
     .returning();
 
+  await markPosterPresentationDraft(parsed.data.submissionId);
+
   return c.json({ slot }, 201);
 });
 
@@ -621,11 +994,28 @@ app.patch("/poster-slots/:slotId", async (c) => {
     }
   }
 
+  const slotUpdates: {
+    judgeId?: string;
+    status?: "PLANNED" | "CONFIRMED" | "COMPLETED";
+    updatedAt: Date;
+  } = { updatedAt: new Date() };
+
+  if (parsed.data.judgeId) {
+    slotUpdates.judgeId = parsed.data.judgeId;
+    slotUpdates.status = "PLANNED";
+  } else if (parsed.data.status) {
+    slotUpdates.status = parsed.data.status;
+  }
+
   const [updated] = await db
     .update(posterSlotJudges)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set(slotUpdates)
     .where(eq(posterSlotJudges.id, slotId))
     .returning();
+
+  if (parsed.data.judgeId || parsed.data.status === "PLANNED") {
+    await markPosterPresentationDraft(existing.submissionId);
+  }
 
   return c.json({ slot: updated });
 });
@@ -644,6 +1034,7 @@ app.delete("/poster-slots/:slotId", async (c) => {
   }
 
   await db.delete(posterSlotJudges).where(eq(posterSlotJudges.id, slotId));
+  await markPosterPresentationDraft(existing.submissionId);
 
   return c.json({ ok: true });
 });
@@ -658,6 +1049,7 @@ app.put("/poster-session", async (c) => {
   const parsed = posterSessionSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: "Validation error" }, 400);
 
+  const before = await getPosterSessionSettings();
   const normalized = normalizePosterSlotTemplates(parsed.data.slotTemplates);
   if (normalized.length !== parsed.data.slotTemplates.length) {
     return c.json({ error: "Invalid slot template range" }, 400);
@@ -667,6 +1059,10 @@ app.put("/poster-session", async (c) => {
     room: parsed.data.room ?? "",
     slotTemplates: parsed.data.slotTemplates,
   });
+
+  if (sessionSettingsChanged(before, sessionSettings)) {
+    await markAllPosterSchedulesDraft();
+  }
 
   return c.json({ sessionSettings });
 });
@@ -688,11 +1084,15 @@ app.post("/:id/evaluations", async (c) => {
 
   const presentation = await db.query.presentationAssignments.findFirst({
     where: eq(presentationAssignments.id, id),
-    columns: { submissionId: true, type: true },
+    columns: { submissionId: true, type: true, status: true },
   });
   if (!presentation) return c.json({ error: "Not found" }, 404);
 
   if (!isAdmin) {
+    if (!isPublishedPresentationStatus(presentation.status)) {
+      return c.json({ error: "SCHEDULE_NOT_PUBLISHED" }, 403);
+    }
+
     const committeeAssignment = await db.query.presentationCommitteeAssignments.findFirst({
       where: and(
         eq(presentationCommitteeAssignments.presentationId, id),
@@ -705,7 +1105,8 @@ app.post("/:id/evaluations", async (c) => {
       posterSlotAssignment = await db.query.posterSlotJudges.findFirst({
         where: and(
           eq(posterSlotJudges.submissionId, presentation.submissionId),
-          eq(posterSlotJudges.judgeId, currentUser.id)
+          eq(posterSlotJudges.judgeId, currentUser.id),
+          inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES)
         ),
       });
     }
