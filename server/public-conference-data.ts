@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, ilike, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, or } from "drizzle-orm";
 import { db } from "@/server/db";
 import {
   presentationAssignments,
@@ -90,6 +90,18 @@ export type PublicDocument = {
 };
 
 export type PublicTrack = { id: string; name: string };
+const DEFAULT_PUBLIC_PAGE_SIZE = 100;
+const MAX_PUBLIC_PAGE_SIZE = 200;
+
+function normalizeLimit(limit: number | undefined) {
+  if (!Number.isFinite(limit) || !limit) return DEFAULT_PUBLIC_PAGE_SIZE;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_PUBLIC_PAGE_SIZE);
+}
+
+function normalizeOffset(offset: number | undefined) {
+  if (!Number.isFinite(offset) || !offset) return 0;
+  return Math.max(Math.trunc(offset), 0);
+}
 
 function composeThaiName(u: {
   name: string;
@@ -118,6 +130,8 @@ function composeEnglishName(u: {
 export async function getPublicAbstracts(opts: {
   trackId?: string;
   search?: string;
+  limit?: number;
+  offset?: number;
 }): Promise<PublicAbstractListItem[]> {
   const conditions = [eq(submissions.isPublished, true)];
   if (opts.trackId) conditions.push(eq(submissions.trackId, opts.trackId));
@@ -156,7 +170,9 @@ export async function getPublicAbstracts(opts: {
     .leftJoin(tracks, eq(submissions.trackId, tracks.id))
     .innerJoin(user, eq(submissions.authorId, user.id))
     .where(and(...conditions))
-    .orderBy(asc(submissions.paperCode), asc(submissions.title));
+    .orderBy(asc(submissions.paperCode), asc(submissions.title))
+    .limit(normalizeLimit(opts.limit))
+    .offset(normalizeOffset(opts.offset));
 
   return rows.map((row) => ({
     id: row.id,
@@ -178,6 +194,33 @@ export async function getPublicAbstracts(opts: {
       lastNameEn: row.authorLastEn,
     }),
   }));
+}
+
+export async function getPublicAbstractCount(opts: {
+  trackId?: string;
+  search?: string;
+} = {}): Promise<number> {
+  const conditions = [eq(submissions.isPublished, true)];
+  if (opts.trackId) conditions.push(eq(submissions.trackId, opts.trackId));
+  if (opts.search) {
+    const term = `%${opts.search}%`;
+    conditions.push(
+      or(
+        ilike(submissions.title, term),
+        ilike(submissions.titleEn, term),
+        ilike(submissions.keywords, term),
+        ilike(submissions.keywordsEn, term),
+        ilike(submissions.paperCode, term)
+      )!
+    );
+  }
+
+  const [row] = await db
+    .select({ total: count() })
+    .from(submissions)
+    .where(and(...conditions));
+
+  return Number(row?.total ?? 0);
 }
 
 /**
@@ -344,6 +387,8 @@ export async function getPublicAbstractByPaperCode(
 export async function getPublicProgram(opts: {
   trackId?: string;
   type?: "ORAL" | "POSTER";
+  limit?: number;
+  offset?: number;
 }): Promise<PublicProgramItem[]> {
   const conditions = [
     eq(submissions.isPublished, true),
@@ -382,7 +427,9 @@ export async function getPublicProgram(opts: {
     .orderBy(
       asc(presentationAssignments.scheduledAt),
       asc(presentationAssignments.room)
-    );
+    )
+    .limit(normalizeLimit(opts.limit))
+    .offset(normalizeOffset(opts.offset));
 
   return rows.map((row) => ({
     presentationId: row.presentationId,
@@ -407,6 +454,27 @@ export async function getPublicProgram(opts: {
       lastNameEn: row.authorLastEn,
     }),
   }));
+}
+
+export async function getPublicProgramCount(opts: {
+  trackId?: string;
+  type?: "ORAL" | "POSTER";
+} = {}): Promise<number> {
+  const conditions = [
+    eq(submissions.isPublished, true),
+    isNotNull(presentationAssignments.scheduledAt),
+    inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES),
+  ];
+  if (opts.trackId) conditions.push(eq(submissions.trackId, opts.trackId));
+  if (opts.type) conditions.push(eq(presentationAssignments.type, opts.type));
+
+  const [row] = await db
+    .select({ total: count() })
+    .from(presentationAssignments)
+    .innerJoin(submissions, eq(presentationAssignments.submissionId, submissions.id))
+    .where(and(...conditions));
+
+  return Number(row?.total ?? 0);
 }
 
 function mapTemplate(row: {

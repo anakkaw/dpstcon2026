@@ -4,14 +4,16 @@ import { getServerTranslator } from "@/lib/i18n/server";
 import { CONFERENCE_TZ } from "@/lib/conference-tz";
 import {
   getPublicProgram,
+  getPublicProgramCount,
   getPublicTracks,
   type PublicProgramItem,
 } from "@/server/public-conference-data";
 import { Badge, EmptyState } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
+const PAGE_SIZE = 50;
 
-type Search = { trackId?: string; type?: string };
+type Search = { trackId?: string; type?: string; page?: string };
 
 function isPresentationType(v: string | undefined): v is "ORAL" | "POSTER" {
   return v === "ORAL" || v === "POSTER";
@@ -37,11 +39,20 @@ export default async function ConferenceProgramPage({
 
   const typeFilter = isPresentationType(params.type) ? params.type : undefined;
   const trackId = params.trackId || undefined;
+  const requestedPage = Math.max(1, Number(params.page || "1") || 1);
 
-  const [program, tracks] = await Promise.all([
-    getPublicProgram({ trackId, type: typeFilter }),
+  const [total, tracks] = await Promise.all([
+    getPublicProgramCount({ trackId, type: typeFilter }),
     getPublicTracks(),
   ]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(requestedPage, totalPages);
+  const program = await getPublicProgram({
+    trackId,
+    type: typeFilter,
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+  });
 
   const days = new Map<string, PublicProgramItem[]>();
   for (const item of program) {
@@ -63,8 +74,10 @@ export default async function ConferenceProgramPage({
     const next = new URLSearchParams();
     const tid = updates.trackId !== undefined ? updates.trackId : trackId;
     const ty = updates.type !== undefined ? updates.type : typeFilter;
+    const p = updates.page !== undefined ? updates.page : page;
     if (tid) next.set("trackId", tid);
     if (ty) next.set("type", ty);
+    if (p && Number(p) > 1) next.set("page", String(p));
     const qs = next.toString();
     return qs ? `?${qs}` : "/conference/program";
   }
@@ -90,7 +103,7 @@ export default async function ConferenceProgramPage({
             <div className="flex items-center gap-2 text-sm">
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-chip bg-stat-brand border border-brand-100 text-brand-700 font-semibold">
                 <Calendar className="h-3.5 w-3.5" />
-                {program.length}{" "}
+                {total}{" "}
                 {locale === "en" ? "sessions" : "เซสชัน"}
               </span>
             </div>
@@ -106,18 +119,18 @@ export default async function ConferenceProgramPage({
               {t("conference.program.filterType")}
             </span>
             <Chip
-              href={buildHref({ type: "" })}
+              href={buildHref({ type: "", page: "" })}
               active={!typeFilter}
               label={t("conference.program.allTypes")}
             />
             <Chip
-              href={buildHref({ type: "ORAL" })}
+              href={buildHref({ type: "ORAL", page: "" })}
               active={typeFilter === "ORAL"}
               label={t("conference.program.typeOral")}
               tone="info"
             />
             <Chip
-              href={buildHref({ type: "POSTER" })}
+              href={buildHref({ type: "POSTER", page: "" })}
               active={typeFilter === "POSTER"}
               label={t("conference.program.typePoster")}
               tone="success"
@@ -128,14 +141,14 @@ export default async function ConferenceProgramPage({
               {t("conference.program.filterTrack")}
             </span>
             <Chip
-              href={buildHref({ trackId: "" })}
+              href={buildHref({ trackId: "", page: "" })}
               active={!trackId}
               label={t("conference.program.allTracks")}
             />
             {tracks.map((tk) => (
               <Chip
                 key={tk.id}
-                href={buildHref({ trackId: tk.id })}
+                href={buildHref({ trackId: tk.id, page: "" })}
                 active={trackId === tk.id}
                 label={tk.name}
               />
@@ -209,7 +222,53 @@ export default async function ConferenceProgramPage({
             })}
           </div>
         )}
+        {totalPages > 1 && (
+          <Pager
+            page={page}
+            totalPages={totalPages}
+            previousHref={buildHref({ page: String(page - 1) })}
+            nextHref={buildHref({ page: String(page + 1) })}
+          />
+        )}
       </section>
+    </div>
+  );
+}
+
+function Pager({
+  page,
+  totalPages,
+  previousHref,
+  nextHref,
+}: {
+  page: number;
+  totalPages: number;
+  previousHref: string;
+  nextHref: string;
+}) {
+  return (
+    <div className="mt-6 flex items-center justify-between gap-3">
+      {page > 1 ? (
+        <Link href={previousHref} className="text-sm font-semibold text-ink border border-border rounded-button px-4 py-2 hover:bg-surface-2">
+          Previous
+        </Link>
+      ) : (
+        <span className="text-sm font-semibold text-ink-muted border border-border rounded-button px-4 py-2 opacity-50">
+          Previous
+        </span>
+      )}
+      <span className="text-sm text-ink-muted">
+        {page} / {totalPages}
+      </span>
+      {page < totalPages ? (
+        <Link href={nextHref} className="text-sm font-semibold text-ink border border-border rounded-button px-4 py-2 hover:bg-surface-2">
+          Next
+        </Link>
+      ) : (
+        <span className="text-sm font-semibold text-ink-muted border border-border rounded-button px-4 py-2 opacity-50">
+          Next
+        </span>
+      )}
     </div>
   );
 }

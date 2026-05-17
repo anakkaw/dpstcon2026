@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, FileText, Search } from "lucide-react";
 import { getServerTranslator } from "@/lib/i18n/server";
 import {
+  getPublicAbstractCount,
   getPublicAbstracts,
   getPublicTracks,
   type PublicAbstractListItem,
@@ -9,8 +10,9 @@ import {
 import { EmptyState } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
+const PAGE_SIZE = 50;
 
-type SearchParamsT = { trackId?: string; search?: string };
+type SearchParamsT = { trackId?: string; search?: string; page?: string };
 
 export default async function ConferenceAbstractsPage({
   searchParams,
@@ -21,18 +23,29 @@ export default async function ConferenceAbstractsPage({
   const params = await searchParams;
   const trackId = params.trackId || undefined;
   const search = params.search?.trim() || undefined;
+  const requestedPage = Math.max(1, Number(params.page || "1") || 1);
 
-  const [abstracts, tracks] = await Promise.all([
-    getPublicAbstracts({ trackId, search }),
+  const [total, tracks] = await Promise.all([
+    getPublicAbstractCount({ trackId, search }),
     getPublicTracks(),
   ]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(requestedPage, totalPages);
+  const abstracts = await getPublicAbstracts({
+    trackId,
+    search,
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+  });
 
   function buildHref(updates: Partial<SearchParamsT>) {
     const next = new URLSearchParams();
     const tid = updates.trackId !== undefined ? updates.trackId : trackId;
     const s = updates.search !== undefined ? updates.search : search;
+    const p = updates.page !== undefined ? updates.page : page;
     if (tid) next.set("trackId", tid);
     if (s) next.set("search", s);
+    if (p && Number(p) > 1) next.set("page", String(p));
     const qs = next.toString();
     return qs ? `?${qs}` : "/conference/abstracts";
   }
@@ -58,7 +71,7 @@ export default async function ConferenceAbstractsPage({
             <div className="flex items-center gap-2 text-sm">
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-chip bg-stat-info border border-blue-100 text-blue-700 font-semibold">
                 <FileText className="h-3.5 w-3.5" />
-                {abstracts.length}{" "}
+                {total}{" "}
                 {locale === "en" ? "papers" : "บทคัดย่อ"}
               </span>
             </div>
@@ -91,14 +104,14 @@ export default async function ConferenceAbstractsPage({
               {locale === "en" ? "Track" : "สาขา"}
             </span>
             <Chip
-              href={buildHref({ trackId: "" })}
+              href={buildHref({ trackId: "", page: "" })}
               active={!trackId}
               label={t("conference.abstracts.allTracks")}
             />
             {tracks.map((tk) => (
               <Chip
                 key={tk.id}
-                href={buildHref({ trackId: tk.id })}
+                href={buildHref({ trackId: tk.id, page: "" })}
                 active={trackId === tk.id}
                 label={tk.name}
               />
@@ -121,12 +134,59 @@ export default async function ConferenceAbstractsPage({
                 key={a.id}
                 entry={a}
                 index={i + 1}
+                offset={(page - 1) * PAGE_SIZE}
                 locale={locale}
               />
             ))}
           </div>
         )}
+        {totalPages > 1 && (
+          <Pager
+            page={page}
+            totalPages={totalPages}
+            previousHref={buildHref({ page: String(page - 1) })}
+            nextHref={buildHref({ page: String(page + 1) })}
+          />
+        )}
       </section>
+    </div>
+  );
+}
+
+function Pager({
+  page,
+  totalPages,
+  previousHref,
+  nextHref,
+}: {
+  page: number;
+  totalPages: number;
+  previousHref: string;
+  nextHref: string;
+}) {
+  return (
+    <div className="mt-6 flex items-center justify-between gap-3">
+      {page > 1 ? (
+        <Link href={previousHref} className="text-sm font-semibold text-ink border border-border rounded-button px-4 py-2 hover:bg-surface-2">
+          Previous
+        </Link>
+      ) : (
+        <span className="text-sm font-semibold text-ink-muted border border-border rounded-button px-4 py-2 opacity-50">
+          Previous
+        </span>
+      )}
+      <span className="text-sm text-ink-muted">
+        {page} / {totalPages}
+      </span>
+      {page < totalPages ? (
+        <Link href={nextHref} className="text-sm font-semibold text-ink border border-border rounded-button px-4 py-2 hover:bg-surface-2">
+          Next
+        </Link>
+      ) : (
+        <span className="text-sm font-semibold text-ink-muted border border-border rounded-button px-4 py-2 opacity-50">
+          Next
+        </span>
+      )}
     </div>
   );
 }
@@ -157,10 +217,12 @@ function Chip({
 function AbstractEntry({
   entry,
   index,
+  offset,
   locale,
 }: {
   entry: PublicAbstractListItem;
   index: number;
+  offset: number;
   locale: string;
 }) {
   const title =
@@ -185,7 +247,7 @@ function AbstractEntry({
     >
       {/* Number badge */}
       <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-brand-50 text-brand-700 font-bold text-sm tabular-nums">
-        {String(index).padStart(2, "0")}
+        {String(offset + index).padStart(2, "0")}
       </div>
 
       {/* Paper code */}

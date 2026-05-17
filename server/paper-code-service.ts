@@ -1,6 +1,6 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { formatPaperCode, getTrackPaperCode, parsePaperCodeSequence } from "@/lib/paper-codes";
-import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
+import { ACCEPTED_SUBMISSION_STATUSES } from "@/lib/submission-status";
 import { db } from "@/server/db";
 import { submissions } from "@/server/db/schema";
 
@@ -103,22 +103,52 @@ export async function ensureSubmissionPaperCode(submissionId: string) {
  * Assigns codes in a single pass to avoid sequence gaps.
  */
 export async function generateMissingPaperCodes() {
+  const counter = await buildPrefixCounter();
   const rows = await db.query.submissions.findMany({
     columns: { id: true, paperCode: true, status: true },
     with: { track: { columns: { name: true } } },
+    where: and(
+      inArray(submissions.status, [...ACCEPTED_SUBMISSION_STATUSES]),
+      isNull(submissions.paperCode)
+    ),
   });
 
-  const targets = rows.filter(
-    (row) => isAcceptedSubmissionStatus(row.status) && !row.paperCode
-  );
-
-  if (targets.length === 0) return [];
+  if (rows.length === 0) return [];
 
   const updated: Array<{ id: string; paperCode: string }> = [];
 
-  for (const target of targets) {
-    const paperCode = await ensureSubmissionPaperCode(target.id);
-    updated.push({ id: target.id, paperCode });
+  for (const target of rows) {
+    const prefix = getTrackPaperCode(target.track?.name);
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < PAPER_CODE_RETRY_LIMIT; attempt++) {
+      const next = (counter.get(prefix) ?? 0) + 1;
+      counter.set(prefix, next);
+      const paperCode = formatPaperCode(prefix, next);
+
+      try {
+        const [row] = await db
+          .update(submissions)
+          .set({ paperCode, updatedAt: new Date() })
+          .where(and(eq(submissions.id, target.id), isNull(submissions.paperCode)))
+          .returning({ paperCode: submissions.paperCode });
+
+        if (row?.paperCode) {
+          updated.push({ id: target.id, paperCode: row.paperCode });
+        }
+        lastError = undefined;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!isUniqueViolation(error)) throw error;
+      }
+    }
+
+    if (lastError) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error("Could not generate a unique paper code");
+    }
   }
 
   return updated;

@@ -4,10 +4,12 @@ import { rateLimit } from "../middleware/rate-limit";
 import { getDownloadUrl } from "@/server/r2";
 import {
   getPublicAbstractByPaperCode,
+  getPublicAbstractCount,
   getPublicAbstracts,
   getPublicDocuments,
   getPublicFileKey,
   getPublicProgram,
+  getPublicProgramCount,
   getPublicTemplateFile,
   getPublicTracks,
   getWelcomeDocument,
@@ -21,18 +23,28 @@ app.use("/*", rateLimit(120, 60 * 1000));
 const listQuerySchema = z.object({
   trackId: z.string().uuid().optional(),
   search: z.string().trim().min(1).max(200).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  perPage: z.coerce.number().int().min(1).max(200).optional(),
 });
 
 app.get("/abstracts", async (c) => {
   const parsed = listQuerySchema.safeParse({
     trackId: c.req.query("trackId") || undefined,
     search: c.req.query("search") || undefined,
+    page: c.req.query("page") || undefined,
+    perPage: c.req.query("perPage") || undefined,
   });
   if (!parsed.success) return c.json({ error: "Invalid query" }, 400);
 
-  const abstracts = await getPublicAbstracts(parsed.data);
-  const tracks = await getPublicTracks();
-  return c.json({ abstracts, tracks });
+  const page = parsed.data.page ?? 1;
+  const perPage = parsed.data.perPage ?? 100;
+  const offset = (page - 1) * perPage;
+  const [abstracts, tracks, total] = await Promise.all([
+    getPublicAbstracts({ ...parsed.data, limit: perPage, offset }),
+    getPublicTracks(),
+    getPublicAbstractCount(parsed.data),
+  ]);
+  return c.json({ abstracts, tracks, page, perPage, total, hasMore: offset + abstracts.length < total });
 });
 
 app.get("/abstracts/:paperCode", async (c) => {
@@ -45,18 +57,28 @@ app.get("/abstracts/:paperCode", async (c) => {
 const programQuerySchema = z.object({
   trackId: z.string().uuid().optional(),
   type: z.enum(["ORAL", "POSTER"]).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  perPage: z.coerce.number().int().min(1).max(200).optional(),
 });
 
 app.get("/program", async (c) => {
   const parsed = programQuerySchema.safeParse({
     trackId: c.req.query("trackId") || undefined,
     type: c.req.query("type") || undefined,
+    page: c.req.query("page") || undefined,
+    perPage: c.req.query("perPage") || undefined,
   });
   if (!parsed.success) return c.json({ error: "Invalid query" }, 400);
 
-  const program = await getPublicProgram(parsed.data);
-  const tracks = await getPublicTracks();
-  return c.json({ program, tracks });
+  const page = parsed.data.page ?? 1;
+  const perPage = parsed.data.perPage ?? 100;
+  const offset = (page - 1) * perPage;
+  const [program, tracks, total] = await Promise.all([
+    getPublicProgram({ ...parsed.data, limit: perPage, offset }),
+    getPublicTracks(),
+    getPublicProgramCount(parsed.data),
+  ]);
+  return c.json({ program, tracks, page, perPage, total, hasMore: offset + program.length < total });
 });
 
 app.get("/documents", async (c) => {

@@ -8,6 +8,8 @@ import { reviewAssignments, storedFiles, submissions } from "@/server/db/schema"
 import { loadReviewerPool } from "@/server/reviewer-pool";
 import { SubmissionsPageClient, type SubmissionData } from "./submissions-page-client";
 
+const INITIAL_SUBMISSION_LOAD_LIMIT = 500;
+
 /**
  * For each submission, fetch the latest MANUSCRIPT file so the workbench can
  * offer a 1-click PDF preview. Returns a map of submissionId → { id, originalName, mimeType }.
@@ -121,6 +123,7 @@ async function loadInitialSubmissions(
         reviewAssignments: assignmentWith,
       },
       orderBy: [desc(submissions.createdAt)],
+      limit: INITIAL_SUBMISSION_LOAD_LIMIT,
     });
 
     const manuscripts = await loadLatestManuscripts(results.map((s) => s.id));
@@ -156,7 +159,9 @@ async function loadInitialSubmissions(
           const trackSubs = await db
             .select({ id: submissions.id })
             .from(submissions)
-            .where(inArray(submissions.trackId, trackIds));
+            .where(inArray(submissions.trackId, trackIds))
+            .orderBy(desc(submissions.createdAt))
+            .limit(INITIAL_SUBMISSION_LOAD_LIMIT);
           trackSubs.forEach((submission) => submissionIds.add(submission.id));
         }
       })
@@ -165,13 +170,13 @@ async function loadInitialSubmissions(
 
   if (hasRole(currentUser, "REVIEWER")) {
     roleFetches.push(
-      db.select({ submissionId: reviewAssignments.submissionId }).from(reviewAssignments).where(eq(reviewAssignments.reviewerId, currentUser.id))
+      db.select({ submissionId: reviewAssignments.submissionId }).from(reviewAssignments).where(eq(reviewAssignments.reviewerId, currentUser.id)).limit(INITIAL_SUBMISSION_LOAD_LIMIT)
         .then((rows) => rows.forEach((assignment) => submissionIds.add(assignment.submissionId)))
     );
   }
 
   roleFetches.push(
-    db.select({ id: submissions.id }).from(submissions).where(eq(submissions.authorId, currentUser.id))
+    db.select({ id: submissions.id }).from(submissions).where(eq(submissions.authorId, currentUser.id)).orderBy(desc(submissions.createdAt)).limit(INITIAL_SUBMISSION_LOAD_LIMIT)
       .then((rows) => rows.forEach((submission) => submissionIds.add(submission.id)))
   );
 
@@ -181,7 +186,7 @@ async function loadInitialSubmissions(
     return [];
   }
 
-  const ids = Array.from(submissionIds);
+  const ids = Array.from(submissionIds).slice(0, INITIAL_SUBMISSION_LOAD_LIMIT);
   const results = await db.query.submissions.findMany({
     where: inArray(submissions.id, ids),
     with: {
@@ -191,6 +196,7 @@ async function loadInitialSubmissions(
       reviewAssignments: assignmentWith,
     },
     orderBy: [desc(submissions.createdAt)],
+    limit: INITIAL_SUBMISSION_LOAD_LIMIT,
   });
 
   // Gate reviewer identity from pure authors — they should only see their own

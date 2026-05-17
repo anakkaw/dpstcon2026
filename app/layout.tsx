@@ -45,29 +45,54 @@ export default async function RootLayout({
         </I18nProvider>
         <Script id="chunk-recovery" strategy="afterInteractive">
           {`
-            window.addEventListener("error", function (event) {
-              if (
-                event.message &&
-                (event.message.includes("ChunkLoadError") ||
-                  event.message.includes("Loading chunk"))
-              ) {
-                console.warn("[DPSTCon] Chunk load error detected, reloading...");
-                window.location.reload();
-              }
-            });
+            (function () {
+              if (window.__dpstChunkRecoveryInstalled) return;
+              window.__dpstChunkRecoveryInstalled = true;
 
-            window.addEventListener("unhandledrejection", function (event) {
-              var reason = event.reason && (event.reason.message || String(event.reason));
-              if (
-                reason &&
-                (reason.includes("ChunkLoadError") ||
-                  reason.includes("Loading chunk") ||
-                  reason.includes("Failed to fetch dynamically"))
-              ) {
-                console.warn("[DPSTCon] Chunk load rejection detected, reloading...");
+              var recoveryKey = "dpstcon:chunk-recovery:last-reload";
+              var recoveryCooldownMs = 30000;
+
+              function recoverFromChunkError(source) {
+                try {
+                  var lastReloadAt = Number(sessionStorage.getItem(recoveryKey) || "0");
+                  var now = Date.now();
+
+                  if (now - lastReloadAt < recoveryCooldownMs) {
+                    console.warn("[DPSTCon] Chunk load " + source + " repeated, reload skipped.");
+                    return;
+                  }
+
+                  sessionStorage.setItem(recoveryKey, String(now));
+                } catch (error) {
+                  console.warn("[DPSTCon] Chunk recovery storage unavailable.", error);
+                }
+
+                console.warn("[DPSTCon] Chunk load " + source + " detected, reloading...");
                 window.location.reload();
               }
-            });
+
+              window.addEventListener("error", function (event) {
+                if (
+                  event.message &&
+                  (event.message.includes("ChunkLoadError") ||
+                    event.message.includes("Loading chunk"))
+                ) {
+                  recoverFromChunkError("error");
+                }
+              });
+
+              window.addEventListener("unhandledrejection", function (event) {
+                var reason = event.reason && (event.reason.message || String(event.reason));
+                if (
+                  reason &&
+                  (reason.includes("ChunkLoadError") ||
+                    reason.includes("Loading chunk") ||
+                    reason.includes("Failed to fetch dynamically"))
+                ) {
+                  recoverFromChunkError("rejection");
+                }
+              });
+            })();
           `}
         </Script>
       </body>

@@ -10,8 +10,9 @@ import {
 } from "lucide-react";
 import { getServerTranslator } from "@/lib/i18n/server";
 import {
-  getPublicAbstracts,
-  getPublicProgram,
+  getPublicAbstractCount,
+  getPublicProgramCount,
+  getPublicTracks,
   getWelcomeDocument,
 } from "@/server/public-conference-data";
 import {
@@ -24,17 +25,18 @@ export const dynamic = "force-dynamic";
 
 export default async function ConferenceHomePage() {
   const { t, locale } = await getServerTranslator();
-  const [welcome, abstracts, program, info] = await Promise.all([
+  const [welcome, abstractCount, programCount, tracks, info] = await Promise.all([
     getWelcomeDocument(),
-    getPublicAbstracts({}),
-    getPublicProgram({}),
+    getPublicAbstractCount(),
+    getPublicProgramCount(),
+    getPublicTracks(),
     getConferenceInfo(),
   ]);
 
   const stats = {
-    abstracts: abstracts.length,
-    tracks: new Set(abstracts.map((a) => a.track?.id).filter(Boolean)).size,
-    sessions: program.length,
+    abstracts: abstractCount,
+    tracks: tracks.length,
+    sessions: programCount,
   };
 
   const welcomeTitle =

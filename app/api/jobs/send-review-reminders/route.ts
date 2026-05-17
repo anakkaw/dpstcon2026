@@ -22,6 +22,7 @@ export async function GET(req: Request) {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UPCOMING_WINDOW_DAYS = 3;
 const REMINDER_COOLDOWN_DAYS = 3;
+const JOB_BATCH_LIMIT = 100;
 
 export async function POST(req: Request) {
   if (!verifyCronSecret(req)) {
@@ -60,7 +61,8 @@ export async function POST(req: Request) {
           lt(reviewAssignments.lastReminderAt, cooldownCutoff)
         )
       )
-    );
+    )
+    .limit(JOB_BATCH_LIMIT);
 
   const appUrl = getAppUrl();
   const loginUrl = `${appUrl}/reviews`;
@@ -70,6 +72,30 @@ export async function POST(req: Request) {
   for (const row of rows) {
     if (!row.reviewerEmail || !row.dueDate) {
       results.push({ assignmentId: row.assignmentId, ok: false, error: "missing email or due date" });
+      continue;
+    }
+
+    // Claim the row before sending so overlapping cron invocations do not
+    // send duplicate reminders for the same assignment.
+    const [claimed] = await db
+      .update(reviewAssignments)
+      .set({ lastReminderAt: now })
+      .where(
+        and(
+          eq(reviewAssignments.id, row.assignmentId),
+          eq(reviewAssignments.status, "ACCEPTED"),
+          isNotNull(reviewAssignments.dueDate),
+          lte(reviewAssignments.dueDate, upcomingCutoff),
+          or(
+            isNull(reviewAssignments.lastReminderAt),
+            lt(reviewAssignments.lastReminderAt, cooldownCutoff)
+          )
+        )
+      )
+      .returning({ id: reviewAssignments.id });
+
+    if (!claimed) {
+      results.push({ assignmentId: row.assignmentId, ok: false, error: "already claimed" });
       continue;
     }
 
@@ -91,10 +117,6 @@ export async function POST(req: Request) {
         text: emailContent.text,
         throwOnFailure: true,
       });
-      await db
-        .update(reviewAssignments)
-        .set({ lastReminderAt: now })
-        .where(eq(reviewAssignments.id, row.assignmentId));
       results.push({ assignmentId: row.assignmentId, ok: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown";

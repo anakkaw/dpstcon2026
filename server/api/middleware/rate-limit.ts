@@ -7,10 +7,16 @@ interface RateLimitEntry {
 }
 
 const MAX_STORE_SIZE = 10_000;
-const store = new Map<string, RateLimitEntry>();
+type RateLimitGlobal = typeof globalThis & {
+  __dpstRateLimitStore?: Map<string, RateLimitEntry>;
+  __dpstRateLimitCleanupTimer?: ReturnType<typeof setInterval>;
+};
 
-// Cleanup stale entries every minute (was 5 min — tighter to bound memory)
-setInterval(() => {
+const rateLimitGlobal = globalThis as RateLimitGlobal;
+const store = rateLimitGlobal.__dpstRateLimitStore ?? new Map<string, RateLimitEntry>();
+rateLimitGlobal.__dpstRateLimitStore = store;
+
+function cleanupRateLimitStore() {
   const now = Date.now();
   for (const [key, entry] of store) {
     if (entry.resetAt < now) store.delete(key);
@@ -22,7 +28,14 @@ setInterval(() => {
     const toEvict = entries.slice(0, store.size - MAX_STORE_SIZE);
     for (const [key] of toEvict) store.delete(key);
   }
-}, 60 * 1000);
+}
+
+// Keep a single timer across Next dev/HMR reloads.
+if (!rateLimitGlobal.__dpstRateLimitCleanupTimer) {
+  const timer = setInterval(cleanupRateLimitStore, 60 * 1000);
+  timer.unref?.();
+  rateLimitGlobal.__dpstRateLimitCleanupTimer = timer;
+}
 
 /**
  * Simple in-memory rate limiter.

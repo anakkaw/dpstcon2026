@@ -18,6 +18,7 @@ export async function GET(req: Request) {
 
 const RESEND_AFTER_HOURS = 48;
 const MAX_AUTO_RESENDS = 2;
+const JOB_BATCH_LIMIT = 100;
 
 export async function POST(req: Request) {
   if (!verifyCronSecret(req)) {
@@ -44,7 +45,8 @@ export async function POST(req: Request) {
         lt(submissions.submittedAt, cutoff),
         sql`COALESCE(${submissions.advisorAutoResendCount}, 0) < ${MAX_AUTO_RESENDS}`
       )
-    );
+    )
+    .limit(JOB_BATCH_LIMIT);
 
   const appUrl = getAppUrl();
 
@@ -57,7 +59,7 @@ export async function POST(req: Request) {
     }
 
     const advisorToken = crypto.randomUUID();
-    await db
+    const [claimed] = await db
       .update(submissions)
       .set({
         advisorApprovalToken: advisorToken,
@@ -65,7 +67,21 @@ export async function POST(req: Request) {
         advisorAutoResendCount: (sub.autoResendCount ?? 0) + 1,
         updatedAt: new Date(),
       })
-      .where(eq(submissions.id, sub.id));
+      .where(
+        and(
+          eq(submissions.id, sub.id),
+          eq(submissions.status, "ADVISOR_APPROVAL_PENDING"),
+          eq(submissions.advisorApprovalStatus, "PENDING"),
+          lt(submissions.submittedAt, cutoff),
+          sql`COALESCE(${submissions.advisorAutoResendCount}, 0) < ${MAX_AUTO_RESENDS}`
+        )
+      )
+      .returning({ id: submissions.id });
+
+    if (!claimed) {
+      results.push({ id: sub.id, ok: false, error: "already claimed" });
+      continue;
+    }
 
     const emailContent = advisorApprovalEmail({
       advisorName: sub.advisorName || "Advisor",

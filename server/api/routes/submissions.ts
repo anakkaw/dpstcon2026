@@ -60,6 +60,19 @@ const FILE_KIND_PATHS = {
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 const UPLOAD_TOKEN_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_SUBMISSION_LIST_LIMIT = 200;
+const MAX_SUBMISSION_LIST_LIMIT = 500;
+
+function parseListLimit(value: string | undefined) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_SUBMISSION_LIST_LIMIT;
+  return Math.min(parsed, MAX_SUBMISSION_LIST_LIMIT);
+}
+
+function parseListOffset(value: string | undefined) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
 
 function hasAuthorSubmissionRole(currentUser: AuthEnv["Variables"]["user"]) {
   return hasRole(currentUser, "AUTHOR");
@@ -276,6 +289,8 @@ app.get("/tracks", async (c) => {
 // GET /api/submissions — multi-role aware listing
 app.get("/", async (c) => {
   const currentUser = c.get("user");
+  const limit = parseListLimit(c.req.query("limit"));
+  const offset = parseListOffset(c.req.query("offset"));
 
   // ADMIN sees everything
   if (hasRole(currentUser, "ADMIN")) {
@@ -287,6 +302,8 @@ app.get("/", async (c) => {
         reviewAssignments: { columns: { id: true, status: true } },
       },
       orderBy: [desc(submissions.createdAt)],
+      limit,
+      offset,
     });
     return c.json({ submissions: results });
   }
@@ -305,7 +322,9 @@ app.get("/", async (c) => {
           const trackSubs = await db
             .select({ id: submissions.id })
             .from(submissions)
-            .where(inArray(submissions.trackId, trackIds));
+            .where(inArray(submissions.trackId, trackIds))
+            .orderBy(desc(submissions.createdAt))
+            .limit(MAX_SUBMISSION_LIST_LIMIT);
           trackSubs.forEach((s) => submissionIds.add(s.id));
         }
       })
@@ -315,14 +334,14 @@ app.get("/", async (c) => {
   // REVIEWER: submissions assigned to them
   if (hasRole(currentUser, "REVIEWER")) {
     roleFetches.push(
-      db.select({ submissionId: reviewAssignments.submissionId }).from(reviewAssignments).where(eq(reviewAssignments.reviewerId, currentUser.id))
+      db.select({ submissionId: reviewAssignments.submissionId }).from(reviewAssignments).where(eq(reviewAssignments.reviewerId, currentUser.id)).limit(MAX_SUBMISSION_LIST_LIMIT)
         .then((rows) => rows.forEach((a) => submissionIds.add(a.submissionId)))
     );
   }
 
   // Owners should always see their own submissions, even if an AUTHOR role assignment is missing.
   roleFetches.push(
-    db.select({ id: submissions.id }).from(submissions).where(eq(submissions.authorId, currentUser.id))
+    db.select({ id: submissions.id }).from(submissions).where(eq(submissions.authorId, currentUser.id)).orderBy(desc(submissions.createdAt)).limit(MAX_SUBMISSION_LIST_LIMIT)
       .then((rows) => rows.forEach((s) => submissionIds.add(s.id)))
   );
 
@@ -333,7 +352,7 @@ app.get("/", async (c) => {
     return c.json({ submissions: [] });
   }
 
-  const ids = Array.from(submissionIds);
+  const ids = Array.from(submissionIds).slice(offset, offset + limit);
   const results = await db.query.submissions.findMany({
     where: inArray(submissions.id, ids),
     with: {
