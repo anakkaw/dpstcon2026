@@ -1192,6 +1192,8 @@ const en: Record<TranslationKey, string> = {
   "conference.home.abstractsCardDesc": "Read abstracts of papers presented at the conference",
   "conference.home.documentsCard": "Conference Documents",
   "conference.home.documentsCardDesc": "Download conference documents and information",
+  "conference.home.scheduleTitle": "Conference Schedule",
+  "conference.home.scheduleCta": "View full program",
   "conference.welcome.heading": "Welcome Message",
   "conference.welcome.empty": "No welcome message published yet",
   "conference.program.heading": "Presentation Program",

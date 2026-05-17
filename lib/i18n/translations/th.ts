@@ -1194,6 +1194,8 @@ const th = {
   "conference.home.abstractsCardDesc": "อ่านบทคัดย่อของผลงานที่นำเสนอในงาน",
   "conference.home.documentsCard": "เอกสารงานประชุม",
   "conference.home.documentsCardDesc": "ดาวน์โหลดเอกสารและกำหนดการที่เกี่ยวข้อง",
+  "conference.home.scheduleTitle": "กำหนดการงานประชุม",
+  "conference.home.scheduleCta": "ดูตารางนำเสนอทั้งหมด",
   "conference.welcome.heading": "ข้อความต้อนรับ",
   "conference.welcome.empty": "ยังไม่มีข้อความต้อนรับในขณะนี้",
   "conference.program.heading": "ตารางการนำเสนอผลงาน",
