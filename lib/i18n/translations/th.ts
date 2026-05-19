@@ -1207,6 +1207,14 @@ const th = {
   "poster.publishTrack": "เผยแพร่สาขานี้",
   "poster.publishSuccess": "เผยแพร่ตารางโปสเตอร์ {n} รายการและแจ้งผู้เกี่ยวข้องแล้ว",
   "poster.publishError": "ไม่สามารถเผยแพร่ตารางโปสเตอร์ได้",
+  "poster.autoAssignTrack": "จัดอัตโนมัติ",
+  "poster.autoAssignTitle": "จัดกรรมการอัตโนมัติโดยใช้จำนวนกรรมการน้อยที่สุด และไม่ให้กรรมการชน slot",
+  "poster.autoAssignSuccess": "จัดกรรมการอัตโนมัติให้ {posters} โปสเตอร์ โดยใช้กรรมการ {judges} คน",
+  "poster.autoAssignError": "ไม่สามารถจัดกรรมการอัตโนมัติได้",
+  "poster.autoAssignNoPosters": "ไม่มีโปสเตอร์แบบร่างให้จัดในสาขานี้",
+  "poster.autoAssignInsufficientSlots": "ต้องมีอย่างน้อย 3 slot สำหรับจัดโปสเตอร์อัตโนมัติ",
+  "poster.autoAssignInsufficientJudges": "ต้องมีกรรมการอย่างน้อย 3 คนในสาขานี้",
+  "poster.autoAssignInsufficientCapacity": "จำนวนกรรมการหรือ slot ที่ว่างไม่พอสำหรับจัดโดยไม่ชนเวลา",
   "poster.track": "สาขาวิชา",
 
   // ─── Public Conference Site ─────────────────────────────

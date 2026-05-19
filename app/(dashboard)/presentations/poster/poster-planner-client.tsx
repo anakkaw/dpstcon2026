@@ -46,6 +46,7 @@ import {
   Trash2,
   UserCheck,
   Users,
+  Wand2,
 } from "lucide-react";
 
 type AdminCommitteeUser = {
@@ -352,6 +353,42 @@ export function PosterPlannerClient({
       }
       await refreshPlanner();
       setMessage(t("poster.publishSuccess", { n: data?.publishedCount ?? 0 }));
+    });
+  }
+
+  function getAutoAssignErrorMessage(error: string | undefined) {
+    switch (error) {
+      case "INSUFFICIENT_SLOTS":
+        return t("poster.autoAssignInsufficientSlots");
+      case "INSUFFICIENT_JUDGES":
+        return t("poster.autoAssignInsufficientJudges");
+      case "INSUFFICIENT_JUDGE_CAPACITY":
+        return t("poster.autoAssignInsufficientCapacity");
+      case "NO_POSTERS":
+        return t("poster.autoAssignNoPosters");
+      default:
+        return error || t("poster.autoAssignError");
+    }
+  }
+
+  async function autoAssignCurrentTrack() {
+    if (!selectedTrackId) return;
+
+    await runAction(`auto-${selectedTrackId}`, async () => {
+      const response = await fetch("/api/presentations/poster-auto-assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId: selectedTrackId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(getAutoAssignErrorMessage(data?.error));
+      }
+      await refreshPlanner();
+      setMessage(t("poster.autoAssignSuccess", {
+        posters: data?.posterCount ?? 0,
+        judges: data?.judgeCount ?? 0,
+      }));
     });
   }
 
@@ -933,6 +970,22 @@ export function PosterPlannerClient({
                   <div className="flex flex-wrap gap-2">
                     <Badge tone="success">{t("poster.readyCount", { n: selectedTrackPublishState.publishableDraftCount })}</Badge>
                     <Badge tone="warning">{t("poster.incompleteCount", { n: selectedTrackPublishState.incompleteDraftCount })}</Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={autoAssignCurrentTrack}
+                      loading={savingKey === `auto-${selectedTrackId}`}
+                      disabled={
+                        !selectedTrackId ||
+                        sessionSettings.slotTemplates.length < POSTER_REQUIRED_JUDGE_COUNT ||
+                        filteredRows.length === 0 ||
+                        trackCommitteeUsers.length < POSTER_REQUIRED_JUDGE_COUNT
+                      }
+                      title={t("poster.autoAssignTitle")}
+                    >
+                      <Wand2 className="h-3.5 w-3.5" />
+                      {t("poster.autoAssignTrack")}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>

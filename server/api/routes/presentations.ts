@@ -8,6 +8,7 @@ import {
   notifications,
   settings,
   submissions,
+  user,
   userRoles,
 } from "@/server/db/schema";
 import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
@@ -42,6 +43,7 @@ import {
   parsePosterOrderValue,
   posterOrderSettingsKey,
 } from "@/lib/poster-planner-order";
+import { createMinimalPosterJudgePlan } from "@/lib/poster-auto-assign";
 import {
   formatThaiPosterSlotSummary,
   getPosterScheduleSortAt,
@@ -872,6 +874,152 @@ app.patch("/poster-order", async (c) => {
     });
 
   return c.json({ order: nextOrder });
+});
+
+app.post("/poster-auto-assign", async (c) => {
+  const currentUser = c.get("user");
+  const body = await c.req.json();
+  const schema = z.object({
+    trackId: z.string().uuid(),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  if (
+    !hasRole(currentUser, "ADMIN") &&
+    !hasTrackRole(currentUser, parsed.data.trackId, "PROGRAM_CHAIR")
+  ) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const sessionSettings = await getPosterSessionSettings();
+  if (sessionSettings.slotTemplates.length < POSTER_REQUIRED_JUDGE_COUNT) {
+    return c.json(
+      { error: `At least ${POSTER_REQUIRED_JUDGE_COUNT} poster slots are required` },
+      400
+    );
+  }
+
+  const posterRows = await db.query.presentationAssignments.findMany({
+    where: eq(presentationAssignments.type, "POSTER"),
+    with: {
+      submission: {
+        columns: { id: true, status: true, trackId: true },
+        with: {
+          posterSlotJudges: {
+            columns: { status: true },
+          },
+        },
+      },
+    },
+  });
+
+  const targetRows = posterRows.filter(
+    (row) =>
+      row.submission.trackId === parsed.data.trackId &&
+      isAcceptedSubmissionStatus(row.submission.status) &&
+      !isPublishedPresentationStatus(row.status) &&
+      !row.submission.posterSlotJudges.some((slot) => slot.status === "COMPLETED")
+  );
+
+  if (targetRows.length === 0) {
+    return c.json(
+      { error: "No draft poster assignments are available for auto assignment in this track" },
+      400
+    );
+  }
+
+  const committeeRows = await db
+    .select({
+      id: userRoles.userId,
+      name: user.name,
+    })
+    .from(userRoles)
+    .innerJoin(user, eq(userRoles.userId, user.id))
+    .where(
+      and(
+        eq(userRoles.role, "COMMITTEE"),
+        or(eq(userRoles.trackId, parsed.data.trackId), isNull(userRoles.trackId))
+      )
+    );
+  const committeeById = new Map<string, { judgeId: string; name: string }>();
+  for (const committee of committeeRows) {
+    if (!committeeById.has(committee.id)) {
+      committeeById.set(committee.id, {
+        judgeId: committee.id,
+        name: committee.name,
+      });
+    }
+  }
+  const judges = Array.from(committeeById.values());
+  if (judges.length < POSTER_REQUIRED_JUDGE_COUNT) {
+    return c.json(
+      { error: `At least ${POSTER_REQUIRED_JUDGE_COUNT} committee members are required` },
+      400
+    );
+  }
+
+  const targetSubmissionIds = new Set(targetRows.map((row) => row.submissionId));
+  const busySlotRows = await db.query.posterSlotJudges.findMany({
+    where: inArray(posterSlotJudges.judgeId, judges.map((judge) => judge.judgeId)),
+    columns: {
+      submissionId: true,
+      judgeId: true,
+      startsAt: true,
+      endsAt: true,
+    },
+  });
+
+  const plan = createMinimalPosterJudgePlan({
+    posters: targetRows.map((row) => ({ submissionId: row.submissionId })),
+    judges,
+    slots: sessionSettings.slotTemplates,
+    busySlots: busySlotRows
+      .filter((slot) => !targetSubmissionIds.has(slot.submissionId))
+      .map((slot) => ({
+        judgeId: slot.judgeId,
+        startsAt: slot.startsAt,
+        endsAt: slot.endsAt,
+      })),
+  });
+
+  if (!plan.ok) {
+    return c.json({ error: plan.reason }, 400);
+  }
+
+  const now = new Date();
+  await db
+    .delete(posterSlotJudges)
+    .where(inArray(posterSlotJudges.submissionId, Array.from(targetSubmissionIds)));
+
+  await db.insert(posterSlotJudges).values(
+    plan.assignments.map((assignment) => ({
+      submissionId: assignment.submissionId,
+      judgeId: assignment.judgeId,
+      startsAt: new Date(assignment.startsAt),
+      endsAt: new Date(assignment.endsAt),
+      status: "PLANNED" as const,
+      updatedAt: now,
+    }))
+  );
+
+  await db
+    .update(presentationAssignments)
+    .set({
+      status: "PENDING",
+      scheduledAt: null,
+      room: null,
+      duration: null,
+    })
+    .where(inArray(presentationAssignments.id, targetRows.map((row) => row.id)));
+
+  return c.json({
+    ok: true,
+    posterCount: targetRows.length,
+    judgeCount: plan.judgeCount,
+    assignmentCount: plan.assignments.length,
+  });
 });
 
 app.post("/poster-publish", async (c) => {

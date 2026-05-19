@@ -1205,6 +1205,14 @@ const en: Record<TranslationKey, string> = {
   "poster.publishTrack": "Publish this track",
   "poster.publishSuccess": "Published {n} poster schedule item(s) and sent notifications",
   "poster.publishError": "Unable to publish the poster schedule",
+  "poster.autoAssignTrack": "Auto assign",
+  "poster.autoAssignTitle": "Automatically assign poster judges using the fewest committee members possible without slot conflicts",
+  "poster.autoAssignSuccess": "Auto assigned {posters} poster(s) using {judges} judge(s)",
+  "poster.autoAssignError": "Unable to auto assign poster judges",
+  "poster.autoAssignNoPosters": "No draft poster assignments are available in this track",
+  "poster.autoAssignInsufficientSlots": "At least 3 poster slots are required for auto assignment",
+  "poster.autoAssignInsufficientJudges": "At least 3 committee members are required in this track",
+  "poster.autoAssignInsufficientCapacity": "Available judges or slots are not enough to assign without conflicts",
   "poster.track": "Track",
 
   // ─── Public Conference Site ─────────────────────────────
