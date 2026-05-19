@@ -201,7 +201,25 @@ export default async function AbstractDetailPage({
                           <Clock className="h-3 w-3" />
                           {locale === "en" ? "Time" : "เวลา"}
                         </div>
-                        {p.scheduledAt ? (
+                        {p.type === "POSTER" && p.posterSlots.length > 0 ? (
+                          <div className="space-y-2">
+                            {p.posterSlots.map((slot, index) => {
+                              const startsAt = new Date(slot.startsAt);
+                              const endsAt = new Date(slot.endsAt);
+                              return (
+                                <div key={slot.id}>
+                                  <div className="text-sm font-bold text-ink tabular-nums leading-none">
+                                    {locale === "en" ? "Slot" : "รอบ"} {index + 1}:{" "}
+                                    {timeFmt.format(startsAt)}-{timeFmt.format(endsAt)}
+                                  </div>
+                                  <div className="text-xs text-ink-muted mt-1">
+                                    {dateFmt.format(startsAt)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : p.scheduledAt ? (
                           <>
                             <div className="text-2xl font-bold text-ink tabular-nums leading-none">
                               {timeFmt.format(new Date(p.scheduledAt))}

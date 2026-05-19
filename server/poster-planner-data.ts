@@ -16,6 +16,11 @@ import {
   isPublishedPosterSlotStatus,
   isPublishedPresentationStatus,
 } from "@/lib/presentation-status";
+import {
+  normalizePosterOrder,
+  parsePosterOrderValue,
+  posterOrderSettingsKey,
+} from "@/lib/poster-planner-order";
 
 const POSTER_SESSION_ROOM_KEY = "posterSessionRoom";
 const POSTER_SESSION_SLOTS_KEY = "posterSessionSlotTemplates";
@@ -189,17 +194,31 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
   const [slotJudgeRows, committeeUsers] = await Promise.all([slotJudgePromise, committeePromise]);
   const visibleSubmissionIds = new Set(submissionIds);
   const candidateJudgeIds = Array.from(new Set(committeeUsers.map((committeeUser) => committeeUser.id)));
+  const visibleTrackIds = Array.from(
+    new Set(filteredPosters.map((row) => row.submission.track?.id).filter((id): id is string => Boolean(id)))
+  );
 
-  const busySlotRows = candidateJudgeIds.length > 0
-    ? await db.query.posterSlotJudges.findMany({
-        where: inArray(posterSlotJudges.judgeId, candidateJudgeIds),
-        with: {
-          submission: {
-            columns: { id: true, paperCode: true, title: true },
+  const [busySlotRows, orderRows] = await Promise.all([
+    candidateJudgeIds.length > 0
+      ? db.query.posterSlotJudges.findMany({
+          where: inArray(posterSlotJudges.judgeId, candidateJudgeIds),
+          with: {
+            submission: {
+              columns: { id: true, paperCode: true, title: true },
+            },
           },
-        },
-      })
-    : [];
+        })
+      : Promise.resolve([]),
+    visibleTrackIds.length > 0
+      ? db
+          .select({
+            key: settings.key,
+            value: settings.value,
+          })
+          .from(settings)
+          .where(inArray(settings.key, visibleTrackIds.map((trackId) => posterOrderSettingsKey(trackId))))
+      : Promise.resolve([]),
+  ]);
 
   const judgeBusySlots: PosterJudgeBusySlot[] = busySlotRows.map((slot) => {
     const canSeeSubmission = scopedTrackIds === null || visibleSubmissionIds.has(slot.submissionId);
@@ -228,7 +247,32 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
     slotJudgesBySubmission.set(sj.submissionId, list);
   }
 
-  const posterSubmissions: PosterPlannerSubmission[] = filteredPosters.map((row) => ({
+  const orderByTrackId = new Map<string, string[]>();
+  for (const trackId of visibleTrackIds) {
+    const row = orderRows.find((orderRow) => orderRow.key === posterOrderSettingsKey(trackId));
+    const currentIds = filteredPosters
+      .filter((posterRow) => posterRow.submission.track?.id === trackId)
+      .map((posterRow) => posterRow.submissionId);
+    orderByTrackId.set(trackId, normalizePosterOrder({
+      currentIds,
+      savedIds: parsePosterOrderValue(row?.value),
+    }));
+  }
+
+  const sortedPosters = filteredPosters.slice().sort((a, b) => {
+    const trackA = a.submission.track?.id ?? "";
+    const trackB = b.submission.track?.id ?? "";
+    if (trackA !== trackB) {
+      return (a.submission.track?.name ?? "").localeCompare(b.submission.track?.name ?? "");
+    }
+    const order = orderByTrackId.get(trackA) ?? [];
+    const indexA = order.indexOf(a.submissionId);
+    const indexB = order.indexOf(b.submissionId);
+    if (indexA !== indexB) return indexA - indexB;
+    return (a.submission.paperCode ?? a.submission.title).localeCompare(b.submission.paperCode ?? b.submission.title);
+  });
+
+  const posterSubmissions: PosterPlannerSubmission[] = sortedPosters.map((row) => ({
     presentationStatus: row.status,
     submissionId: row.submissionId,
     paperCode: row.submission.paperCode,

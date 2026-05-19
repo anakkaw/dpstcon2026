@@ -31,6 +31,11 @@ export interface ScoringListItem {
   status: string;
   scheduledAt: string | null;
   room: string | null;
+  posterSlots?: Array<{
+    id: string;
+    startsAt: string;
+    endsAt: string;
+  }>;
   submission: {
     paperCode: string | null;
     title: string;
@@ -271,12 +276,19 @@ export function ScoringListClient({
                       </h3>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
                         <span>{displayNameTh(item.submission.author)}</span>
-                        {item.scheduledAt && (
+                        {item.type === "POSTER" && item.posterSlots?.length ? (
+                          item.posterSlots.map((slot, index) => (
+                            <span key={slot.id} className="inline-flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {t("presentations.posterSlot")} {index + 1}: {formatDateTime(slot.startsAt)}
+                            </span>
+                          ))
+                        ) : item.scheduledAt ? (
                           <span className="inline-flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             {formatDateTime(item.scheduledAt)}
                           </span>
-                        )}
+                        ) : null}
                         {item.room && (
                           <span className="inline-flex items-center gap-1">
                             <MapPin className="h-3 w-3" />

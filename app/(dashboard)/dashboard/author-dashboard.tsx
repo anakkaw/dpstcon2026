@@ -18,7 +18,7 @@ import { NextActionCard } from "@/components/author/next-action-card";
 import { getNextAction, getDaysUntil, getRelevantDeadlineKey } from "@/lib/author-utils";
 import { isPublishedPresentationStatus } from "@/lib/presentation-status";
 import { getAcceptedSubmissionCount } from "@/lib/submission-status";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 interface AuthorSubmission {
   id: string;
@@ -39,6 +39,11 @@ interface AuthorPresentation {
   scheduledAt: string | null;
   room: string | null;
   duration: number | null;
+  posterSlots?: Array<{
+    id: string;
+    startsAt: string;
+    endsAt: string;
+  }>;
 }
 
 export default function AuthorDashboard({ stats }: { stats: Record<string, unknown> }) {
@@ -172,7 +177,15 @@ export default function AuthorDashboard({ stats }: { stats: Record<string, unkno
                       {p.type === "ORAL" ? t("dashboard.oralPresentation") : t("dashboard.poster")}
                     </Badge>
                     {p.room && <span className="text-xs text-ink-muted">{p.room}</span>}
-                    {p.scheduledAt && <span className="text-xs text-ink-muted">{formatDate(p.scheduledAt, locale)}</span>}
+                    {p.type === "POSTER" && p.posterSlots?.length ? (
+                      p.posterSlots.map((slot, index) => (
+                        <span key={slot.id} className="text-xs text-ink-muted">
+                          {locale === "en" ? "Slot" : "รอบ"} {index + 1}: {formatDateTime(slot.startsAt)}
+                        </span>
+                      ))
+                    ) : (
+                      p.scheduledAt && <span className="text-xs text-ink-muted">{formatDate(p.scheduledAt, locale)}</span>
+                    )}
                   </div>
                 </div>
                 <Badge tone={isPublishedPresentationStatus(p.status) ? "success" : "warning"}>

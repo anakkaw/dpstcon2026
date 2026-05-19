@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { hasRole } from "@/lib/permissions";
 import type { ServerAuthUser } from "@/server/auth-helpers";
 import { db } from "@/server/db";
@@ -18,6 +18,10 @@ import {
   PUBLISHED_POSTER_SLOT_STATUSES,
   PUBLISHED_PRESENTATION_STATUSES,
 } from "@/lib/presentation-status";
+import {
+  getPosterScheduleSortAt,
+  sortPosterScheduleSlots,
+} from "@/lib/poster-schedule";
 
 export type PresentationType = "ORAL" | "POSTER";
 
@@ -28,6 +32,11 @@ export interface PresentationData {
   scheduledAt: string | null;
   room: string | null;
   duration: number | null;
+  posterSlots: Array<{
+    id: string;
+    startsAt: string;
+    endsAt: string;
+  }>;
   submissionId: string;
   submission: {
     id: string;
@@ -172,10 +181,49 @@ async function getPresentations(currentUser: ServerAuthUser, type: PresentationT
     orderBy: [desc(presentationAssignments.scheduledAt)],
   });
 
-  return rows.map((row) => ({
-    ...row,
-    scheduledAt: row.scheduledAt?.toISOString() ?? null,
-  }));
+  const posterSubmissionIds = rows
+    .filter((row) => row.type === "POSTER")
+    .map((row) => row.submissionId);
+  const posterSlotRows =
+    posterSubmissionIds.length > 0
+      ? await db
+          .select({
+            id: posterSlotJudges.id,
+            submissionId: posterSlotJudges.submissionId,
+            startsAt: posterSlotJudges.startsAt,
+            endsAt: posterSlotJudges.endsAt,
+          })
+          .from(posterSlotJudges)
+          .where(inArray(posterSlotJudges.submissionId, posterSubmissionIds))
+          .orderBy(asc(posterSlotJudges.startsAt), asc(posterSlotJudges.endsAt))
+      : [];
+
+  const posterSlotsBySubmission = new Map<string, typeof posterSlotRows>();
+  for (const slot of posterSlotRows) {
+    const slots = posterSlotsBySubmission.get(slot.submissionId) ?? [];
+    slots.push(slot);
+    posterSlotsBySubmission.set(slot.submissionId, slots);
+  }
+
+  return rows.map((row) => {
+    const rawPosterSlots =
+      row.type === "POSTER" ? posterSlotsBySubmission.get(row.submissionId) ?? [] : [];
+    const posterSlots = sortPosterScheduleSlots(rawPosterSlots).map((slot) => ({
+      id: slot.id,
+      startsAt: slot.startsAt.toISOString(),
+      endsAt: slot.endsAt.toISOString(),
+    }));
+
+    return {
+      ...row,
+      scheduledAt:
+        row.type === "POSTER"
+          ? getPosterScheduleSortAt(posterSlots, row.scheduledAt)?.toISOString() ?? null
+          : row.scheduledAt?.toISOString() ?? null,
+      duration: row.type === "POSTER" && posterSlots.length > 0 ? null : row.duration,
+      posterSlots,
+    };
+  });
 }
 
 async function getCommitteeUsers(currentUser: ServerAuthUser): Promise<CommitteeUser[]> {

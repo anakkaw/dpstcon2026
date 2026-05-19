@@ -8,6 +8,7 @@ import {
   decisionHistory,
   submissionResubmissions,
   presentationAssignments,
+  posterSlotJudges,
   reviewAssignments,
   settings,
   userRoles,
@@ -17,8 +18,15 @@ import { eq, sql, and, inArray, desc, asc, count } from "drizzle-orm";
 import { SubmissionDetail } from "./submission-detail";
 import { getServerAuthContext } from "@/server/auth-helpers";
 import { hasTrackRole, hasRole } from "@/lib/permissions";
-import { isPublishedPresentationStatus } from "@/lib/presentation-status";
+import {
+  PUBLISHED_POSTER_SLOT_STATUSES,
+  isPublishedPresentationStatus,
+} from "@/lib/presentation-status";
 import { normalizeSubmissionStatus } from "@/lib/submission-status";
+import {
+  getPosterScheduleSortAt,
+  sortPosterScheduleSlots,
+} from "@/lib/poster-schedule";
 import { canRevealReviewerIdentity } from "@/server/access-policies";
 import {
   getPresentationRubrics,
@@ -315,6 +323,29 @@ export default async function SubmissionDetailPage({
     : presRows.filter((presentation) =>
         isPublishedPresentationStatus(presentation.status)
       );
+  const rawPosterSlots = visiblePresentationRows.some((presentation) => presentation.type === "POSTER")
+    ? await db
+        .select({
+          id: posterSlotJudges.id,
+          startsAt: posterSlotJudges.startsAt,
+          endsAt: posterSlotJudges.endsAt,
+        })
+        .from(posterSlotJudges)
+        .where(
+          and(
+            eq(posterSlotJudges.submissionId, id),
+            canManageSubmission
+              ? undefined
+              : inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES)
+          )
+        )
+        .orderBy(asc(posterSlotJudges.startsAt), asc(posterSlotJudges.endsAt))
+    : [];
+  const posterSlots = sortPosterScheduleSlots(rawPosterSlots).map((slot) => ({
+    id: slot.id,
+    startsAt: slot.startsAt.toISOString(),
+    endsAt: slot.endsAt.toISOString(),
+  }));
 
   const presentationTypes = Array.from(
     new Set(visiblePresentationRows.map((presentation) => presentation.type as PresentationType))
@@ -452,9 +483,13 @@ export default async function SubmissionDetailPage({
         type: p.type,
         status: p.status,
         paperCode: submission.paperCode,
-        scheduledAt: p.scheduledAt?.toISOString() || null,
+        scheduledAt:
+          p.type === "POSTER"
+            ? getPosterScheduleSortAt(posterSlots, p.scheduledAt)?.toISOString() || null
+            : p.scheduledAt?.toISOString() || null,
         room: p.room,
-        duration: p.duration,
+        duration: p.type === "POSTER" && posterSlots.length > 0 ? null : p.duration,
+        posterSlots: p.type === "POSTER" ? posterSlots : [],
       }))}
       criteriaByType={criteriaByType}
       deadlines={deadlineMap}

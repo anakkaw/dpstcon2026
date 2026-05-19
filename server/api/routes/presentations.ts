@@ -16,6 +16,7 @@ import type { AuthEnv } from "../middleware/auth";
 import { z } from "zod";
 import { getTrackRoleIds, hasTrackRole, hasRole } from "@/lib/permissions";
 import { parseScheduledAt } from "@/lib/conference-tz";
+import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
 import {
   getPosterPlannerPageData,
   getPosterSessionSettings,
@@ -31,6 +32,22 @@ import {
   PUBLISHED_PRESENTATION_STATUSES,
   isPublishedPresentationStatus,
 } from "@/lib/presentation-status";
+import {
+  POSTER_REQUIRED_JUDGE_COUNT,
+  buildPosterJudgeAssignments,
+  getPosterScheduleReadiness,
+} from "@/lib/poster-planner-rules";
+import {
+  movePosterOrderItem,
+  parsePosterOrderValue,
+  posterOrderSettingsKey,
+} from "@/lib/poster-planner-order";
+import {
+  formatThaiPosterSlotSummary,
+  getPosterScheduleSortAt,
+  getPosterScheduleSlotMinutes,
+  sortPosterScheduleSlots,
+} from "@/lib/poster-schedule";
 
 const app = new OpenAPIHono<AuthEnv>();
 
@@ -191,28 +208,6 @@ function formatScheduleSummary(input: {
 
 function paperLabel(input: { paperCode: string | null; title: string }) {
   return input.paperCode ? `${input.paperCode} · ${input.title}` : input.title;
-}
-
-function posterSlotWindow<T extends { startsAt: Date; endsAt: Date }>(slots: T[]) {
-  const sortedSlots = slots
-    .slice()
-    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
-  const firstSlot = sortedSlots[0];
-  if (!firstSlot) {
-    throw new Error("posterSlotWindow requires at least one slot");
-  }
-  const lastSlot = sortedSlots.reduce((latest, slot) =>
-    slot.endsAt > latest.endsAt ? slot : latest
-  );
-
-  return {
-    sortedSlots,
-    scheduledAt: firstSlot.startsAt,
-    duration: Math.max(
-      1,
-      Math.round((lastSlot.endsAt.getTime() - firstSlot.startsAt.getTime()) / 60000)
-    ),
-  };
 }
 
 async function createPresentationNotifications(
@@ -471,7 +466,50 @@ app.get("/", async (c) => {
     },
     orderBy: [desc(presentationAssignments.scheduledAt)],
   });
-  return c.json({ presentations });
+
+  const posterSubmissionIds = presentations
+    .filter((presentation) => presentation.type === "POSTER")
+    .map((presentation) => presentation.submissionId);
+  const posterSlotRows =
+    posterSubmissionIds.length > 0
+      ? await db.query.posterSlotJudges.findMany({
+          where: inArray(posterSlotJudges.submissionId, posterSubmissionIds),
+          orderBy: (slot, { asc }) => [asc(slot.startsAt), asc(slot.endsAt)],
+        })
+      : [];
+  const posterSlotsBySubmission = new Map<string, typeof posterSlotRows>();
+  for (const slot of posterSlotRows) {
+    const slots = posterSlotsBySubmission.get(slot.submissionId) ?? [];
+    slots.push(slot);
+    posterSlotsBySubmission.set(slot.submissionId, slots);
+  }
+
+  return c.json({
+    presentations: presentations.map((presentation) => {
+      const rawPosterSlots =
+        presentation.type === "POSTER"
+          ? posterSlotsBySubmission.get(presentation.submissionId) ?? []
+          : [];
+      const posterSlots = sortPosterScheduleSlots(rawPosterSlots).map((slot) => ({
+        id: slot.id,
+        startsAt: slot.startsAt.toISOString(),
+        endsAt: slot.endsAt.toISOString(),
+      }));
+
+      return {
+        ...presentation,
+        scheduledAt:
+          presentation.type === "POSTER"
+            ? getPosterScheduleSortAt(posterSlots, presentation.scheduledAt)?.toISOString() ?? null
+            : presentation.scheduledAt?.toISOString() ?? null,
+        duration:
+          presentation.type === "POSTER" && posterSlots.length > 0
+            ? null
+            : presentation.duration,
+        posterSlots,
+      };
+    }),
+  });
 });
 
 app.get("/criteria", async (c) => {
@@ -535,6 +573,13 @@ app.post("/schedule", async (c) => {
   const scheduledAt = parseScheduledAt(parsed.data.scheduledAt);
   if ("error" in scheduledAt) return c.json({ error: scheduledAt.error }, 400);
 
+  if (parsed.data.type === "POSTER") {
+    return c.json(
+      { error: "Use the poster planner to schedule poster presentations" },
+      400
+    );
+  }
+
   if (!(await canManageSubmissionPresentation(currentUser, parsed.data.submissionId))) {
     return c.json({ error: "Forbidden" }, 403);
   }
@@ -595,6 +640,18 @@ app.patch("/:id/schedule", async (c) => {
 
   if (!(await canManagePresentation(currentUser, id))) {
     return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const presentation = await db.query.presentationAssignments.findFirst({
+    where: eq(presentationAssignments.id, id),
+    columns: { type: true },
+  });
+  if (!presentation) return c.json({ error: "Not found" }, 404);
+  if (presentation.type === "POSTER") {
+    return c.json(
+      { error: "Use the poster planner to schedule poster presentations" },
+      400
+    );
   }
 
   const [updated] = await db
@@ -744,6 +801,79 @@ app.get("/poster-planner", async (c) => {
   return c.json(data);
 });
 
+app.patch("/poster-order", async (c) => {
+  const currentUser = c.get("user");
+  const body = await c.req.json();
+  const schema = z.object({
+    trackId: z.string().uuid(),
+    submissionId: z.string().uuid(),
+    direction: z.enum(["up", "down"]),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  if (
+    !hasRole(currentUser, "ADMIN") &&
+    !hasTrackRole(currentUser, parsed.data.trackId, "PROGRAM_CHAIR")
+  ) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const posterRows = await db.query.presentationAssignments.findMany({
+    where: eq(presentationAssignments.type, "POSTER"),
+    with: {
+      submission: {
+        columns: {
+          id: true,
+          status: true,
+          trackId: true,
+        },
+      },
+    },
+    orderBy: (table, { asc }) => [asc(table.submissionId)],
+  });
+
+  const currentIds = posterRows
+    .filter(
+      (row) =>
+        row.submission.trackId === parsed.data.trackId &&
+        isAcceptedSubmissionStatus(row.submission.status)
+    )
+    .map((row) => row.submissionId);
+
+  if (!currentIds.includes(parsed.data.submissionId)) {
+    return c.json({ error: "Poster was not found in this track" }, 404);
+  }
+
+  const key = posterOrderSettingsKey(parsed.data.trackId);
+  const existing = await db.query.settings.findFirst({
+    where: eq(settings.key, key),
+    columns: { value: true },
+  });
+  const nextOrder = movePosterOrderItem({
+    currentIds,
+    savedIds: parsePosterOrderValue(existing?.value),
+    submissionId: parsed.data.submissionId,
+    direction: parsed.data.direction,
+  });
+  const now = new Date();
+
+  await db
+    .insert(settings)
+    .values({
+      key,
+      value: nextOrder,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value: nextOrder, updatedAt: now },
+    });
+
+  return c.json({ order: nextOrder });
+});
+
 app.post("/poster-publish", async (c) => {
   const currentUser = c.get("user");
   if (!hasRole(currentUser, "ADMIN")) {
@@ -787,12 +917,12 @@ app.post("/poster-publish", async (c) => {
     (row) =>
       row.submission.trackId === parsed.data.trackId &&
       !isPublishedPresentationStatus(row.status) &&
-      row.submission.posterSlotJudges.length > 0
+      getPosterScheduleReadiness(buildPosterJudgeAssignments(row.submission.posterSlotJudges)).isReady
   );
 
   if (targetRows.length === 0) {
     return c.json(
-      { error: "No draft poster assignments with judge slots were found for this track" },
+      { error: "No draft poster assignments with three judges in three different slots were found for this track" },
       400
     );
   }
@@ -800,7 +930,7 @@ app.post("/poster-publish", async (c) => {
   const now = new Date();
   await Promise.all(
     targetRows.map((row) => {
-      const { scheduledAt, duration } = posterSlotWindow(row.submission.posterSlotJudges);
+      const scheduledAt = getPosterScheduleSortAt(row.submission.posterSlotJudges);
 
       return db
         .update(presentationAssignments)
@@ -808,7 +938,7 @@ app.post("/poster-publish", async (c) => {
           status: "SCHEDULED",
           scheduledAt,
           room: sessionSettings.room || null,
-          duration,
+          duration: null,
         })
         .where(eq(presentationAssignments.id, row.id));
     })
@@ -830,12 +960,8 @@ app.post("/poster-publish", async (c) => {
   const notificationsToCreate: Parameters<typeof createPresentationNotifications>[0] = [];
   for (const row of targetRows) {
     const label = paperLabel(row.submission);
-    const { sortedSlots, scheduledAt, duration } = posterSlotWindow(row.submission.posterSlotJudges);
-    const authorSummary = formatScheduleSummary({
-      scheduledAt,
-      room: sessionSettings.room || null,
-      duration,
-    });
+    const sortedSlots = sortPosterScheduleSlots(row.submission.posterSlotJudges);
+    const authorSummary = formatThaiPosterSlotSummary(sortedSlots, sessionSettings.room || null);
 
     notificationsToCreate.push({
       userId: row.submission.authorId,
@@ -848,10 +974,7 @@ app.post("/poster-publish", async (c) => {
       const slotSummary = formatScheduleSummary({
         scheduledAt: slot.startsAt,
         room: sessionSettings.room || null,
-        duration: Math.max(
-          1,
-          Math.round((slot.endsAt.getTime() - slot.startsAt.getTime()) / 60000)
-        ),
+        duration: getPosterScheduleSlotMinutes(slot),
       });
       notificationsToCreate.push({
         userId: slot.judgeId,
@@ -927,6 +1050,34 @@ app.post("/poster-slots", async (c) => {
     );
   }
 
+  const existingPosterSlots = await db.query.posterSlotJudges.findMany({
+    where: eq(posterSlotJudges.submissionId, parsed.data.submissionId),
+    columns: { judgeId: true, startsAt: true, endsAt: true },
+  });
+  if (existingPosterSlots.length >= POSTER_REQUIRED_JUDGE_COUNT) {
+    return c.json(
+      { error: `A poster can have only ${POSTER_REQUIRED_JUDGE_COUNT} judges` },
+      400
+    );
+  }
+
+  const duplicatePosterJudge = existingPosterSlots.find(
+    (slot) => slot.judgeId === parsed.data.judgeId
+  );
+  if (duplicatePosterJudge) {
+    return c.json({ error: "A judge can review the same poster only once" }, 409);
+  }
+
+  const duplicatePosterSlot = existingPosterSlots.find(
+    (slot) => slot.startsAt.getTime() === startsAt.getTime() && slot.endsAt.getTime() === endsAt.getTime()
+  );
+  if (duplicatePosterSlot) {
+    return c.json(
+      { error: "A poster can be assigned only one judge per slot" },
+      409
+    );
+  }
+
   const [slot] = await db
     .insert(posterSlotJudges)
     .values({
@@ -950,6 +1101,8 @@ app.patch("/poster-slots/:slotId", async (c) => {
   const schema = z.object({
     judgeId: z.string().min(1).optional(),
     status: z.enum(["PLANNED", "CONFIRMED", "COMPLETED"]).optional(),
+    startsAt: z.string().optional(),
+    endsAt: z.string().optional(),
   });
 
   const parsed = schema.safeParse(body);
@@ -957,12 +1110,29 @@ app.patch("/poster-slots/:slotId", async (c) => {
 
   const existing = await db.query.posterSlotJudges.findFirst({
     where: eq(posterSlotJudges.id, slotId),
-    columns: { submissionId: true, startsAt: true, endsAt: true },
+    columns: { submissionId: true, judgeId: true, startsAt: true, endsAt: true },
   });
   if (!existing) return c.json({ error: "Not found" }, 404);
   if (!(await canManageSubmissionPresentation(currentUser, existing.submissionId))) {
     return c.json({ error: "Forbidden" }, 403);
   }
+
+  const isTimePatch = parsed.data.startsAt !== undefined || parsed.data.endsAt !== undefined;
+  if (isTimePatch && (!parsed.data.startsAt || !parsed.data.endsAt)) {
+    return c.json({ error: "startsAt and endsAt are required together" }, 400);
+  }
+
+  const nextStartsAt = parsed.data.startsAt ? new Date(parsed.data.startsAt) : existing.startsAt;
+  const nextEndsAt = parsed.data.endsAt ? new Date(parsed.data.endsAt) : existing.endsAt;
+  if (
+    Number.isNaN(nextStartsAt.getTime()) ||
+    Number.isNaN(nextEndsAt.getTime()) ||
+    nextStartsAt >= nextEndsAt
+  ) {
+    return c.json({ error: "Invalid time range" }, 400);
+  }
+
+  const nextJudgeId = parsed.data.judgeId ?? existing.judgeId;
 
   if (parsed.data.judgeId) {
     const submission = await db.query.submissions.findFirst({
@@ -976,11 +1146,34 @@ app.patch("/poster-slots/:slotId", async (c) => {
     if (!isValidJudge) {
       return c.json({ error: "Selected user is not a committee member" }, 400);
     }
+  }
+
+  if (parsed.data.judgeId || isTimePatch) {
+    const siblingSlots = await db.query.posterSlotJudges.findMany({
+      where: eq(posterSlotJudges.submissionId, existing.submissionId),
+      columns: { id: true, judgeId: true, startsAt: true, endsAt: true },
+    });
+    const duplicatePosterJudge = siblingSlots.find(
+      (slot) => slot.id !== slotId && slot.judgeId === nextJudgeId
+    );
+    if (duplicatePosterJudge) {
+      return c.json({ error: "A judge can review the same poster only once" }, 409);
+    }
+
+    const duplicatePosterSlot = siblingSlots.find(
+      (slot) =>
+        slot.id !== slotId &&
+        slot.startsAt.getTime() === nextStartsAt.getTime() &&
+        slot.endsAt.getTime() === nextEndsAt.getTime()
+    );
+    if (duplicatePosterSlot) {
+      return c.json({ error: "A poster can be assigned only one judge per slot" }, 409);
+    }
 
     const conflict = await findPosterJudgeTimeConflict({
-      judgeId: parsed.data.judgeId,
-      startsAt: existing.startsAt,
-      endsAt: existing.endsAt,
+      judgeId: nextJudgeId,
+      startsAt: nextStartsAt,
+      endsAt: nextEndsAt,
       excludeSlotId: slotId,
     });
     if (conflict) {
@@ -996,12 +1189,19 @@ app.patch("/poster-slots/:slotId", async (c) => {
 
   const slotUpdates: {
     judgeId?: string;
+    startsAt?: Date;
+    endsAt?: Date;
     status?: "PLANNED" | "CONFIRMED" | "COMPLETED";
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
   if (parsed.data.judgeId) {
     slotUpdates.judgeId = parsed.data.judgeId;
+    slotUpdates.status = "PLANNED";
+  }
+  if (isTimePatch) {
+    slotUpdates.startsAt = nextStartsAt;
+    slotUpdates.endsAt = nextEndsAt;
     slotUpdates.status = "PLANNED";
   } else if (parsed.data.status) {
     slotUpdates.status = parsed.data.status;
@@ -1013,7 +1213,7 @@ app.patch("/poster-slots/:slotId", async (c) => {
     .where(eq(posterSlotJudges.id, slotId))
     .returning();
 
-  if (parsed.data.judgeId || parsed.data.status === "PLANNED") {
+  if (parsed.data.judgeId || isTimePatch || parsed.data.status === "PLANNED") {
     await markPosterPresentationDraft(existing.submissionId);
   }
 

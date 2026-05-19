@@ -17,6 +17,11 @@ interface PresentationData {
   scheduledAt?: string | null;
   room?: string | null;
   duration?: number | null;
+  posterSlots?: Array<{
+    id: string;
+    startsAt: string;
+    endsAt: string;
+  }>;
 }
 
 interface PresentationCardProps {
@@ -64,13 +69,22 @@ export function PresentationCard({
                 </Badge>
               </div>
 
-              {pres.scheduledAt && (
+              {pres.type === "POSTER" && pres.posterSlots?.length ? (
+                <div className="space-y-1">
+                  {pres.posterSlots.map((slot, index) => (
+                    <p key={slot.id} className="text-xs text-ink flex items-center gap-1.5">
+                      <Clock className="h-3 w-3 text-ink-muted" />
+                      {t("presentations.posterSlot")} {index + 1}: {formatDateTime(slot.startsAt)}
+                    </p>
+                  ))}
+                </div>
+              ) : pres.scheduledAt ? (
                 <p className="text-xs text-ink flex items-center gap-1.5">
                   <Clock className="h-3 w-3 text-ink-muted" />
                   {formatDateTime(pres.scheduledAt)}
                   {pres.duration && <span className="text-ink-muted">({pres.duration} {t("presentations.minutes")})</span>}
                 </p>
-              )}
+              ) : null}
 
               {pres.room && (
                 <p className="text-xs text-ink flex items-center gap-1.5">

@@ -324,6 +324,21 @@ function SessionRow({
   const linkHref = session.paperCode
     ? `/conference/abstracts/${encodeURIComponent(session.paperCode)}`
     : "";
+  const slotTimeFmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: CONFERENCE_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const posterSlotLabels = session.posterSlots.map((slot, index) => {
+    const startsAt = new Date(slot.startsAt);
+    const endsAt = new Date(slot.endsAt);
+    return {
+      id: slot.id,
+      label: `${locale === "en" ? "Slot" : "รอบ"} ${index + 1}: ${slotTimeFmt.format(startsAt)}-${slotTimeFmt.format(endsAt)}`,
+      room: slot.room,
+    };
+  });
 
   const accentBar = isOral ? "bg-blue-500" : "bg-emerald-500";
 
@@ -341,6 +356,10 @@ function SessionRow({
         {session.duration ? (
           <div className="mt-1 text-[11px] uppercase tracking-wide font-semibold text-ink-muted tabular-nums">
             {session.duration} min
+          </div>
+        ) : !isOral && posterSlotLabels.length > 0 ? (
+          <div className="mt-1 text-[11px] uppercase tracking-wide font-semibold text-ink-muted tabular-nums">
+            {posterSlotLabels.length} {locale === "en" ? "slots" : "รอบ"}
           </div>
         ) : null}
       </div>
@@ -378,6 +397,19 @@ function SessionRow({
         <div className="text-xs sm:text-sm text-ink-muted mt-1">
           {presenter}
         </div>
+        {!isOral && posterSlotLabels.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {posterSlotLabels.map((slot) => (
+              <span
+                key={slot.id}
+                className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700"
+              >
+                <Clock className="h-3 w-3" />
+                {slot.label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Right column */}

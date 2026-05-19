@@ -13,6 +13,15 @@ import { RubricManager } from "@/components/presentations/rubric-manager";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Select } from "@/components/ui/select";
 import { useI18n } from "@/lib/i18n";
+import {
+  POSTER_REQUIRED_JUDGE_COUNT,
+  buildPosterJudgeAssignments,
+  createPosterSlotTemplateId,
+  getPosterScheduleReadiness,
+  getUnavailableJudgeIdsForSlot,
+  posterSlotRangesOverlap,
+  type PosterJudgeAssignment,
+} from "@/lib/poster-planner-rules";
 import { isPublishedPresentationStatus } from "@/lib/presentation-status";
 import type {
   PosterPlannerSubmission,
@@ -23,6 +32,8 @@ import type {
 } from "@/server/poster-planner-data";
 import type { CriterionData } from "@/server/presentation-data";
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarRange,
   ClipboardList,
   Clock,
@@ -33,6 +44,7 @@ import {
   Plus,
   Star,
   Trash2,
+  UserCheck,
   Users,
 } from "lucide-react";
 
@@ -93,29 +105,12 @@ interface ScheduleRow {
   authorName: string;
   trackId: string;
   trackName: string;
-  /** Map from slot template id → { slotId, judgeId } */
-  slotAssignments: Record<string, { slotId: string; judgeId: string }>;
+  judgeAssignments: PosterJudgeAssignment[];
 }
 
 type ScheduleSlotTemplate = PosterPlannerSessionSettings["slotTemplates"][number] & {
   isOrphan?: boolean;
 };
-
-type JudgeBusyAssignment = {
-  slotId: string;
-  submissionId: string | null;
-  slotTemplateId: string;
-  label: string | null;
-};
-
-function createSlotTemplateId(startsAt: string, endsAt: string): string {
-  return `${startsAt}__${endsAt}`;
-}
-
-function rangesOverlap(aStartsAt: string, aEndsAt: string, bStartsAt: string, bEndsAt: string): boolean {
-  return new Date(aStartsAt).getTime() < new Date(bEndsAt).getTime() &&
-    new Date(aEndsAt).getTime() > new Date(bStartsAt).getTime();
-}
 
 export function PosterPlannerClient({
   mode,
@@ -169,11 +164,7 @@ export function PosterPlannerClient({
   // ── Build schedule rows ──
   const scheduleRows = useMemo((): ScheduleRow[] => {
     return posterSubmissions.map((sub) => {
-      const slotAssignments: Record<string, { slotId: string; judgeId: string }> = {};
-      for (const sj of sub.slotJudges) {
-        const templateId = createSlotTemplateId(sj.startsAt, sj.endsAt);
-        slotAssignments[templateId] = { slotId: sj.id, judgeId: sj.judgeId };
-      }
+      const judgeAssignments = buildPosterJudgeAssignments(sub.slotJudges);
 
       return {
         presentationStatus: sub.presentationStatus,
@@ -183,7 +174,7 @@ export function PosterPlannerClient({
         authorName: sub.author.name,
         trackId: sub.track?.id || "",
         trackName: sub.track?.name || "",
-        slotAssignments,
+        judgeAssignments,
       };
     });
   }, [posterSubmissions]);
@@ -197,13 +188,15 @@ export function PosterPlannerClient({
   const selectedTrackPublishState = useMemo(() => {
     let draftCount = 0;
     let publishableDraftCount = 0;
+    let incompleteDraftCount = 0;
     for (const row of filteredRows) {
       const isDraft = !isPublishedPresentationStatus(row.presentationStatus);
-      const hasSlot = Object.keys(row.slotAssignments).length > 0;
+      const isReady = getPosterScheduleReadiness(row.judgeAssignments).isReady;
       if (isDraft) draftCount += 1;
-      if (isDraft && hasSlot) publishableDraftCount += 1;
+      if (isDraft && isReady) publishableDraftCount += 1;
+      if (isDraft && !isReady) incompleteDraftCount += 1;
     }
-    return { draftCount, publishableDraftCount };
+    return { draftCount, publishableDraftCount, incompleteDraftCount };
   }, [filteredRows]);
 
   // ── Committee users for selected track ──
@@ -219,27 +212,6 @@ export function PosterPlannerClient({
     });
   }, [initialCommitteeUsers, selectedTrackId]);
 
-  // ── Judge workload across all tracks ──
-  const judgeWorkload = useMemo(() => {
-    const counts = new Map<string, { name: string; count: number }>();
-    for (const cu of initialCommitteeUsers) {
-      counts.set(cu.id, { name: cu.name, count: 0 });
-    }
-    for (const sub of posterSubmissions) {
-      for (const sj of sub.slotJudges) {
-        const entry = counts.get(sj.judgeId);
-        if (entry) {
-          entry.count += 1;
-        } else {
-          counts.set(sj.judgeId, { name: sj.judgeName, count: 1 });
-        }
-      }
-    }
-    return Array.from(counts.entries())
-      .map(([id, { name, count }]) => ({ id, name, count }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [initialCommitteeUsers, posterSubmissions]);
-
   const sessionTemplateIds = useMemo(
     () => new Set(sessionSettings.slotTemplates.map((slot) => slot.id)),
     [sessionSettings.slotTemplates]
@@ -249,7 +221,7 @@ export function PosterPlannerClient({
     const orphanMap = new Map<string, ScheduleSlotTemplate>();
     for (const sub of posterSubmissions) {
       for (const sj of sub.slotJudges) {
-        const id = createSlotTemplateId(sj.startsAt, sj.endsAt);
+        const id = createPosterSlotTemplateId(sj.startsAt, sj.endsAt);
         if (!sessionTemplateIds.has(id)) {
           orphanMap.set(id, { id, startsAt: sj.startsAt, endsAt: sj.endsAt, isOrphan: true });
         }
@@ -271,7 +243,7 @@ export function PosterPlannerClient({
     let count = 0;
     for (const sub of posterSubmissions) {
       for (const sj of sub.slotJudges) {
-        if (!sessionTemplateIds.has(createSlotTemplateId(sj.startsAt, sj.endsAt))) {
+        if (!sessionTemplateIds.has(createPosterSlotTemplateId(sj.startsAt, sj.endsAt))) {
           count += 1;
         }
       }
@@ -282,8 +254,8 @@ export function PosterPlannerClient({
   const selectedTrackOrphanAssignmentCount = useMemo(() => {
     let count = 0;
     for (const row of filteredRows) {
-      for (const templateId of Object.keys(row.slotAssignments)) {
-        if (!sessionTemplateIds.has(templateId)) {
+      for (const assignment of row.judgeAssignments) {
+        if (!sessionTemplateIds.has(assignment.slotTemplateId)) {
           count += 1;
         }
       }
@@ -291,33 +263,40 @@ export function PosterPlannerClient({
     return count;
   }, [filteredRows, sessionTemplateIds]);
 
-  const judgeBusyBySlot = useMemo(() => {
-    const busy = new Map<string, Map<string, JudgeBusyAssignment[]>>();
+  const slotLoadSummary = useMemo(() => {
+    const counts = new Map<string, number>();
     for (const slot of visibleSlotTemplates) {
-      const judges = new Map<string, JudgeBusyAssignment[]>();
-      for (const busySlot of judgeBusySlots) {
-        if (!rangesOverlap(slot.startsAt, slot.endsAt, busySlot.startsAt, busySlot.endsAt)) continue;
-        const assignments = judges.get(busySlot.judgeId) ?? [];
-        assignments.push({
-          slotId: busySlot.slotId,
-          submissionId: busySlot.submissionId,
-          slotTemplateId: createSlotTemplateId(busySlot.startsAt, busySlot.endsAt),
-          label: busySlot.label,
-        });
-        judges.set(busySlot.judgeId, assignments);
-      }
-      busy.set(slot.id, judges);
+      counts.set(slot.id, 0);
     }
-    return busy;
-  }, [judgeBusySlots, visibleSlotTemplates]);
+    for (const row of filteredRows) {
+      for (const assignment of row.judgeAssignments) {
+        counts.set(assignment.slotTemplateId, (counts.get(assignment.slotTemplateId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [filteredRows, visibleSlotTemplates]);
 
-  const getJudgeConflicts = useCallback(
-    (row: ScheduleRow, slot: ScheduleSlotTemplate, judgeId: string) =>
-      (judgeBusyBySlot.get(slot.id)?.get(judgeId) ?? []).filter(
-        (assignment) => assignment.slotId !== row.slotAssignments[slot.id]?.slotId
-      ),
-    [judgeBusyBySlot]
-  );
+  const judgeWorkloadGrid = useMemo(() => {
+    const rows = trackCommitteeUsers.map((judge) => ({
+      id: judge.id,
+      name: judge.name,
+      count: 0,
+      slots: new Map<string, string>(),
+    }));
+    const byJudgeId = new Map(rows.map((row) => [row.id, row]));
+
+    for (const row of filteredRows) {
+      const label = row.paperCode || row.title;
+      for (const assignment of row.judgeAssignments) {
+        const judge = byJudgeId.get(assignment.judgeId);
+        if (!judge) continue;
+        judge.count += 1;
+        judge.slots.set(assignment.slotTemplateId, label);
+      }
+    }
+
+    return rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [filteredRows, trackCommitteeUsers]);
 
   // ── API helpers ──
   const refreshPlanner = useCallback(async () => {
@@ -443,69 +422,135 @@ export function PosterPlannerClient({
     setMessage(t("poster.slotRemovedSave"));
   }
 
-  // ── Judge assignment handler ──
-  const handleJudgeChange = useCallback(
-    async (row: ScheduleRow, templateId: string, newJudgeId: string) => {
-      const existing = row.slotAssignments[templateId];
-      const template = visibleSlotTemplates.find((s) => s.id === templateId);
-      if (!template) return;
+  const readPosterSlotError = useCallback(async (response: Response) => {
+    const data = await response.json().catch(() => null);
+    return data?.message || data?.error || t("poster.unableToSaveJudge");
+  }, [t]);
 
-      if (template.isOrphan && !existing && newJudgeId) {
+  const deletePosterSlot = useCallback(async (slotId: string) => {
+    const response = await fetch(`/api/presentations/poster-slots/${slotId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      throw new Error(await readPosterSlotError(response));
+    }
+  }, [readPosterSlotError]);
+
+  const patchPosterSlot = useCallback(async (
+    slotId: string,
+    body: { judgeId?: string; startsAt?: string; endsAt?: string }
+  ) => {
+    const response = await fetch(`/api/presentations/poster-slots/${slotId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(await readPosterSlotError(response));
+    }
+  }, [readPosterSlotError]);
+
+  const createPosterSlot = useCallback(async (input: {
+    submissionId: string;
+    judgeId: string;
+    startsAt: string;
+    endsAt: string;
+  }) => {
+    const response = await fetch("/api/presentations/poster-slots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      throw new Error(await readPosterSlotError(response));
+    }
+  }, [readPosterSlotError]);
+
+  const movePosterRow = useCallback(
+    async (row: ScheduleRow, direction: "up" | "down") => {
+      const actionKey = `move-${row.submissionId}-${direction}`;
+      await runAction(actionKey, async () => {
+        const response = await fetch("/api/presentations/poster-order", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            trackId: row.trackId,
+            submissionId: row.submissionId,
+            direction,
+          }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(data?.error || t("poster.unableToReorder"));
+        }
+        await refreshPlanner();
+        setMessage(t("poster.orderSaved"));
+      });
+    },
+    [refreshPlanner, runAction, t]
+  );
+
+  const handleMatrixJudgeChange = useCallback(
+    async (row: ScheduleRow, slot: ScheduleSlotTemplate, newJudgeId: string) => {
+      const existing = row.judgeAssignments.find((assignment) => assignment.slotTemplateId === slot.id);
+
+      if (slot.isOrphan && newJudgeId) {
         setMessageTone("danger");
         setMessage(t("poster.orphanSlotCannotCreate"));
         return;
       }
 
-      if (newJudgeId && getJudgeConflicts(row, template, newJudgeId).length > 0) {
+      const duplicateJudge = newJudgeId
+        ? row.judgeAssignments.some(
+            (assignment) => assignment.slotId !== existing?.slotId && assignment.judgeId === newJudgeId
+          )
+        : false;
+      if (duplicateJudge) {
+        setMessageTone("danger");
+        setMessage(t("poster.judgesMustBeUnique"));
+        return;
+      }
+
+      const isCreatingFourthAssignment =
+        !existing && newJudgeId && row.judgeAssignments.length >= POSTER_REQUIRED_JUDGE_COUNT;
+      if (isCreatingFourthAssignment) {
+        setMessageTone("danger");
+        setMessage(t("poster.posterAlreadyComplete"));
+        return;
+      }
+
+      const unavailable = getUnavailableJudgeIdsForSlot({
+        slot,
+        currentSubmissionId: row.submissionId,
+        busySlots: judgeBusySlots,
+      });
+      if (newJudgeId && unavailable.has(newJudgeId) && existing?.judgeId !== newJudgeId) {
         setMessageTone("danger");
         setMessage(t("poster.judgeTimeConflict"));
         return;
       }
 
-      const actionKey = `assign-${row.submissionId}-${templateId}`;
+      const actionKey = `assign-${row.submissionId}-${slot.id}`;
       await runAction(actionKey, async () => {
         if (existing && newJudgeId === "") {
-          // Remove slot
-          const response = await fetch(`/api/presentations/poster-slots/${existing.slotId}`, {
-            method: "DELETE",
-          });
-          if (!response.ok) {
-            const data = await response.json().catch(() => null);
-            throw new Error(data?.message || data?.error || t("poster.unableToSaveJudge"));
-          }
+          await deletePosterSlot(existing.slotId);
         } else if (existing && newJudgeId) {
-          // Update slot
-          const response = await fetch(`/api/presentations/poster-slots/${existing.slotId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ judgeId: newJudgeId }),
+          await patchPosterSlot(existing.slotId, {
+            judgeId: newJudgeId,
           });
-          if (!response.ok) {
-            const data = await response.json().catch(() => null);
-            throw new Error(data?.message || data?.error || t("poster.unableToSaveJudge"));
-          }
         } else if (!existing && newJudgeId) {
-          // Create slot
-          const response = await fetch("/api/presentations/poster-slots", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              submissionId: row.submissionId,
-              judgeId: newJudgeId,
-              startsAt: template.startsAt,
-              endsAt: template.endsAt,
-            }),
+          await createPosterSlot({
+            submissionId: row.submissionId,
+            judgeId: newJudgeId,
+            startsAt: slot.startsAt,
+            endsAt: slot.endsAt,
           });
-          if (!response.ok) {
-            const data = await response.json().catch(() => null);
-            throw new Error(data?.message || data?.error || t("poster.unableToSaveJudge"));
-          }
         }
         await refreshPlanner();
         setMessage(t("poster.judgeSaved"));
       });
     },
-    [getJudgeConflicts, refreshPlanner, runAction, t, visibleSlotTemplates]
+    [createPosterSlot, deletePosterSlot, judgeBusySlots, patchPosterSlot, refreshPlanner, runAction, t]
   );
 
   const sessionRoomId = `${plannerId}-session-room`;
@@ -837,6 +882,7 @@ export function PosterPlannerClient({
                     {t("poster.publishPanelDesc", {
                       draft: selectedTrackPublishState.draftCount,
                       ready: selectedTrackPublishState.publishableDraftCount,
+                      incomplete: selectedTrackPublishState.incompleteDraftCount,
                     })}
                   </p>
                 </div>
@@ -873,94 +919,246 @@ export function PosterPlannerClient({
             <EmptyState icon={<FolderKanban className="h-12 w-12" />} title={t("poster.noPapersInTrack")} body={t("poster.noRecordsDesc")} />
           ) : (
             <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                      <UserCheck className="h-4 w-4 text-ink-muted" />
+                      {t("poster.assignmentBoardTitle")}
+                    </h3>
+                    <p className="mt-1 text-sm text-ink-muted">
+                      {t("poster.assignmentBoardDesc", { n: POSTER_REQUIRED_JUDGE_COUNT })}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge tone="success">{t("poster.readyCount", { n: selectedTrackPublishState.publishableDraftCount })}</Badge>
+                    <Badge tone="warning">{t("poster.incompleteCount", { n: selectedTrackPublishState.incompleteDraftCount })}</Badge>
+                  </div>
+                </div>
+              </CardHeader>
               <CardBody className="overflow-x-auto p-0">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[1620px] text-sm">
                   <thead>
                     <tr className="border-b border-border/60 bg-gray-50/80">
-                      <th className="sticky left-0 z-10 bg-gray-50/80 px-4 py-3 text-left font-semibold text-ink min-w-[280px]">
+                      <th className="sticky left-0 z-10 min-w-[300px] bg-gray-50/80 px-4 py-3 text-left font-semibold text-ink">
                         {t("poster.paperColumn")}
                       </th>
-                      <th className="px-3 py-3 text-left font-semibold text-ink min-w-[120px]">
+                      <th className="min-w-[120px] px-3 py-3 text-left font-semibold text-ink">
                         {t("poster.authorColumn")}
                       </th>
                       {visibleSlotTemplates.map((slot, index) => (
-                        <th key={slot.id} className="px-3 py-3 text-center font-semibold text-ink min-w-[160px]">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${slot.isOrphan ? "bg-amber-100 text-amber-800" : "bg-brand-100 text-brand-700"}`}>{formatSlotCode(index)}</span>
-                            <span className="text-xs text-ink-muted">{formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}</span>
-                            {slot.isOrphan && (
-                              <span className="text-[11px] font-semibold text-amber-700">{t("poster.removedSlot")}</span>
-                            )}
+                        <th key={slot.id} className="min-w-[165px] px-3 py-3 text-left font-semibold text-ink">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${slot.isOrphan ? "bg-amber-100 text-amber-800" : "bg-brand-100 text-brand-700"}`}>
+                                {formatSlotCode(index)}
+                              </span>
+                              {slot.isOrphan && (
+                                <span className="text-[11px] font-semibold text-amber-700">{t("poster.removedSlot")}</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-ink-muted">{formatTime(slot.startsAt)} - {formatTime(slot.endsAt)}</div>
+                            <div className="text-[11px] font-medium text-ink-muted">
+                              {t("poster.slotLoad", { n: slotLoadSummary.get(slot.id) ?? 0 })}
+                            </div>
                           </div>
                         </th>
                       ))}
+                      <th className="min-w-[150px] px-3 py-3 text-left font-semibold text-ink">
+                        {t("poster.readinessColumn")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRows.map((row) => (
-                      <tr key={row.submissionId} className="border-b border-border/40 hover:bg-gray-50/50 transition-colors">
-                        <td className="sticky left-0 z-10 bg-white px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <Badge>{row.paperCode || "NO-CODE"}</Badge>
-                            <Badge tone={isPublishedPresentationStatus(row.presentationStatus) ? "success" : "warning"}>
-                              {isPublishedPresentationStatus(row.presentationStatus) ? t("presentations.statusScheduled") : t("presentations.statusPending")}
-                            </Badge>
-                            <span className="truncate font-medium text-ink max-w-[200px]" title={row.title}>{row.title}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 text-ink-muted whitespace-nowrap">{row.authorName}</td>
-                        {visibleSlotTemplates.map((slot) => {
-                          const assignment = row.slotAssignments[slot.id];
-                          const currentJudgeId = assignment?.judgeId || "";
-                          const isSaving = savingKey === `assign-${row.submissionId}-${slot.id}`;
-                          const isEmptyOrphanSlot = Boolean(slot.isOrphan && !assignment);
-                          const currentConflicts = currentJudgeId
-                            ? getJudgeConflicts(row, slot, currentJudgeId)
-                            : [];
-                          const hasCurrentConflict = currentConflicts.length > 0;
-                          const currentConflictLabel =
-                            currentConflicts[0]?.label ?? t("poster.anotherTrackConflict");
+                    {filteredRows.map((row, rowIndex) => {
+                      const readiness = getPosterScheduleReadiness(row.judgeAssignments);
+                      const assignmentsBySlot = new Map<string, PosterJudgeAssignment[]>();
+                      for (const assignment of row.judgeAssignments) {
+                        const assignments = assignmentsBySlot.get(assignment.slotTemplateId) ?? [];
+                        assignments.push(assignment);
+                        assignmentsBySlot.set(assignment.slotTemplateId, assignments);
+                      }
+                      const assignedJudgeIds = row.judgeAssignments.map((assignment) => assignment.judgeId);
+                      const isPublished = isPublishedPresentationStatus(row.presentationStatus);
+                      const hasDuplicateSlots = readiness.duplicateSlotCount > 0;
+                      const readinessTone = readiness.isReady ? "success" : hasDuplicateSlots || readiness.duplicateJudgeCount > 0 ? "danger" : "warning";
+                      const readinessLabel = readiness.isReady
+                        ? t("poster.ready")
+                        : hasDuplicateSlots
+                          ? t("poster.duplicateSlots")
+                          : readiness.duplicateJudgeCount > 0
+                            ? t("poster.duplicateJudges")
+                          : t("poster.needJudges", { n: readiness.missingJudgeCount });
 
-                          return (
-                            <td key={slot.id} className="px-2 py-2">
-                              <Select
-                                value={currentJudgeId}
-                                onChange={(e) => handleJudgeChange(row, slot.id, e.target.value)}
-                                disabled={isSaving || isEmptyOrphanSlot}
-                                className={`w-full rounded-lg border px-2 py-1.5 text-xs transition-colors ${
-                                  hasCurrentConflict
-                                    ? "border-red-300 bg-red-50/70 text-red-900"
-                                    : slot.isOrphan
-                                      ? "border-amber-200 bg-amber-50/60 text-amber-900"
+                      return (
+                        <tr key={row.submissionId} className="border-b border-border/40 align-top transition-colors hover:bg-gray-50/50">
+                          <td className="sticky left-0 z-10 bg-white px-4 py-3">
+                            <div className="flex gap-3">
+                              <div className="flex shrink-0 flex-col gap-1 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => movePosterRow(row, "up")}
+                                  disabled={rowIndex === 0 || savingKey === `move-${row.submissionId}-up`}
+                                  title={t("poster.moveUp")}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-white text-ink-muted transition-colors hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-35"
+                                >
+                                  <ArrowUp className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => movePosterRow(row, "down")}
+                                  disabled={rowIndex === filteredRows.length - 1 || savingKey === `move-${row.submissionId}-down`}
+                                  title={t("poster.moveDown")}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-white text-ink-muted transition-colors hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-35"
+                                >
+                                  <ArrowDown className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge>{row.paperCode || "NO-CODE"}</Badge>
+                                  <Badge tone={isPublished ? "success" : "warning"}>
+                                    {isPublished ? t("presentations.statusScheduled") : t("presentations.statusPending")}
+                                  </Badge>
+                                </div>
+                                <p className="max-w-[240px] font-medium leading-snug text-ink" title={row.title}>
+                                  {row.title}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-ink-muted">{row.authorName}</td>
+                          {visibleSlotTemplates.map((slot) => {
+                            const slotAssignments = assignmentsBySlot.get(slot.id) ?? [];
+                            const assignment = slotAssignments[0];
+                            const duplicateSlotAssignments = slotAssignments.slice(1);
+                            const currentJudgeId = assignment?.judgeId ?? "";
+                            const isSaving = savingKey === `assign-${row.submissionId}-${slot.id}`;
+                            const isEmptyLocked = !assignment && row.judgeAssignments.length >= POSTER_REQUIRED_JUDGE_COUNT;
+                            const unavailableJudges = getUnavailableJudgeIdsForSlot({
+                              slot,
+                              currentSubmissionId: row.submissionId,
+                              busySlots: judgeBusySlots,
+                            });
+                            const currentBusySlot = currentJudgeId
+                              ? judgeBusySlots.find((busySlot) =>
+                                  busySlot.judgeId === currentJudgeId &&
+                                  busySlot.submissionId !== row.submissionId &&
+                                  posterSlotRangesOverlap(
+                                    slot.startsAt,
+                                    slot.endsAt,
+                                    busySlot.startsAt,
+                                    busySlot.endsAt
+                                  )
+                                )
+                              : null;
+
+                            return (
+                              <td key={slot.id} className="px-3 py-3">
+                                <Select
+                                  value={currentJudgeId}
+                                  onChange={(event) => handleMatrixJudgeChange(row, slot, event.target.value)}
+                                  disabled={isSaving || Boolean(slot.isOrphan) || isEmptyLocked}
+                                  className={`w-full rounded-lg border px-2.5 py-2 text-xs transition-colors ${
+                                    currentBusySlot
+                                      ? "border-red-300 bg-red-50/70 text-red-900"
                                       : currentJudgeId
                                         ? "border-brand-200 bg-brand-50/40 text-ink"
+                                        : isEmptyLocked
+                                          ? "border-gray-100 bg-gray-50 text-gray-400"
                                         : "border-border/60 bg-white text-ink-muted"
-                                } ${isSaving ? "opacity-50 cursor-wait" : "hover:border-brand-300 focus:border-brand-400 focus:ring-1 focus:ring-brand-200"} focus:outline-none`}
-                              >
-                                <option value="">{isEmptyOrphanSlot ? t("poster.removedSlotOption") : t("poster.selectJudgeOption")}</option>
-                                {trackCommitteeUsers.map((cu) => {
-                                  const conflicts = getJudgeConflicts(row, slot, cu.id);
-                                  const hasConflict = conflicts.length > 0 && currentJudgeId !== cu.id;
-                                  const conflictLabel = conflicts[0]?.label ?? t("poster.anotherTrackConflict");
-                                  return (
-                                    <option key={cu.id} value={cu.id} disabled={hasConflict}>
-                                      {hasConflict
-                                        ? t("poster.judgeBusyOption", { name: cu.name, paper: conflictLabel })
-                                        : cu.name}
-                                    </option>
-                                  );
-                                })}
-                              </Select>
-                              {hasCurrentConflict && (
-                                <p className="mt-1 text-[11px] font-semibold leading-tight text-red-700">
-                                  {t("poster.existingConflictWarning", { paper: currentConflictLabel })}
+                                  } ${isSaving ? "cursor-wait opacity-50" : "hover:border-brand-300 focus:border-brand-400 focus:ring-1 focus:ring-brand-200"} focus:outline-none`}
+                                >
+                                  <option value="">
+                                    {isEmptyLocked ? t("poster.posterAlreadyComplete") : t("poster.selectJudgeOption")}
+                                  </option>
+                                  {trackCommitteeUsers.map((cu) => {
+                                    const duplicateSelected = assignedJudgeIds.some(
+                                      (judgeId) => judgeId === cu.id && currentJudgeId !== cu.id
+                                    );
+                                    const isBusy = unavailableJudges.has(cu.id) && currentJudgeId !== cu.id;
+                                    const busySlot = isBusy
+                                      ? judgeBusySlots.find((candidate) =>
+                                          candidate.judgeId === cu.id &&
+                                          candidate.submissionId !== row.submissionId &&
+                                          posterSlotRangesOverlap(
+                                            slot.startsAt,
+                                            slot.endsAt,
+                                            candidate.startsAt,
+                                            candidate.endsAt
+                                          )
+                                        )
+                                      : null;
+                                    const disabled = duplicateSelected || isBusy;
+                                    return (
+                                      <option key={cu.id} value={cu.id} disabled={disabled}>
+                                        {isBusy
+                                          ? t("poster.judgeBusyOption", {
+                                              name: cu.name,
+                                              paper: busySlot?.label ?? t("poster.anotherTrackConflict"),
+                                            })
+                                          : duplicateSelected
+                                            ? t("poster.judgeDuplicateOption", { name: cu.name })
+                                            : cu.name}
+                                      </option>
+                                    );
+                                  })}
+                                </Select>
+                                {currentBusySlot && (
+                                  <p className="mt-1 text-[11px] font-semibold leading-tight text-red-700">
+                                    {t("poster.existingConflictWarning", {
+                                      paper: currentBusySlot.label ?? t("poster.anotherTrackConflict"),
+                                    })}
+                                  </p>
+                                )}
+                                {duplicateSlotAssignments.length > 0 && (
+                                  <div className="mt-1 space-y-1">
+                                    {duplicateSlotAssignments.map((duplicate) => (
+                                      <button
+                                        key={duplicate.slotId}
+                                        type="button"
+                                        onClick={() =>
+                                          runAction(`delete-duplicate-${duplicate.slotId}`, async () => {
+                                            await deletePosterSlot(duplicate.slotId);
+                                            await refreshPlanner();
+                                            setMessage(t("poster.duplicateSlotRemoved"));
+                                          })
+                                        }
+                                        disabled={savingKey === `delete-duplicate-${duplicate.slotId}`}
+                                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:cursor-wait disabled:opacity-50"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                        {t("poster.removeDuplicateSlot")}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="px-3 py-3">
+                            <div className="space-y-1.5">
+                              <Badge tone={readinessTone}>{readinessLabel}</Badge>
+                              {readiness.extraJudgeCount > 0 && (
+                                <p className="text-[11px] font-semibold text-red-700">
+                                  {t("poster.extraJudges", { n: readiness.extraJudgeCount })}
                                 </p>
                               )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                              {readiness.duplicateJudgeCount > 0 && (
+                                <p className="text-[11px] font-semibold text-red-700">
+                                  {t("poster.duplicateJudges")}
+                                </p>
+                              )}
+                              {readiness.duplicateSlotCount > 0 && (
+                                <p className="text-[11px] font-semibold text-red-700">
+                                  {t("poster.duplicateSlots")}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </CardBody>
@@ -968,33 +1166,56 @@ export function PosterPlannerClient({
           )}
 
           {/* ── Judge Workload Summary ── */}
-          {judgeWorkload.length > 0 && (
+          {judgeWorkloadGrid.length > 0 && visibleSlotTemplates.length > 0 && (
             <Card>
               <CardHeader>
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <Users className="h-4 w-4 text-ink-muted" />
-                  {t("poster.workloadSummary")}
-                </h3>
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <Users className="h-4 w-4 text-ink-muted" />
+                    {t("poster.workloadSummary")}
+                  </h3>
+                  <p className="mt-1 text-sm text-ink-muted">{t("poster.workloadSummaryDesc")}</p>
+                </div>
               </CardHeader>
-              <CardBody className="p-0">
-                <table className="w-full text-sm">
+              <CardBody className="overflow-x-auto p-0">
+                <table className="w-full min-w-[980px] text-sm">
                   <thead>
                     <tr className="border-b border-border/60 bg-gray-50/80">
-                      <th className="px-4 py-2.5 text-left font-semibold text-ink">{t("poster.judgeName")}</th>
-                      <th className="px-4 py-2.5 text-center font-semibold text-ink w-[160px]">{t("poster.assignedSlots")}</th>
+                      <th className="sticky left-0 z-10 min-w-[220px] bg-gray-50/80 px-4 py-2.5 text-left font-semibold text-ink">{t("poster.judgeName")}</th>
+                      {visibleSlotTemplates.map((slot, index) => (
+                        <th key={slot.id} className="min-w-[110px] px-3 py-2.5 text-center font-semibold text-ink">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span>{formatSlotCode(index)}</span>
+                            <span className="text-[11px] font-normal text-ink-muted">{formatTime(slot.startsAt)}</span>
+                          </div>
+                        </th>
+                      ))}
+                      <th className="w-[120px] px-4 py-2.5 text-center font-semibold text-ink">{t("poster.assignedSlots")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {judgeWorkload.map((judge) => (
+                    {judgeWorkloadGrid.map((judge) => (
                       <tr key={judge.id} className="border-b border-border/40 hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-2 text-ink">{judge.name}</td>
+                        <td className="sticky left-0 z-10 bg-white px-4 py-2 text-ink">{judge.name}</td>
+                        {visibleSlotTemplates.map((slot) => {
+                          const label = judge.slots.get(slot.id);
+                          return (
+                            <td key={slot.id} className="px-2 py-2 text-center">
+                              <span className={`inline-flex min-h-6 min-w-16 items-center justify-center rounded-md border px-2 py-1 text-[11px] font-semibold ${
+                                label
+                                  ? "border-brand-200 bg-brand-50 text-brand-700"
+                                  : "border-gray-100 bg-gray-50 text-gray-300"
+                              }`}>
+                                {label || "-"}
+                              </span>
+                            </td>
+                          );
+                        })}
                         <td className="px-4 py-2 text-center">
                           <span className={`inline-flex min-w-[2rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
                             judge.count === 0
                               ? "bg-gray-100 text-gray-400"
-                              : judge.count >= 6
-                                ? "bg-red-100 text-red-700"
-                                : "bg-brand-100 text-brand-700"
+                              : "bg-brand-100 text-brand-700"
                           }`}>
                             {judge.count}
                           </span>

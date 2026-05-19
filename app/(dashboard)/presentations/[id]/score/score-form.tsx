@@ -35,6 +35,11 @@ interface PresentationProps {
   scheduledAt: string | null;
   room: string | null;
   duration: number | null;
+  posterSlots?: Array<{
+    id: string;
+    startsAt: string;
+    endsAt: string;
+  }>;
   submission: {
     id: string;
     paperCode: string | null;
@@ -246,12 +251,19 @@ export function ScoreForm({
           </div>
 
           <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-            {presentation.scheduledAt && (
+            {presentation.type === "POSTER" && presentation.posterSlots?.length ? (
+              presentation.posterSlots.map((slot, index) => (
+                <div key={slot.id} className="flex items-center gap-2 rounded-lg bg-surface-alt px-3 py-2 text-ink">
+                  <Clock className="h-4 w-4 text-ink-muted" />
+                  {t("presentations.posterSlot")} {index + 1}: {formatDateTime(slot.startsAt)}
+                </div>
+              ))
+            ) : presentation.scheduledAt ? (
               <div className="flex items-center gap-2 rounded-lg bg-surface-alt px-3 py-2 text-ink">
                 <Clock className="h-4 w-4 text-ink-muted" />
                 {formatDateTime(presentation.scheduledAt)}
               </div>
-            )}
+            ) : null}
             {presentation.room && (
               <div className="flex items-center gap-2 rounded-lg bg-surface-alt px-3 py-2 text-ink">
                 <MapPin className="h-4 w-4 text-ink-muted" />

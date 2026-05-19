@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import {
   PUBLISHED_POSTER_SLOT_STATUSES,
@@ -24,6 +24,10 @@ import {
   userRoles,
 } from "@/server/db/schema";
 import { DashboardClient } from "./dashboard-client";
+import {
+  getPosterScheduleSortAt,
+  sortPosterScheduleSlots,
+} from "@/lib/poster-schedule";
 
 type DashboardStats = Record<string, unknown>;
 
@@ -96,6 +100,34 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
         ])
       : [[], []];
 
+  const posterSubmissionIds = myPresentations
+    .filter((presentation) => presentation.type === "POSTER")
+    .map((presentation) => presentation.submissionId);
+  const myPosterSlots =
+    posterSubmissionIds.length > 0
+      ? await db
+          .select({
+            id: posterSlotJudges.id,
+            submissionId: posterSlotJudges.submissionId,
+            startsAt: posterSlotJudges.startsAt,
+            endsAt: posterSlotJudges.endsAt,
+          })
+          .from(posterSlotJudges)
+          .where(
+            and(
+              inArray(posterSlotJudges.submissionId, posterSubmissionIds),
+              inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES)
+            )
+          )
+          .orderBy(asc(posterSlotJudges.startsAt), asc(posterSlotJudges.endsAt))
+      : [];
+  const posterSlotsBySubmission = new Map<string, typeof myPosterSlots>();
+  for (const slot of myPosterSlots) {
+    const slots = posterSlotsBySubmission.get(slot.submissionId) ?? [];
+    slots.push(slot);
+    posterSlotsBySubmission.set(slot.submissionId, slots);
+  }
+
   const deadlines: Record<string, string> = {};
   for (const row of deadlineRows) {
     if (typeof row.value === "string") {
@@ -143,10 +175,27 @@ async function loadAuthorStats(userId: string): Promise<DashboardStats> {
       ...decision,
       decidedAt: decision.decidedAt.toISOString(),
     })),
-    presentations: myPresentations.map((presentation) => ({
-      ...presentation,
-      scheduledAt: presentation.scheduledAt?.toISOString() || null,
-    })),
+    presentations: myPresentations.map((presentation) => {
+      const rawPosterSlots =
+        presentation.type === "POSTER"
+          ? posterSlotsBySubmission.get(presentation.submissionId) ?? []
+          : [];
+      const posterSlots = sortPosterScheduleSlots(rawPosterSlots).map((slot) => ({
+        id: slot.id,
+        startsAt: slot.startsAt.toISOString(),
+        endsAt: slot.endsAt.toISOString(),
+      }));
+
+      return {
+        ...presentation,
+        scheduledAt:
+          presentation.type === "POSTER"
+            ? getPosterScheduleSortAt(posterSlots, presentation.scheduledAt)?.toISOString() || null
+            : presentation.scheduledAt?.toISOString() || null,
+        duration: presentation.type === "POSTER" && posterSlots.length > 0 ? null : presentation.duration,
+        posterSlots,
+      };
+    }),
     deadlines,
     unreadNotifications: Number(unreadCount?.count || 0),
   };
@@ -296,7 +345,7 @@ async function loadCommitteeStats(userId: string): Promise<DashboardStats> {
       .select({
         presentationId: presentationAssignments.id,
         type: presentationAssignments.type,
-        scheduledAt: presentationAssignments.scheduledAt,
+        scheduledAt: posterSlotJudges.startsAt,
       })
       .from(posterSlotJudges)
       .innerJoin(
@@ -326,10 +375,14 @@ async function loadCommitteeStats(userId: string): Promise<DashboardStats> {
     });
   }
   for (const row of posterSlotRows) {
-    if (!assignmentMap.has(row.presentationId)) {
+    const existing = assignmentMap.get(row.presentationId);
+    if (!existing || existing.type === "POSTER") {
       assignmentMap.set(row.presentationId, {
         type: row.type,
-        scheduledAt: row.scheduledAt,
+        scheduledAt:
+          existing?.scheduledAt && existing.scheduledAt < row.scheduledAt
+            ? existing.scheduledAt
+            : row.scheduledAt,
       });
     }
   }

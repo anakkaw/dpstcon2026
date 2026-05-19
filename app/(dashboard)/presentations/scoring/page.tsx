@@ -6,6 +6,10 @@ import {
   PUBLISHED_POSTER_SLOT_STATUSES,
   PUBLISHED_PRESENTATION_STATUSES,
 } from "@/lib/presentation-status";
+import {
+  getPosterScheduleSortAt,
+  sortPosterScheduleSlots,
+} from "@/lib/poster-schedule";
 import { db } from "@/server/db";
 import {
   posterSlotJudges,
@@ -134,6 +138,27 @@ export default async function ScoringHubPage() {
     evaluations.map((e) => [e.presentationId, e])
   );
 
+  const posterSubmissionIds = presentations
+    .filter((p) => p.type === "POSTER")
+    .map((p) => p.submission.id);
+  const posterSlotRows =
+    posterSubmissionIds.length > 0
+      ? await db.query.posterSlotJudges.findMany({
+          where: and(
+            inArray(posterSlotJudges.submissionId, posterSubmissionIds),
+            inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES),
+            isAdmin ? undefined : eq(posterSlotJudges.judgeId, currentUser.id)
+          ),
+          orderBy: (slot, { asc }) => [asc(slot.startsAt), asc(slot.endsAt)],
+        })
+      : [];
+  const posterSlotsBySubmission = new Map<string, typeof posterSlotRows>();
+  for (const slot of posterSlotRows) {
+    const slots = posterSlotsBySubmission.get(slot.submissionId) ?? [];
+    slots.push(slot);
+    posterSlotsBySubmission.set(slot.submissionId, slots);
+  }
+
   const items: ScoringListItem[] = presentations.map((p) => {
     const evaluation = evaluationByPresentation.get(p.id);
     const scores = (evaluation?.scores as Record<string, number> | null) ?? null;
@@ -141,12 +166,24 @@ export default async function ScoringHubPage() {
       ? Object.values(scores).reduce((sum, v) => sum + (typeof v === "number" ? v : 0), 0)
       : 0;
 
+    const rawPosterSlots =
+      p.type === "POSTER" ? posterSlotsBySubmission.get(p.submission.id) ?? [] : [];
+    const posterSlots = sortPosterScheduleSlots(rawPosterSlots).map((slot) => ({
+      id: slot.id,
+      startsAt: slot.startsAt.toISOString(),
+      endsAt: slot.endsAt.toISOString(),
+    }));
+
     return {
       presentationId: p.id,
       type: p.type,
       status: p.status,
-      scheduledAt: p.scheduledAt?.toISOString() ?? null,
+      scheduledAt:
+        p.type === "POSTER"
+          ? getPosterScheduleSortAt(posterSlots, p.scheduledAt)?.toISOString() ?? null
+          : p.scheduledAt?.toISOString() ?? null,
       room: p.room,
+      posterSlots,
       submission: {
         paperCode: p.submission.paperCode,
         title: p.submission.title,

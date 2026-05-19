@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, count, desc, eq, ilike, inArray, isNotNull, or } from "drizzle-orm";
 import { db } from "@/server/db";
 import {
+  posterSlotJudges,
   presentationAssignments,
   storedFiles,
   submissions,
@@ -14,7 +15,14 @@ import {
   isPdfMime,
   isSubmissionFilePubliclyVisible,
 } from "@/server/e-abstract-policy";
-import { PUBLISHED_PRESENTATION_STATUSES } from "@/lib/presentation-status";
+import {
+  PUBLISHED_POSTER_SLOT_STATUSES,
+  PUBLISHED_PRESENTATION_STATUSES,
+} from "@/lib/presentation-status";
+import {
+  getPosterScheduleSortAt,
+  sortPosterScheduleSlots,
+} from "@/lib/poster-schedule";
 
 export type PublicAbstractListItem = {
   id: string;
@@ -35,6 +43,14 @@ export type PublicPresentationSlot = {
   room: string | null;
   duration: number | null;
   status: string;
+  posterSlots: PublicPosterSlot[];
+};
+
+export type PublicPosterSlot = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  room: string | null;
 };
 
 export type PublicAuthorEntry = {
@@ -73,6 +89,7 @@ export type PublicProgramItem = {
   scheduledAt: string | null;
   room: string | null;
   duration: number | null;
+  posterSlots: PublicPosterSlot[];
   mainAuthorTh: string;
   mainAuthorEn: string | null;
   track: { id: string; name: string } | null;
@@ -322,13 +339,42 @@ export async function getPublicAbstractByPaperCode(
     )
     .orderBy(asc(presentationAssignments.scheduledAt));
 
+  const posterSlotRows = presRows.some((p) => p.type === "POSTER")
+    ? await db
+        .select({
+          id: posterSlotJudges.id,
+          startsAt: posterSlotJudges.startsAt,
+          endsAt: posterSlotJudges.endsAt,
+        })
+        .from(posterSlotJudges)
+        .where(
+          and(
+            eq(posterSlotJudges.submissionId, row.id),
+            inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES)
+          )
+        )
+        .orderBy(asc(posterSlotJudges.startsAt), asc(posterSlotJudges.endsAt))
+    : [];
+
   const presentations: PublicPresentationSlot[] = presRows.map((p) => ({
     id: p.id,
     type: p.type,
-    scheduledAt: p.scheduledAt?.toISOString() ?? null,
+    scheduledAt:
+      p.type === "POSTER"
+        ? getPosterScheduleSortAt(posterSlotRows, p.scheduledAt)?.toISOString() ?? null
+        : p.scheduledAt?.toISOString() ?? null,
     room: p.room,
-    duration: p.duration,
+    duration: p.type === "POSTER" && posterSlotRows.length > 0 ? null : p.duration,
     status: p.status,
+    posterSlots:
+      p.type === "POSTER"
+        ? sortPosterScheduleSlots(posterSlotRows).map((slot) => ({
+            id: slot.id,
+            startsAt: slot.startsAt.toISOString(),
+            endsAt: slot.endsAt.toISOString(),
+            room: p.room,
+          }))
+        : [],
   }));
 
   let eAbstractFile: PublicAbstractDetail["eAbstractFile"] = null;
@@ -392,7 +438,10 @@ export async function getPublicProgram(opts: {
 }): Promise<PublicProgramItem[]> {
   const conditions = [
     eq(submissions.isPublished, true),
-    isNotNull(presentationAssignments.scheduledAt),
+    or(
+      isNotNull(presentationAssignments.scheduledAt),
+      eq(presentationAssignments.type, "POSTER")
+    )!,
     inArray(presentationAssignments.status, PUBLISHED_PRESENTATION_STATUSES),
   ];
   if (opts.trackId) conditions.push(eq(submissions.trackId, opts.trackId));
@@ -431,29 +480,74 @@ export async function getPublicProgram(opts: {
     .limit(normalizeLimit(opts.limit))
     .offset(normalizeOffset(opts.offset));
 
-  return rows.map((row) => ({
-    presentationId: row.presentationId,
-    submissionId: row.submissionId,
-    paperCode: row.paperCode,
-    titleTh: row.titleTh,
-    titleEn: row.titleEn,
-    type: row.type,
-    scheduledAt: row.scheduledAt?.toISOString() ?? null,
-    room: row.room,
-    duration: row.duration,
-    track: row.trackId ? { id: row.trackId, name: row.trackName! } : null,
-    mainAuthorTh: composeThaiName({
-      name: row.authorName,
-      prefixTh: row.authorPrefixTh,
-      firstNameTh: row.authorFirstTh,
-      lastNameTh: row.authorLastTh,
-    }),
-    mainAuthorEn: composeEnglishName({
-      prefixEn: row.authorPrefixEn,
-      firstNameEn: row.authorFirstEn,
-      lastNameEn: row.authorLastEn,
-    }),
-  }));
+  const posterSubmissionIds = rows
+    .filter((row) => row.type === "POSTER")
+    .map((row) => row.submissionId);
+  const posterSlotRows =
+    posterSubmissionIds.length > 0
+      ? await db
+          .select({
+            id: posterSlotJudges.id,
+            submissionId: posterSlotJudges.submissionId,
+            startsAt: posterSlotJudges.startsAt,
+            endsAt: posterSlotJudges.endsAt,
+          })
+          .from(posterSlotJudges)
+          .where(
+            and(
+              inArray(posterSlotJudges.submissionId, posterSubmissionIds),
+              inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES)
+            )
+          )
+          .orderBy(asc(posterSlotJudges.startsAt), asc(posterSlotJudges.endsAt))
+      : [];
+
+  const posterSlotsBySubmission = new Map<string, typeof posterSlotRows>();
+  for (const slot of posterSlotRows) {
+    const slots = posterSlotsBySubmission.get(slot.submissionId) ?? [];
+    slots.push(slot);
+    posterSlotsBySubmission.set(slot.submissionId, slots);
+  }
+
+  return rows.map((row) => {
+    const rawPosterSlots =
+      row.type === "POSTER" ? posterSlotsBySubmission.get(row.submissionId) ?? [] : [];
+    const posterSlots = sortPosterScheduleSlots(rawPosterSlots).map((slot) => ({
+      id: slot.id,
+      startsAt: slot.startsAt.toISOString(),
+      endsAt: slot.endsAt.toISOString(),
+      room: row.room,
+    }));
+    const scheduledAt =
+      row.type === "POSTER"
+        ? getPosterScheduleSortAt(posterSlots, row.scheduledAt)?.toISOString() ?? null
+        : row.scheduledAt?.toISOString() ?? null;
+
+    return {
+      presentationId: row.presentationId,
+      submissionId: row.submissionId,
+      paperCode: row.paperCode,
+      titleTh: row.titleTh,
+      titleEn: row.titleEn,
+      type: row.type,
+      scheduledAt,
+      room: row.room,
+      duration: row.type === "POSTER" && posterSlots.length > 0 ? null : row.duration,
+      posterSlots,
+      track: row.trackId ? { id: row.trackId, name: row.trackName! } : null,
+      mainAuthorTh: composeThaiName({
+        name: row.authorName,
+        prefixTh: row.authorPrefixTh,
+        firstNameTh: row.authorFirstTh,
+        lastNameTh: row.authorLastTh,
+      }),
+      mainAuthorEn: composeEnglishName({
+        prefixEn: row.authorPrefixEn,
+        firstNameEn: row.authorFirstEn,
+        lastNameEn: row.authorLastEn,
+      }),
+    };
+  });
 }
 
 export async function getPublicProgramCount(opts: {

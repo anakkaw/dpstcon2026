@@ -7,6 +7,10 @@ import {
   PUBLISHED_PRESENTATION_STATUSES,
   isPublishedPresentationStatus,
 } from "@/lib/presentation-status";
+import {
+  getPosterScheduleSortAt,
+  sortPosterScheduleSlots,
+} from "@/lib/poster-schedule";
 import { normalizeSubmissionStatus } from "@/lib/submission-status";
 import { db } from "@/server/db";
 import {
@@ -95,6 +99,23 @@ export default async function ScorePresentationPage({
       ),
     }),
   ]);
+
+  const posterSlotRows =
+    presentation.type === "POSTER"
+      ? await db.query.posterSlotJudges.findMany({
+          where: and(
+            eq(posterSlotJudges.submissionId, presentation.submission.id),
+            inArray(posterSlotJudges.status, PUBLISHED_POSTER_SLOT_STATUSES),
+            isAdmin ? undefined : eq(posterSlotJudges.judgeId, currentUser.id)
+          ),
+          orderBy: (slot, { asc }) => [asc(slot.startsAt), asc(slot.endsAt)],
+        })
+      : [];
+  const posterSlots = sortPosterScheduleSlots(posterSlotRows).map((slot) => ({
+    id: slot.id,
+    startsAt: slot.startsAt.toISOString(),
+    endsAt: slot.endsAt.toISOString(),
+  }));
 
   // Find the next pending presentation for this judge (skip current one)
   let nextPendingId: string | null = null;
@@ -189,9 +210,13 @@ export default async function ScorePresentationPage({
         id: presentation.id,
         type: presentation.type,
         status: presentation.status,
-        scheduledAt: presentation.scheduledAt?.toISOString() ?? null,
+        scheduledAt:
+          presentation.type === "POSTER"
+            ? getPosterScheduleSortAt(posterSlots, presentation.scheduledAt)?.toISOString() ?? null
+            : presentation.scheduledAt?.toISOString() ?? null,
         room: presentation.room,
-        duration: presentation.duration,
+        duration: presentation.type === "POSTER" && posterSlots.length > 0 ? null : presentation.duration,
+        posterSlots,
         submission: {
           id: presentation.submission.id,
           paperCode: presentation.submission.paperCode,

@@ -95,6 +95,7 @@ export function PresentationsClient({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const title = type === "ORAL" ? t("presentations.oral") : t("presentations.poster");
+  const isPosterMode = type === "POSTER";
   const TitleIcon = type === "ORAL" ? Mic : ImageIcon;
   const presentationLabel = (presentation: PresentationData | ScoringPresentation) =>
     `${presentation.submission.paperCode || "NO-CODE"} · ${presentation.submission.title}`;
@@ -106,6 +107,40 @@ export function PresentationsClient({
   };
   const presentationStatusTone = (status: string) =>
     isPublishedPresentationStatus(status) ? "success" : "warning";
+  const renderScheduleTime = (presentation: PresentationData) => {
+    if (presentation.type === "POSTER" && presentation.posterSlots.length > 0) {
+      return (
+        <div className="space-y-1">
+          {presentation.posterSlots.map((slot, index) => (
+            <div key={slot.id} className="text-xs text-ink-light">
+              {t("presentations.posterSlot")} {index + 1}: {formatDateTime(slot.startsAt)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return presentation.scheduledAt ? (
+      <span className="text-xs text-ink-light">{formatDateTime(presentation.scheduledAt)}</span>
+    ) : (
+      <span className="text-xs text-ink-muted">—</span>
+    );
+  };
+  const renderDuration = (presentation: PresentationData) => {
+    if (presentation.type === "POSTER" && presentation.posterSlots.length > 0) {
+      return (
+        <span className="text-xs text-ink-light">
+          {presentation.posterSlots.length} {t("presentations.posterSlotUnit")}
+        </span>
+      );
+    }
+
+    return presentation.duration ? (
+      <span className="text-xs text-ink-light">{presentation.duration}</span>
+    ) : (
+      <span className="text-xs text-ink-muted">—</span>
+    );
+  };
 
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((prev) => {
@@ -153,7 +188,7 @@ export function PresentationsClient({
         case "room":
           return direction * (a.room || "").localeCompare(b.room || "");
         case "duration":
-          return direction * ((a.duration || 0) - (b.duration || 0));
+          return direction * (((a.type === "POSTER" ? a.posterSlots.length : a.duration) || 0) - ((b.type === "POSTER" ? b.posterSlots.length : b.duration) || 0));
         case "status":
           return direction * a.status.localeCompare(b.status);
         default:
@@ -411,15 +446,15 @@ export function PresentationsClient({
                     <div className="grid grid-cols-1 gap-3 rounded-xl bg-surface-alt p-4 text-sm sm:grid-cols-3">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.dateTime")}</p>
-                        <p className="mt-1 text-ink">{presentation.scheduledAt ? formatDateTime(presentation.scheduledAt) : "—"}</p>
+                        <div className="mt-1">{renderScheduleTime(presentation)}</div>
                       </div>
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.room")}</p>
                         <p className="mt-1 text-ink">{presentation.room || "—"}</p>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.minutes")}</p>
-                        <p className="mt-1 text-ink">{presentation.duration || "—"}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{isPosterMode ? t("presentations.posterSlots") : t("presentations.minutes")}</p>
+                        <div className="mt-1">{renderDuration(presentation)}</div>
                       </div>
                     </div>
 
@@ -438,6 +473,14 @@ export function PresentationsClient({
                           <Button size="sm" onClick={() => handleSchedule(presentation.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
                           <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>{t("common.cancel")}</Button>
                         </div>
+                      </div>
+                    ) : canManage && isPosterMode ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Link href="/presentations/poster">
+                          <Button size="sm" variant="outline">
+                            {t("presentations.managePosterSlots")}
+                          </Button>
+                        </Link>
                       </div>
                     ) : canManage ? (
                       <div className="flex flex-wrap gap-2">
@@ -492,7 +535,7 @@ export function PresentationsClient({
                         <SortTh label={t("submissions.track")} sortKey_="track" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                         <SortTh label={t("presentations.dateTime")} sortKey_="scheduledAt" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                         <SortTh label={t("presentations.room")} sortKey_="room" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                        <SortTh label={t("presentations.minutes")} sortKey_="duration" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
+                        <SortTh label={isPosterMode ? t("presentations.posterSlots") : t("presentations.minutes")} sortKey_="duration" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                         <SortTh label={t("presentations.statusCol")} sortKey_="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                         <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-muted" />
                       </tr>
@@ -509,11 +552,7 @@ export function PresentationsClient({
                               {presentation.submission.track ? <Badge tone="info">{presentation.submission.track.name}</Badge> : <span className="text-xs text-ink-muted">—</span>}
                             </td>
                             <td className="px-4 py-3.5">
-                              {presentation.scheduledAt ? (
-                                <span className="text-xs text-ink-light">{formatDateTime(presentation.scheduledAt)}</span>
-                              ) : (
-                                <span className="text-xs text-ink-muted">—</span>
-                              )}
+                              {renderScheduleTime(presentation)}
                             </td>
                             <td className="px-4 py-3.5">
                               {presentation.room ? (
@@ -523,7 +562,7 @@ export function PresentationsClient({
                               )}
                             </td>
                             <td className="px-4 py-3.5 text-center">
-                              {presentation.duration ? <span className="text-xs text-ink-light">{presentation.duration}</span> : <span className="text-xs text-ink-muted">—</span>}
+                              {renderDuration(presentation)}
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <Badge tone={presentationStatusTone(presentation.status)} dot>
@@ -537,6 +576,16 @@ export function PresentationsClient({
                                     <Button size="sm" onClick={() => handleSchedule(presentation.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
                                     <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
                                   </>
+                                ) : canManage && isPosterMode ? (
+                                  <Link href="/presentations/poster">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+                                    >
+                                      {t("presentations.managePosterSlots")}
+                                    </Button>
+                                  </Link>
                                 ) : canManage ? (
                                   <>
                                     <Button
