@@ -43,7 +43,16 @@ import {
   parsePosterOrderValue,
   posterOrderSettingsKey,
 } from "@/lib/poster-planner-order";
-import { createMinimalPosterJudgePlan } from "@/lib/poster-auto-assign";
+import {
+  normalizePosterSubgroups,
+  parsePosterSubgroupsValue,
+  posterSubgroupsSettingsKey,
+  type PosterPlannerSubgroup,
+} from "@/lib/poster-subgroups";
+import {
+  createFixedJudgeFewestSlotPlan,
+  createMinimalPosterJudgePlan,
+} from "@/lib/poster-auto-assign";
 import {
   formatThaiPosterSlotSummary,
   getPosterScheduleSortAt,
@@ -876,11 +885,98 @@ app.patch("/poster-order", async (c) => {
   return c.json({ order: nextOrder });
 });
 
+const posterSubgroupSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(120),
+  submissionIds: z.array(z.string().uuid()).default([]),
+  judgeIds: z.array(z.string().uuid()).default([]),
+});
+
+async function getPosterSubgroupScope(trackId: string) {
+  const [posterRows, committeeRows] = await Promise.all([
+    db.query.presentationAssignments.findMany({
+      where: eq(presentationAssignments.type, "POSTER"),
+      with: {
+        submission: {
+          columns: {
+            id: true,
+            status: true,
+            trackId: true,
+          },
+        },
+      },
+      orderBy: (table, { asc }) => [asc(table.submissionId)],
+    }),
+    db
+      .select({
+        id: userRoles.userId,
+      })
+      .from(userRoles)
+      .where(
+        and(
+          eq(userRoles.role, "COMMITTEE"),
+          or(eq(userRoles.trackId, trackId), isNull(userRoles.trackId))
+        )
+      ),
+  ]);
+
+  return {
+    currentSubmissionIds: posterRows
+      .filter(
+        (row) =>
+          row.submission.trackId === trackId &&
+          isAcceptedSubmissionStatus(row.submission.status)
+      )
+      .map((row) => row.submissionId),
+    candidateJudgeIds: Array.from(new Set(committeeRows.map((row) => row.id))),
+  };
+}
+
+app.put("/poster-subgroups", async (c) => {
+  const currentUser = c.get("user");
+  if (!hasRole(currentUser, "ADMIN")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const body = await c.req.json();
+  const schema = z.object({
+    trackId: z.string().uuid(),
+    subgroups: z.array(posterSubgroupSchema).max(50),
+  });
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Validation error" }, 400);
+
+  const scope = await getPosterSubgroupScope(parsed.data.trackId);
+  const subgroups = normalizePosterSubgroups({
+    ...scope,
+    savedSubgroups: parsed.data.subgroups,
+  });
+  const now = new Date();
+
+  await db
+    .insert(settings)
+    .values({
+      key: posterSubgroupsSettingsKey(parsed.data.trackId),
+      value: subgroups,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value: subgroups, updatedAt: now },
+    });
+
+  return c.json({ subgroups });
+});
+
 app.post("/poster-auto-assign", async (c) => {
   const currentUser = c.get("user");
   const body = await c.req.json();
   const schema = z.object({
     trackId: z.string().uuid(),
+    subgroupId: z.string().trim().min(1).max(120).optional(),
+    mode: z.enum(["MIN_JUDGES", "FIXED_JUDGES_MIN_SLOTS"]).default("MIN_JUDGES"),
+    judgeCount: z.number().int().min(POSTER_REQUIRED_JUDGE_COUNT).optional(),
   });
 
   const parsed = schema.safeParse(body);
@@ -895,10 +991,7 @@ app.post("/poster-auto-assign", async (c) => {
 
   const sessionSettings = await getPosterSessionSettings();
   if (sessionSettings.slotTemplates.length < POSTER_REQUIRED_JUDGE_COUNT) {
-    return c.json(
-      { error: `At least ${POSTER_REQUIRED_JUDGE_COUNT} poster slots are required` },
-      400
-    );
+    return c.json({ error: "INSUFFICIENT_SLOTS" }, 400);
   }
 
   const posterRows = await db.query.presentationAssignments.findMany({
@@ -915,7 +1008,7 @@ app.post("/poster-auto-assign", async (c) => {
     },
   });
 
-  const targetRows = posterRows.filter(
+  let targetRows = posterRows.filter(
     (row) =>
       row.submission.trackId === parsed.data.trackId &&
       isAcceptedSubmissionStatus(row.submission.status) &&
@@ -924,10 +1017,7 @@ app.post("/poster-auto-assign", async (c) => {
   );
 
   if (targetRows.length === 0) {
-    return c.json(
-      { error: "No draft poster assignments are available for auto assignment in this track" },
-      400
-    );
+    return c.json({ error: "NO_POSTERS" }, 400);
   }
 
   const committeeRows = await db
@@ -952,10 +1042,48 @@ app.post("/poster-auto-assign", async (c) => {
       });
     }
   }
-  const judges = Array.from(committeeById.values());
+  let judges = Array.from(committeeById.values());
+  let selectedSubgroup: PosterPlannerSubgroup | null = null;
+
+  if (parsed.data.subgroupId) {
+    const subgroupRow = await db.query.settings.findFirst({
+      where: eq(settings.key, posterSubgroupsSettingsKey(parsed.data.trackId)),
+      columns: { value: true },
+    });
+    const subgroups = normalizePosterSubgroups({
+      currentSubmissionIds: posterRows
+        .filter(
+          (row) =>
+            row.submission.trackId === parsed.data.trackId &&
+            isAcceptedSubmissionStatus(row.submission.status)
+        )
+        .map((row) => row.submissionId),
+      candidateJudgeIds: judges.map((judge) => judge.judgeId),
+      savedSubgroups: parsePosterSubgroupsValue(subgroupRow?.value),
+    });
+    selectedSubgroup = subgroups.find((subgroup) => subgroup.id === parsed.data.subgroupId) ?? null;
+    if (!selectedSubgroup) {
+      return c.json({ error: "SUBGROUP_NOT_FOUND" }, 404);
+    }
+
+    const subgroupSubmissionIds = new Set(selectedSubgroup.submissionIds);
+    const subgroupJudgeIds = new Set(selectedSubgroup.judgeIds);
+    targetRows = targetRows.filter((row) => subgroupSubmissionIds.has(row.submissionId));
+    judges = judges.filter((judge) => subgroupJudgeIds.has(judge.judgeId));
+  }
+
+  if (targetRows.length === 0) {
+    return c.json({ error: "NO_POSTERS" }, 400);
+  }
   if (judges.length < POSTER_REQUIRED_JUDGE_COUNT) {
+    return c.json({ error: "INSUFFICIENT_JUDGES" }, 400);
+  }
+  if (
+    parsed.data.mode === "FIXED_JUDGES_MIN_SLOTS" &&
+    (!parsed.data.judgeCount || parsed.data.judgeCount > judges.length)
+  ) {
     return c.json(
-      { error: `At least ${POSTER_REQUIRED_JUDGE_COUNT} committee members are required` },
+      { error: "INVALID_JUDGE_COUNT" },
       400
     );
   }
@@ -971,7 +1099,7 @@ app.post("/poster-auto-assign", async (c) => {
     },
   });
 
-  const plan = createMinimalPosterJudgePlan({
+  const planInput = {
     posters: targetRows.map((row) => ({ submissionId: row.submissionId })),
     judges,
     slots: sessionSettings.slotTemplates,
@@ -982,7 +1110,14 @@ app.post("/poster-auto-assign", async (c) => {
         startsAt: slot.startsAt,
         endsAt: slot.endsAt,
       })),
-  });
+  };
+  const plan =
+    parsed.data.mode === "FIXED_JUDGES_MIN_SLOTS"
+      ? createFixedJudgeFewestSlotPlan({
+          ...planInput,
+          judgeCount: parsed.data.judgeCount!,
+        })
+      : createMinimalPosterJudgePlan(planInput);
 
   if (!plan.ok) {
     return c.json({ error: plan.reason }, 400);
@@ -1016,8 +1151,10 @@ app.post("/poster-auto-assign", async (c) => {
 
   return c.json({
     ok: true,
+    subgroupId: selectedSubgroup?.id ?? null,
     posterCount: targetRows.length,
     judgeCount: plan.judgeCount,
+    slotCount: plan.slotCount,
     assignmentCount: plan.assignments.length,
   });
 });

@@ -33,6 +33,7 @@ export type PosterAutoAssignPlan =
   | {
       ok: true;
       judgeCount: number;
+      slotCount: number;
       assignments: PosterAutoAssignment[];
       reason?: never;
     }
@@ -76,6 +77,18 @@ export function getMinimumPosterJudgeCount(input: {
   return Math.max(
     REQUIRED_REVIEWS_PER_POSTER,
     Math.ceil((input.posterCount * REQUIRED_REVIEWS_PER_POSTER) / input.slotCount)
+  );
+}
+
+export function getMinimumPosterSlotCount(input: {
+  posterCount: number;
+  judgeCount: number;
+}) {
+  if (input.posterCount <= 0) return 0;
+  if (input.judgeCount <= 0) return Number.POSITIVE_INFINITY;
+  return Math.max(
+    REQUIRED_REVIEWS_PER_POSTER,
+    Math.ceil((input.posterCount * REQUIRED_REVIEWS_PER_POSTER) / input.judgeCount)
   );
 }
 
@@ -316,6 +329,45 @@ function getJudgeSetsForCount<T extends PosterAutoAssignJudge>(
   return uniqueJudgeSets(sets).slice(0, MAX_EXACT_JUDGE_SET_ATTEMPTS);
 }
 
+function getSlotSetsForCount<T extends PosterAutoAssignSlot>(
+  slots: T[],
+  slotCount: number
+) {
+  if (countCombinations(slots.length, slotCount) <= MAX_EXACT_JUDGE_SET_ATTEMPTS) {
+    return buildCombinations(slots, slotCount, MAX_EXACT_JUDGE_SET_ATTEMPTS);
+  }
+
+  const top = slots.slice(0, slotCount);
+  const reserve = slots.slice(slotCount, Math.min(slots.length, slotCount + 12));
+  const sets: T[][] = [top];
+
+  for (let replaceIndex = slotCount - 1; replaceIndex >= 0; replaceIndex -= 1) {
+    for (const reserveSlot of reserve) {
+      sets.push([
+        ...top.slice(0, replaceIndex),
+        reserveSlot,
+        ...top.slice(replaceIndex + 1),
+      ]);
+    }
+  }
+
+  const seen = new Set<string>();
+  return sets.filter((set) => {
+    const key = set.map((slot) => slot.id).sort().join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, MAX_EXACT_JUDGE_SET_ATTEMPTS);
+}
+
+function countUsedJudges(assignments: PosterAutoAssignment[]) {
+  return new Set(assignments.map((assignment) => assignment.judgeId)).size;
+}
+
+function countUsedSlots(assignments: PosterAutoAssignment[]) {
+  return new Set(assignments.map((assignment) => assignment.slotId)).size;
+}
+
 export function createMinimalPosterJudgePlan(input: {
   posters: PosterAutoAssignPoster[];
   judges: PosterAutoAssignJudge[];
@@ -355,7 +407,12 @@ export function createMinimalPosterJudgePlan(input: {
       });
 
       if (assignments) {
-        return { ok: true, judgeCount, assignments };
+        return {
+          ok: true,
+          judgeCount: countUsedJudges(assignments),
+          slotCount: countUsedSlots(assignments),
+          assignments,
+        };
       }
     }
   }
@@ -363,6 +420,68 @@ export function createMinimalPosterJudgePlan(input: {
   return {
     ok: false,
     judgeCount: input.judges.length,
+    assignments: [],
+    reason: "INSUFFICIENT_JUDGE_CAPACITY",
+  };
+}
+
+export function createFixedJudgeFewestSlotPlan(input: {
+  posters: PosterAutoAssignPoster[];
+  judges: PosterAutoAssignJudge[];
+  slots: PosterAutoAssignSlot[];
+  busySlots: PosterAutoAssignBusySlot[];
+  judgeCount: number;
+}): PosterAutoAssignPlan {
+  if (input.posters.length === 0) {
+    return { ok: false, judgeCount: 0, assignments: [], reason: "NO_POSTERS" };
+  }
+  if (input.slots.length < REQUIRED_REVIEWS_PER_POSTER) {
+    return { ok: false, judgeCount: input.judgeCount, assignments: [], reason: "INSUFFICIENT_SLOTS" };
+  }
+  if (input.judgeCount < REQUIRED_REVIEWS_PER_POSTER || input.judges.length < REQUIRED_REVIEWS_PER_POSTER) {
+    return { ok: false, judgeCount: input.judgeCount, assignments: [], reason: "INSUFFICIENT_JUDGES" };
+  }
+
+  const requestedJudgeCount = Math.min(input.judgeCount, input.judges.length);
+  const sortedSlots = sortSlots(input.slots);
+  const rankedJudges = sortJudgesByAvailability({
+    judges: input.judges,
+    slots: sortedSlots,
+    busySlots: input.busySlots,
+  });
+  const judgeSets = getJudgeSetsForCount(rankedJudges, requestedJudgeCount);
+  const lowerBound = getMinimumPosterSlotCount({
+    posterCount: input.posters.length,
+    judgeCount: requestedJudgeCount,
+  });
+
+  for (let slotCount = lowerBound; slotCount <= sortedSlots.length; slotCount += 1) {
+    const slotSets = getSlotSetsForCount(sortedSlots, slotCount);
+    for (const slotSet of slotSets) {
+      for (const judgeSet of judgeSets) {
+        const assignments = attemptPlan({
+          posters: input.posters,
+          judges: judgeSet,
+          slots: slotSet,
+          busySlots: input.busySlots,
+          maxJudgeCount: judgeSet.length,
+        });
+
+        if (assignments) {
+          return {
+            ok: true,
+            judgeCount: countUsedJudges(assignments),
+            slotCount: countUsedSlots(assignments),
+            assignments,
+          };
+        }
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    judgeCount: requestedJudgeCount,
     assignments: [],
     reason: "INSUFFICIENT_JUDGE_CAPACITY",
   };

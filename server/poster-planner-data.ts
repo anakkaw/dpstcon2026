@@ -21,6 +21,14 @@ import {
   parsePosterOrderValue,
   posterOrderSettingsKey,
 } from "@/lib/poster-planner-order";
+import {
+  normalizePosterSubgroups,
+  parsePosterSubgroupsValue,
+  posterSubgroupsSettingsKey,
+  type PosterPlannerSubgroup,
+} from "@/lib/poster-subgroups";
+
+export type { PosterPlannerSubgroup };
 
 const POSTER_SESSION_ROOM_KEY = "posterSessionRoom";
 const POSTER_SESSION_SLOTS_KEY = "posterSessionSlotTemplates";
@@ -198,7 +206,12 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
     new Set(filteredPosters.map((row) => row.submission.track?.id).filter((id): id is string => Boolean(id)))
   );
 
-  const [busySlotRows, orderRows] = await Promise.all([
+  const plannerSettingKeys = visibleTrackIds.flatMap((trackId) => [
+    posterOrderSettingsKey(trackId),
+    posterSubgroupsSettingsKey(trackId),
+  ]);
+
+  const [busySlotRows, plannerSettingRows] = await Promise.all([
     candidateJudgeIds.length > 0
       ? db.query.posterSlotJudges.findMany({
           where: inArray(posterSlotJudges.judgeId, candidateJudgeIds),
@@ -209,14 +222,14 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
           },
         })
       : Promise.resolve([]),
-    visibleTrackIds.length > 0
+    plannerSettingKeys.length > 0
       ? db
           .select({
             key: settings.key,
             value: settings.value,
           })
           .from(settings)
-          .where(inArray(settings.key, visibleTrackIds.map((trackId) => posterOrderSettingsKey(trackId))))
+          .where(inArray(settings.key, plannerSettingKeys))
       : Promise.resolve([]),
   ]);
 
@@ -248,8 +261,9 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
   }
 
   const orderByTrackId = new Map<string, string[]>();
+  const posterSubgroupsByTrackId: Record<string, PosterPlannerSubgroup[]> = {};
   for (const trackId of visibleTrackIds) {
-    const row = orderRows.find((orderRow) => orderRow.key === posterOrderSettingsKey(trackId));
+    const row = plannerSettingRows.find((orderRow) => orderRow.key === posterOrderSettingsKey(trackId));
     const currentIds = filteredPosters
       .filter((posterRow) => posterRow.submission.track?.id === trackId)
       .map((posterRow) => posterRow.submissionId);
@@ -257,6 +271,22 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
       currentIds,
       savedIds: parsePosterOrderValue(row?.value),
     }));
+
+    const subgroupRow = plannerSettingRows.find(
+      (settingRow) => settingRow.key === posterSubgroupsSettingsKey(trackId)
+    );
+    const candidateJudgeIdsForTrack = Array.from(
+      new Set(
+        committeeUsers
+          .filter((committeeUser) => committeeUser.trackId === null || committeeUser.trackId === trackId)
+          .map((committeeUser) => committeeUser.id)
+      )
+    );
+    posterSubgroupsByTrackId[trackId] = normalizePosterSubgroups({
+      currentSubmissionIds: currentIds,
+      candidateJudgeIds: candidateJudgeIdsForTrack,
+      savedSubgroups: parsePosterSubgroupsValue(subgroupRow?.value),
+    });
   }
 
   const sortedPosters = filteredPosters.slice().sort((a, b) => {
@@ -287,6 +317,7 @@ export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
     posterSubmissions,
     committeeUsers,
     judgeBusySlots,
+    posterSubgroupsByTrackId,
   };
 }
 

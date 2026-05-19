@@ -62,6 +62,7 @@ export default async function PresentationsPage({
           initialPosterSubmissions={data.posterSubmissions}
           initialCommitteeUsers={data.committeeUsers}
           initialJudgeBusySlots={data.judgeBusySlots}
+          initialPosterSubgroupsByTrackId={data.posterSubgroupsByTrackId}
           criteria={criteria}
           canEditCriteria={canEditCriteria}
           canEditSessionSettings={canEditCriteria}

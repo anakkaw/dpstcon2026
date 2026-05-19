@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createFixedJudgeFewestSlotPlan,
   createMinimalPosterJudgePlan,
   getMinimumPosterJudgeCount,
+  getMinimumPosterSlotCount,
 } from "@/lib/poster-auto-assign";
 
 function slots(count: number) {
@@ -31,7 +33,7 @@ function judges(count: number) {
   }));
 }
 
-function assertValidPlan(plan: ReturnType<typeof createMinimalPosterJudgePlan>) {
+function assertValidPlan(plan: ReturnType<typeof createMinimalPosterJudgePlan> | ReturnType<typeof createFixedJudgeFewestSlotPlan>) {
   assert.equal(plan.ok, true, plan.reason);
   const byPoster = new Map<string, typeof plan.assignments>();
   const judgeSlotPairs = new Set<string>();
@@ -57,6 +59,12 @@ test("minimum judge count follows total required reviews over available slots", 
   assert.equal(getMinimumPosterJudgeCount({ posterCount: 10, slotCount: 7 }), 5);
   assert.equal(getMinimumPosterJudgeCount({ posterCount: 5, slotCount: 3 }), 5);
   assert.equal(getMinimumPosterJudgeCount({ posterCount: 1, slotCount: 7 }), 3);
+});
+
+test("minimum slot count follows total required reviews over fixed judges", () => {
+  assert.equal(getMinimumPosterSlotCount({ posterCount: 10, judgeCount: 6 }), 5);
+  assert.equal(getMinimumPosterSlotCount({ posterCount: 5, judgeCount: 5 }), 3);
+  assert.equal(getMinimumPosterSlotCount({ posterCount: 1, judgeCount: 10 }), 3);
 });
 
 test("auto assign uses the minimum possible judge count for the selected track", () => {
@@ -122,4 +130,32 @@ test("auto assign reports impossible plans when capacity is insufficient", () =>
 
   assert.equal(plan.ok, false);
   assert.equal(plan.reason, "INSUFFICIENT_JUDGE_CAPACITY");
+});
+
+test("fixed judge auto assign uses the fewest possible slots", () => {
+  const plan = createFixedJudgeFewestSlotPlan({
+    posters: posters(10),
+    judges: judges(8),
+    slots: slots(7),
+    busySlots: [],
+    judgeCount: 6,
+  });
+
+  assertValidPlan(plan);
+  assert.equal(plan.judgeCount, 6);
+  assert.equal(plan.slotCount, 5);
+  assert.equal(new Set(plan.assignments.map((assignment) => assignment.slotId)).size, 5);
+});
+
+test("fixed judge auto assign reports impossible fixed judge counts", () => {
+  const plan = createFixedJudgeFewestSlotPlan({
+    posters: posters(10),
+    judges: judges(8),
+    slots: slots(7),
+    busySlots: [],
+    judgeCount: 2,
+  });
+
+  assert.equal(plan.ok, false);
+  assert.equal(plan.reason, "INSUFFICIENT_JUDGES");
 });
