@@ -91,7 +91,7 @@ export function TrackFilter({ value, onChange, tracks: propTracks, counts }: Tra
 
         <div className="w-px h-6 bg-gray-200 shrink-0" />
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto scrollbar-none py-1 -my-1">
           <button
             onClick={() => onChange("")}
             className={cn(
