@@ -130,11 +130,7 @@ export function AppShellClient({
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-landing-hero text-slate-100 relative dashboard-theme">
-      {/* Background Decorative Glowing Orbs */}
-      <div className="absolute -left-20 top-1/4 h-[450px] w-[450px] rounded-full bg-orange-500/5 blur-[100px] pointer-events-none animate-pulse-glow" />
-      <div className="absolute right-1/4 top-10 h-[500px] w-[500px] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none" />
-
+    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-300 relative">
       {/* Skip to main content link for keyboard/screen reader users */}
       <a
         href="#main-content"
@@ -154,7 +150,7 @@ export function AppShellClient({
         id="app-sidebar"
         aria-label={t("common.primaryNavigation")}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/5 bg-slate-950/40 backdrop-blur-md",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/5 bg-slate-950/95 backdrop-blur-md",
           "transition-transform duration-300 ease-out",
           "lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
@@ -199,24 +195,24 @@ export function AppShellClient({
         </nav>
       </aside>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-white/5 bg-slate-950/20 px-4 backdrop-blur-md lg:px-8 relative z-10">
+      <div className="flex flex-1 flex-col overflow-hidden bg-dashboard-light relative dashboard-theme text-slate-800">
+        <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-slate-200/60 bg-white/70 px-4 backdrop-blur-md lg:px-8 relative z-10">
           <button
             type="button"
             aria-label={t("common.openNavigation")}
             aria-expanded={sidebarOpen}
             aria-controls="app-sidebar"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 lg:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
               {roleSummary}
             </p>
-            <h1 className="truncate text-base font-semibold text-white sm:text-lg">
+            <h1 className="truncate text-base font-semibold text-slate-900 sm:text-lg">
               {activeLabel}
             </h1>
           </div>
@@ -229,10 +225,10 @@ export function AppShellClient({
               <span className="text-sm font-semibold text-white">{initials}</span>
             </div>
             <div className="hidden min-w-0 sm:block">
-              <p className="truncate text-sm font-medium leading-tight text-white">
+              <p className="truncate text-sm font-medium leading-tight text-slate-800">
                 {displayName}
               </p>
-              <p className="text-xs leading-tight text-slate-400">
+              <p className="text-xs leading-tight text-slate-500">
                 {roleSummary}
               </p>
             </div>
@@ -246,7 +242,7 @@ export function AppShellClient({
                   window.location.href = "/login";
                 }
               }}
-              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400 border border-white/5 hover:border-red-500/20"
+              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-all hover:bg-red-50 hover:text-red-600 border border-slate-200 hover:border-red-200"
               title={t("common.signOut")}
               aria-label={t("common.signOut")}
             >
@@ -259,10 +255,10 @@ export function AppShellClient({
           <div className="mx-auto w-full max-w-7xl">
             {children}
             <Footer
-              className="mt-10 opacity-70"
+              className="mt-10 opacity-60"
               developedBy={t("footer.developedBy")}
               university={t("footer.university")}
-              variant="dark"
+              variant="light"
             />
           </div>
         </main>
