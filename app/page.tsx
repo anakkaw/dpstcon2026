@@ -11,6 +11,7 @@ import {
 import { getServerTranslator } from "@/lib/i18n/server";
 import { LanguageToggle } from "@/components/language-toggle";
 import { Footer } from "@/components/ui/footer";
+import { Countdown } from "@/components/countdown";
 
 export default async function HomePage() {
   const { t, locale } = await getServerTranslator();
@@ -19,14 +20,15 @@ export default async function HomePage() {
     {
       href: "/conference",
       icon: Sparkles,
-      title: locale === "en" ? "Public conference home" : "หน้า public งานประชุม",
+      title: locale === "en" ? "Public Conference Home" : "หน้าหลักงานประชุม",
       desc:
         locale === "en"
           ? "Start with the public overview, key dates, venue, and featured conference content."
           : "เริ่มจากภาพรวมสาธารณะ วันเวลา สถานที่ และข้อมูลเด่นของงานประชุม",
-      iconBg: "glass-chip text-brand-700",
-      accent: "bg-brand-500",
-      hover: "hover:border-brand-200",
+      glowColor: "group-hover:shadow-[0_0_20px_rgba(249,115,22,0.15)]",
+      iconBg: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+      accent: "bg-orange-500",
+      hover: "hover:border-orange-500/30",
     },
     {
       href: "/conference/program",
@@ -36,9 +38,10 @@ export default async function HomePage() {
         locale === "en"
           ? "Browse oral and poster presentation sessions in one place."
           : "ดูตารางนำเสนอผลงานทั้งแบบบรรยายและโปสเตอร์ในหน้าเดียว",
-      iconBg: "glass-chip text-brand-700",
-      accent: "bg-amber-500",
-      hover: "hover:border-brand-200",
+      glowColor: "group-hover:shadow-[0_0_20px_rgba(6,182,212,0.15)]",
+      iconBg: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+      accent: "bg-cyan-500",
+      hover: "hover:border-cyan-500/30",
     },
     {
       href: "/conference/abstracts",
@@ -48,9 +51,10 @@ export default async function HomePage() {
         locale === "en"
           ? "Search published abstracts by title, author, keywords, or paper code."
           : "ค้นหาบทคัดย่อที่เผยแพร่ด้วยชื่อเรื่อง ผู้แต่ง คำสำคัญ หรือรหัสบทความ",
-      iconBg: "glass-chip text-brand-700",
-      accent: "bg-orange-400",
-      hover: "hover:border-brand-200",
+      glowColor: "group-hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]",
+      iconBg: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+      accent: "bg-purple-500",
+      hover: "hover:border-purple-500/30",
     },
     {
       href: "/conference/docs",
@@ -60,159 +64,162 @@ export default async function HomePage() {
         locale === "en"
           ? "Download public conference files and supporting documents."
           : "ดาวน์โหลดเอกสารเผยแพร่และไฟล์ประกอบงานประชุม",
-      iconBg: "glass-chip text-amber-700",
-      accent: "bg-brand-600",
-      hover: "hover:border-amber-200",
+      glowColor: "group-hover:shadow-[0_0_20px_rgba(239,68,68,0.15)]",
+      iconBg: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+      accent: "bg-rose-500",
+      hover: "hover:border-rose-500/30",
     },
   ];
 
   return (
-    <div className="min-h-screen bg-[#fff1e6] text-ink">
-      <header className="glass-nav relative z-20 border-b">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6 lg:px-8">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(135deg,#fb923c_0%,#f97316_52%,#c2410c_100%)] shadow-elev-2">
-              <span className="text-lg font-bold text-white">D</span>
+    <div className="min-h-screen bg-landing-hero text-slate-100 flex flex-col overflow-hidden">
+      {/* Background Decorative Glowing Orbs */}
+      <div className="absolute -left-20 top-1/4 h-[400px] w-[400px] rounded-full bg-orange-500/5 blur-[100px] pointer-events-none animate-pulse-glow" />
+      <div className="absolute right-1/4 top-10 h-[500px] w-[500px] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none" />
+
+      {/* Floating minimalist glass header */}
+      <header className="sticky top-0 z-30 backdrop-blur-md bg-slate-950/20 border-b border-white/5 transition-all">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <Link href="/" className="flex min-w-0 items-center gap-3 group">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#fb923c_0%,#f97316_52%,#c2410c_100%)] shadow-[0_0_15px_rgba(249,115,22,0.25)] group-hover:scale-105 transition-transform duration-300">
+              <span className="text-lg font-bold text-white tracking-wide">D</span>
             </span>
             <span className="min-w-0">
-              <span className="block text-base font-bold leading-tight text-ink">
+              <span className="block text-base font-extrabold leading-tight text-white tracking-wide">
                 DPSTCon 2026
               </span>
-              <span className="hidden text-xs leading-tight text-ink-muted sm:block">
+              <span className="hidden text-[10px] uppercase font-bold tracking-widest text-slate-400 leading-tight sm:block">
                 {t("landing.title")}
               </span>
             </span>
           </Link>
 
-          <div className="flex items-center gap-2">
-            <LanguageToggle />
+          <div className="flex items-center gap-3">
+            <LanguageToggle className="text-slate-300 hover:text-white border-white/10 hover:bg-white/5 bg-white/3" />
             <Link
               href="/login"
-              className="glass-chip hidden items-center gap-1.5 rounded-button border px-3.5 py-2 text-sm font-semibold text-ink transition-colors hover:bg-white/80 sm:inline-flex"
+              className="hidden items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-200 transition-all hover:bg-white/10 hover:text-white sm:inline-flex"
             >
-              <LogIn className="h-4 w-4" />
+              <LogIn className="h-3.5 w-3.5" />
               {t("common.signIn")}
             </Link>
           </div>
         </div>
       </header>
 
-      <main>
-        <section className="relative overflow-hidden border-b border-white/60 bg-[#fff1e6]">
-          <div className="absolute inset-x-0 top-0 h-1.5 bg-[linear-gradient(90deg,#c2410c_0%,#f97316_36%,#f59e0b_72%,#fff7ed_100%)]" />
-          <div className="absolute inset-0 bg-[linear-gradient(122deg,rgba(255,122,0,0.58)_0%,rgba(255,190,77,0.46)_24%,rgba(244,63,94,0.26)_50%,rgba(37,99,235,0.15)_78%,rgba(255,247,237,0.82)_100%)]" />
-          <div className="absolute -left-32 top-20 h-48 w-[76rem] -rotate-12 rounded-lg bg-[linear-gradient(90deg,rgba(194,65,12,0.40)_0%,rgba(249,115,22,0.44)_34%,rgba(251,191,36,0.34)_68%,rgba(255,255,255,0.12)_100%)] blur-2xl" />
-          <div className="absolute bottom-6 right-[-18rem] h-56 w-[68rem] rotate-[-18deg] rounded-lg bg-[linear-gradient(90deg,rgba(251,146,60,0.38)_0%,rgba(244,63,94,0.26)_42%,rgba(59,130,246,0.16)_100%)] blur-2xl" />
-          <div className="absolute left-6 top-32 h-64 w-[32rem] -rotate-6 rounded-lg bg-[linear-gradient(135deg,rgba(234,88,12,0.48)_0%,rgba(251,191,36,0.34)_52%,rgba(244,63,94,0.20)_100%)] blur-xl sm:left-12 lg:left-20" />
-          <div className="absolute inset-0 opacity-[0.45] [background-image:linear-gradient(rgba(194,65,12,0.09)_1px,transparent_1px),linear-gradient(90deg,rgba(194,65,12,0.07)_1px,transparent_1px)] [background-size:34px_34px]" />
-          <div className="absolute left-0 top-20 hidden h-72 w-2 rounded-r-lg bg-[linear-gradient(180deg,#c2410c_0%,#f97316_52%,#f59e0b_100%)] lg:block" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-full opacity-25 sm:opacity-35 lg:w-[72%] lg:opacity-90">
-            <Image
-              src="/hero-img.png"
-              alt=""
-              fill
-              priority
-              sizes="(min-width: 1024px) 72vw, 100vw"
-              className="object-contain object-right-bottom saturate-125"
-            />
-          </div>
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,247,237,0.22)_0%,rgba(255,255,255,0.14)_44%,rgba(255,255,255,0.03)_100%)]" />
-          <div className="pointer-events-none absolute bottom-8 left-[48%] hidden h-16 w-16 rotate-6 rounded-lg border border-white/70 bg-white/35 shadow-[0_18px_60px_rgb(194_65_12/0.14)] backdrop-blur-xl lg:block" />
-          <div className="pointer-events-none absolute right-[32%] top-16 hidden h-12 w-12 -rotate-6 rounded-lg border border-white/70 bg-white/35 shadow-[0_18px_60px_rgb(245_158_11/0.16)] backdrop-blur-xl lg:block" />
+      {/* Immersive Hero Section */}
+      <main className="flex-grow flex flex-col justify-center relative">
+        <section className="relative w-full py-12 lg:py-20 flex items-center">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 w-full relative z-10">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+              
+              {/* Left Column: Hero Text & Call to Actions */}
+              <div className="lg:col-span-6 flex flex-col gap-6 text-left animate-slide-in-left">
+                <div className="inline-flex items-center gap-2 self-start rounded-full border border-orange-500/20 bg-orange-500/10 px-3.5 py-1.5 text-xs font-semibold text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.1)]">
+                  <Sparkles className="h-3.5 w-3.5 animate-pulse text-orange-400" />
+                  <span>
+                    {locale === "en" ? "Official Conference Portal" : "พื้นที่พอร์ทัลงานประชุมวิชาการ พสวท."}
+                  </span>
+                </div>
 
-          <div className="relative mx-auto flex min-h-[560px] max-w-7xl items-center px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-            <div className="glass-panel-strong max-w-2xl rounded-lg border p-6 sm:p-8">
-              <div className="glass-chip mb-5 inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold text-brand-700">
-                <Sparkles className="h-4 w-4" />
-                {locale === "en"
-                  ? "Public Conference Portal"
-                  : "พื้นที่สาธารณะงานประชุม"}
+                <div className="space-y-4">
+                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.08] text-white">
+                    DPSTCon{" "}
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-orange-400 via-amber-300 to-rose-400 drop-shadow-[0_0_30px_rgba(249,115,22,0.2)]">
+                      2026
+                    </span>
+                  </h1>
+                  <p className="text-lg sm:text-xl text-slate-300 font-medium leading-relaxed max-w-xl">
+                    {t("landing.subtitle")}
+                  </p>
+                  <p className="text-sm font-bold tracking-wide text-slate-400 max-w-xl uppercase">
+                    {t("conference.tagline")}
+                  </p>
+                </div>
+
+                {/* Primary & Secondary Actions */}
+                <div className="flex flex-col sm:flex-row gap-3 mt-2">
+                  <Link
+                    href="/conference"
+                    className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3.5 text-sm font-bold text-white shadow-[0_4px_20px_rgba(249,115,22,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(249,115,22,0.5)] hover:scale-[1.01]"
+                  >
+                    {locale === "en" ? "Explore Public Portal" : "เข้าสู่หน้าพอร์ทัลสาธารณะ"}
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-3.5 text-sm font-bold text-slate-200 backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/10 hover:text-white"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    {t("common.signIn")}
+                  </Link>
+                </div>
+
+                {/* Highly-integrated Countdown Timer */}
+                <div className="mt-4">
+                  <Countdown locale={locale} />
+                </div>
               </div>
 
-              <h1 className="text-5xl font-extrabold leading-[1.04] text-ink">
-                DPSTCon 2026
-              </h1>
-              <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-light">
-                {t("landing.subtitle")}
-              </p>
-              <p className="mt-2 text-sm font-medium text-ink-muted">
-                {t("conference.tagline")}
-              </p>
-
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/conference"
-                  className="group inline-flex items-center justify-center gap-2 rounded-button bg-brand-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_28px_rgb(249_115_22/0.24)] transition-all hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-[0_18px_38px_rgb(249_115_22/0.26)]"
-                >
-                  {locale === "en" ? "Open public site" : "เข้าสู่หน้า public"}
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                </Link>
-                <Link
-                  href="/login"
-                  className="glass-chip inline-flex items-center justify-center gap-2 rounded-button border px-5 py-3 text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:border-brand-200 hover:bg-white/80"
-                >
-                  <LogIn className="h-4 w-4" />
-                  {t("common.signIn")}
-                </Link>
+              {/* Right Column: Hero Graphic with Smooth Radial Mask Fading */}
+              <div className="lg:col-span-6 relative w-full h-[340px] sm:h-[420px] lg:h-[520px] flex items-center justify-center animate-slide-in-right">
+                <div className="relative w-full h-full">
+                  <Image
+                    src="/hero-img.png"
+                    alt="DPSTCon 2026 Portal"
+                    fill
+                    priority
+                    sizes="(min-width: 1024px) 50vw, 100vw"
+                    className="object-contain object-center lg:object-right saturate-[1.15] scale-110 sm:scale-115 lg:scale-120 drop-shadow-[0_20px_40px_rgba(249,115,22,0.20)] transition-all duration-300"
+                    style={{
+                      maskImage: "radial-gradient(circle at center, black 50%, transparent 88%)",
+                      WebkitMaskImage: "radial-gradient(circle at center, black 50%, transparent 88%)",
+                    }}
+                  />
+                </div>
               </div>
 
-              <div className="mt-8 grid max-w-xl grid-cols-3 gap-2">
-                <MiniFact
-                  value="2026"
-                  label="DPSTCon"
-                  accent="bg-brand-500"
-                />
-                <MiniFact
-                  value={locale === "en" ? "Public" : "สาธารณะ"}
-                  label={locale === "en" ? "Portal" : "หน้าเว็บ"}
-                  accent="bg-amber-500"
-                />
-                <MiniFact
-                  value={locale === "en" ? "TH / EN" : "ไทย / EN"}
-                  label={locale === "en" ? "Language" : "ภาษา"}
-                  accent="bg-brand-600"
-                />
-              </div>
             </div>
           </div>
         </section>
 
-        <section className="relative overflow-hidden bg-[#fff1e6]">
-          <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,247,237,0.86)_0%,rgba(255,190,77,0.34)_38%,rgba(249,115,22,0.30)_62%,rgba(255,255,255,0.78)_100%)]" />
-          <div className="absolute left-[5%] top-28 h-32 w-[90%] -rotate-2 rounded-lg bg-[linear-gradient(90deg,rgba(234,88,12,0.22)_0%,rgba(251,191,36,0.32)_34%,rgba(244,63,94,0.20)_68%,rgba(255,255,255,0.08)_100%)] blur-xl" />
-          <div className="absolute inset-0 opacity-[0.35] [background-image:linear-gradient(120deg,rgba(255,255,255,0.72)_0_1px,transparent_1px_18px)]" />
-          <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-            <div className="mb-7 flex flex-col gap-2">
-              <p className="text-sm font-bold text-brand-700">
-                {locale === "en" ? "Conference access" : "ทางเข้าสำคัญ"}
+        {/* Bento Grid Access Cards */}
+        <section className="relative py-14 bg-slate-950/20 border-t border-white/5 backdrop-blur-sm">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-8 flex flex-col gap-1.5 text-left">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-orange-400">
+                {locale === "en" ? "Conference Access" : "ทางเข้าข้อมูลสำคัญ"}
               </p>
-              <h2 className="text-2xl font-bold text-ink">
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">
                 {locale === "en"
-                  ? "Choose the public information you need"
-                  : "เลือกข้อมูลสาธารณะที่ต้องการดู"}
+                  ? "Select Public Resource"
+                  : "เลือกช่องทางเข้าถึงข้อมูลสาธารณะ"}
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {publicLinks.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`glass-panel group flex min-h-44 flex-col overflow-hidden rounded-lg border p-5 transition-all hover:-translate-y-1 hover:bg-white/72 hover:shadow-[0_24px_70px_rgb(194_65_12/0.14)] ${item.hover}`}
+                  className={`group relative overflow-hidden rounded-2xl border border-white/5 bg-white/2 p-5 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:bg-white/5 hover:border-white/12 ${item.glowColor} ${item.hover}`}
                 >
-                  <span className={`mb-4 h-1 w-16 rounded-full ${item.accent}`} />
+                  {/* Decorative glowing top line */}
+                  <span className={`absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl transition-all opacity-40 group-hover:opacity-100 ${item.accent}`} />
+                  
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <span
-                      className={`flex h-10 w-10 items-center justify-center rounded-lg border ${item.iconBg}`}
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl border ${item.iconBg} transition-transform group-hover:scale-105 duration-300`}
                     >
                       <item.icon className="h-5 w-5" />
                     </span>
-                    <ArrowRight className="h-4 w-4 text-ink-muted transition-all group-hover:translate-x-0.5 group-hover:text-brand-600" />
+                    <ArrowRight className="h-4 w-4 text-slate-400 transition-all duration-300 group-hover:translate-x-1.5 group-hover:text-white" />
                   </div>
-                  <h3 className="text-base font-bold leading-snug text-ink">
+                  
+                  <h3 className="text-base font-extrabold leading-snug text-white tracking-wide">
                     {item.title}
                   </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                  <p className="mt-2 text-xs leading-relaxed text-slate-400 group-hover:text-slate-300 transition-colors">
                     {item.desc}
                   </p>
                 </Link>
@@ -225,29 +232,9 @@ export default async function HomePage() {
       <Footer
         developedBy={t("footer.developedBy")}
         university={t("footer.university")}
+        variant="dark"
+        className="bg-slate-950/40 border-t border-white/5 text-slate-500 py-6"
       />
-    </div>
-  );
-}
-
-function MiniFact({
-  value,
-  label,
-  accent,
-}: {
-  value: string;
-  label: string;
-  accent: string;
-}) {
-  return (
-    <div className="glass-panel overflow-hidden rounded-lg border">
-      <div className={`h-1 ${accent}`} />
-      <div className="px-3 py-3">
-        <div className="text-base font-extrabold leading-none text-ink">
-          {value}
-        </div>
-        <div className="mt-1 text-xs font-medium text-ink-muted">{label}</div>
-      </div>
     </div>
   );
 }

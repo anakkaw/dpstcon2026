@@ -39,10 +39,10 @@
   --color-side-hover: rgba(255, 255, 255, 0.08);
   --color-side-divider: rgba(255, 255, 255, 0.08);
 
-  /* Typography: --font-dpst-body is set by next/font in app/layout.tsx */
-  --font-sans: var(--font-dpst-body), "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-dpst-body), "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
-  --font-body: var(--font-dpst-body), "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  /* Typography: --font-dpst-body and --font-dpst-title are set by next/font in app/layout.tsx */
+  --font-sans: var(--font-dpst-body), "Sarabun", "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-dpst-title), "Prompt", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-dpst-body), "Sarabun", "Noto Sans Thai", "Leelawadee UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
 
   /* Shadows — neutral elevation scale (elev-1 subtle / elev-2 card / elev-3 overlay) */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
@@ -269,3 +269,195 @@ input[type="checkbox"] {
               radial-gradient(ellipse 60% 40% at 80% 50%, rgba(249, 115, 22, 0.1), transparent),
               linear-gradient(180deg, #020617 0%, #0f172a 40%, #1e293b 100%);
 }
+
+/* ==========================================
+   Dashboard Premium Dark-Cosmic Theme
+   ========================================== */
+.dashboard-theme {
+  color: #f1f5f9;
+
+  /* Global background and card variables overrides inside dashboard */
+  --color-surface: rgba(15, 23, 42, 0.65);
+  --color-surface-1: transparent;
+  --color-surface-2: rgba(255, 255, 255, 0.04);
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
+  --color-surface-alt: rgba(15, 23, 42, 0.35);
+  
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-light: rgba(255, 255, 255, 0.04);
+
+  --color-ink: #f8fafc;
+  --color-ink-light: #cbd5e1;
+  --color-ink-muted: #94a3b8;
+
+  /* Override standard bg-white to glass panels */
+  .bg-white, .bg-surface {
+    background-color: rgba(15, 23, 42, 0.45) !important;
+    border-color: rgba(255, 255, 255, 0.06) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(20px) saturate(1.4);
+  }
+  
+  /* Overrides for modals and dialog cards - stronger opacity for high legibility */
+  div[role="dialog"] .bg-surface,
+  div[role="dialog"] .bg-white,
+  .bg-surface-alt\/50 {
+    background-color: rgba(10, 15, 30, 0.95) !important;
+  }
+  
+  /* Modals background overlay */
+  .bg-black\/40, .bg-black\/50 {
+    background-color: rgba(0, 0, 0, 0.75) !important;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+
+  /* Override absolute popover, dropdown, and context menus for high contrast & clarity */
+  .absolute.bg-white,
+  .absolute.bg-surface,
+  .fixed.bg-white,
+  [role="menu"],
+  [role="listbox"] {
+    background-color: rgba(10, 15, 30, 0.97) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  /* Override flat light backgrounds */
+  .bg-slate-50, .bg-slate-100, .bg-slate-200, .bg-gray-50, .bg-gray-100 {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+  }
+
+  /* Overwrite default text colors */
+  .text-slate-900, .text-slate-800, .text-slate-700, .text-gray-900, .text-gray-800, .text-ink {
+    color: #f8fafc !important;
+  }
+  
+  .text-slate-600, .text-slate-500, .text-gray-600, .text-gray-500, .text-ink-muted {
+    color: #94a3b8 !important;
+  }
+  
+  .text-slate-400, .text-gray-400 {
+    color: #cbd5e1 !important;
+  }
+
+  /* Border color overrides */
+  .border-slate-200, .border-gray-200, .border-border, .border-border-light {
+    border-color: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  /* Stat Card Accent Colors & Styling overrides */
+  .border-brand-200\/80, .border-blue-200\/80, .border-emerald-200\/80, .border-amber-200\/80, .border-red-200\/80 {
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+  
+  .bg-brand-50 {
+    background-color: rgba(249, 115, 22, 0.15) !important;
+    color: #fb923c !important;
+  }
+  .bg-blue-50 {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+    color: #60a5fa !important;
+  }
+  .bg-emerald-50 {
+    background-color: rgba(16, 185, 129, 0.15) !important;
+    color: #34d399 !important;
+  }
+  .bg-amber-50 {
+    background-color: rgba(245, 158, 11, 0.15) !important;
+    color: #fbbf24 !important;
+  }
+  .bg-red-50 {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+    color: #f87171 !important;
+  }
+
+  .text-brand-700, .text-brand-700\/80, .text-brand-600 { color: #fb923c !important; }
+  .text-blue-800, .text-blue-800\/75, .text-blue-600 { color: #60a5fa !important; }
+  .text-emerald-800, .text-emerald-800\/75, .text-emerald-600 { color: #34d399 !important; }
+  .text-amber-800, .text-amber-800\/75, .text-amber-600 { color: #fbbf24 !important; }
+  .text-red-800, .text-red-800\/75, .text-red-600 { color: #f87171 !important; }
+
+  /* Input fields & Select elements overrides */
+  input[type="text"], input[type="email"], input[type="password"], textarea, select {
+    background-color: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+  }
+  
+  input[type="text"]:focus, select:focus, textarea:focus {
+    border-color: rgba(249, 115, 22, 0.5) !important;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15) !important;
+  }
+
+  /* Option dropdown inside selects */
+  select option {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+  }
+
+  /* Badge styling overrides for modern look */
+  .bg-green-50, .bg-emerald-50, .bg-emerald-500\/10 {
+    background-color: rgba(16, 185, 129, 0.12) !important;
+    color: #34d399 !important;
+    border: 1px solid rgba(16, 185, 129, 0.2) !important;
+  }
+  .bg-amber-50, .bg-yellow-50, .bg-amber-550\/10 {
+    background-color: rgba(245, 158, 11, 0.12) !important;
+    color: #fbbf24 !important;
+    border: 1px solid rgba(245, 158, 11, 0.2) !important;
+  }
+  .bg-blue-50, .bg-blue-500\/10 {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+    color: #60a5fa !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+  }
+  .bg-red-50, .bg-red-500\/10 {
+    background-color: rgba(239, 68, 68, 0.12) !important;
+    color: #f87171 !important;
+    border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  }
+
+  /* Table Headers & Lists */
+  th {
+    color: #94a3b8 !important;
+    background-color: rgba(255, 255, 255, 0.02) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+  
+  tr:hover {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+  }
+  
+  /* Horizontal line dividers */
+  .divide-y > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  /* Active Tabs filters */
+  .bg-gray-200\/80, .bg-gray-200 {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    color: #94a3b8 !important;
+  }
+  .bg-white\/20 {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+  }
+  
+  /* Link items overrides */
+  .text-brand-500 {
+    color: #f97316 !important;
+  }
+  .text-brand-600:hover {
+    color: #fb923c !important;
+  }
+  
+  /* Dark mode scrollbars thumb inside dashboard */
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15) !important;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+  }
+}
+

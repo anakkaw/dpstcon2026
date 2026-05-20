@@ -16,23 +16,23 @@ export default async function ConferenceDocsPage() {
   return (
     <div>
       {/* ─── Page header ──────────────────────────────────── */}
-      <section className="bg-white border-b border-border">
+      <section className="bg-transparent border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
+              <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
                 <Files className="h-3.5 w-3.5" />
                 {locale === "en" ? "Section 03" : "ส่วนที่ 03"}
               </div>
-              <h1 className="text-3xl lg:text-4xl font-extrabold text-ink tracking-tight">
+              <h1 className="text-3xl lg:text-4xl font-black text-white tracking-tight">
                 {t("conference.docs.heading")}
               </h1>
-              <p className="mt-2 text-ink-muted max-w-2xl">
+              <p className="mt-2 text-slate-300 max-w-2xl font-medium">
                 {t("conference.docs.subtitle")}
               </p>
             </div>
             {documents.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-chip bg-stat-success border border-emerald-100 text-emerald-700 font-semibold text-sm">
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold shadow-[0_0_15px_rgba(16,185,129,0.1)] text-sm">
                 <Files className="h-3.5 w-3.5" />
                 {documents.length}{" "}
                 {locale === "en" ? "documents" : "เอกสาร"}
@@ -50,7 +50,7 @@ export default async function ConferenceDocsPage() {
             title={t("conference.docs.empty")}
           />
         ) : (
-          <div className="bg-white rounded-card border border-border shadow-elev-1 overflow-hidden divide-y divide-border-light">
+          <div className="bg-white/2 rounded-2xl border border-white/5 shadow-2xl backdrop-blur-md overflow-hidden divide-y divide-white/5">
             {documents.map((doc, i) => (
               <DocEntry
                 key={doc.id}
@@ -84,21 +84,21 @@ function DocEntry({
       ? doc.descriptionEn
       : doc.descriptionTh;
   return (
-    <div className="group grid grid-cols-[44px_1fr_auto] gap-3 sm:gap-5 items-start py-5 px-4 sm:px-5 hover:bg-surface-2 transition-colors">
-      <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-50 text-emerald-600">
+    <div className="group grid grid-cols-[44px_1fr_auto] gap-3 sm:gap-5 items-start py-5 px-4 sm:px-5 hover:bg-white/4 transition-colors">
+      <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
         <FileText className="h-5 w-5" />
       </div>
       <div className="min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-[11px] font-bold text-ink-muted tabular-nums">
+          <span className="text-[11px] font-bold text-slate-400 tabular-nums">
             №{String(index).padStart(2, "0")}
           </span>
         </div>
-        <h3 className="font-semibold text-base lg:text-lg text-ink leading-snug">
+        <h3 className="font-bold text-base lg:text-lg text-white leading-snug">
           {name}
         </h3>
         {desc && (
-          <p className="text-sm text-ink-muted mt-1.5 leading-relaxed">
+          <p className="text-sm text-slate-300 mt-1.5 leading-relaxed">
             {desc}
           </p>
         )}
@@ -108,7 +108,7 @@ function DocEntry({
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`${downloadLabel} ${name}`}
-        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-button text-xs font-semibold bg-brand-gradient-btn text-white shadow-elev-1 hover:shadow-elev-2 transition-shadow whitespace-nowrap"
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-[linear-gradient(135deg,#fb923c_0%,#f97316_52%,#c2410c_100%)] text-white shadow-[0_0_15px_rgba(249,115,22,0.25)] border border-orange-500/20 hover:scale-[1.02] transition-all duration-200 whitespace-nowrap"
       >
         <Download className="h-3.5 w-3.5" aria-hidden />
         <span className="hidden sm:inline">{downloadLabel}</span>

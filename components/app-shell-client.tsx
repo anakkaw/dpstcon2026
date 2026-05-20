@@ -115,20 +115,26 @@ export function AppShellClient({
         onClick={() => setSidebarOpen(false)}
         aria-current={isActive ? "page" : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200",
+          "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 border",
           isActive
-            ? "bg-white text-slate-950 shadow-sm"
-            : "text-slate-300 hover:bg-white/5 hover:text-white"
+            ? "bg-white/10 text-white border-white/10 shadow-[0_0_12px_rgba(249,115,22,0.15)] font-semibold"
+            : "text-slate-300 hover:bg-white/5 hover:text-white border-transparent"
         )}
       >
-        {iconMap[item.icon] || <LayoutDashboard className="h-5 w-5" />}
+        <span className={cn("transition-colors", isActive ? "text-orange-400" : "text-slate-400")}>
+          {iconMap[item.icon] || <LayoutDashboard className="h-5 w-5" />}
+        </span>
         {t(item.labelKey)}
       </Link>
     );
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100">
+    <div className="flex h-screen overflow-hidden bg-landing-hero text-slate-100 relative dashboard-theme">
+      {/* Background Decorative Glowing Orbs */}
+      <div className="absolute -left-20 top-1/4 h-[450px] w-[450px] rounded-full bg-orange-500/5 blur-[100px] pointer-events-none animate-pulse-glow" />
+      <div className="absolute right-1/4 top-10 h-[500px] w-[500px] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none" />
+
       {/* Skip to main content link for keyboard/screen reader users */}
       <a
         href="#main-content"
@@ -148,14 +154,14 @@ export function AppShellClient({
         id="app-sidebar"
         aria-label={t("common.primaryNavigation")}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/10 bg-slate-950",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/5 bg-slate-950/40 backdrop-blur-md",
           "transition-transform duration-300 ease-out",
           "lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         )}
       >
-        <div className="flex items-center gap-3 border-b border-white/10 px-6 py-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500">
+        <div className="flex items-center gap-3 border-b border-white/5 px-6 py-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#fb923c_0%,#f97316_52%,#c2410c_100%)] shadow-[0_0_15px_rgba(249,115,22,0.25)]">
             <span className="text-lg font-bold text-white">D</span>
           </div>
           <div>
@@ -177,7 +183,7 @@ export function AppShellClient({
             navGroups.map((group, idx) => (
               <div key={group.role}>
                 {idx > 0 && (
-                  <div className="mx-3 my-2 border-t border-white/10" />
+                  <div className="mx-3 my-2 border-t border-white/5" />
                 )}
                 {group.role !== "_COMMON" && (
                   <p className="mb-1 mt-1 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -194,23 +200,23 @@ export function AppShellClient({
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-border bg-white/90 px-4 backdrop-blur lg:px-8">
+        <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-white/5 bg-slate-950/20 px-4 backdrop-blur-md lg:px-8 relative z-10">
           <button
             type="button"
             aria-label={t("common.openNavigation")}
             aria-expanded={sidebarOpen}
             aria-controls="app-sidebar"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 lg:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
               {roleSummary}
             </p>
-            <h1 className="truncate text-base font-semibold text-ink sm:text-lg">
+            <h1 className="truncate text-base font-semibold text-white sm:text-lg">
               {activeLabel}
             </h1>
           </div>
@@ -219,14 +225,14 @@ export function AppShellClient({
           <NotificationBell />
 
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#fb923c_0%,#f97316_52%,#c2410c_100%)] shadow-sm">
               <span className="text-sm font-semibold text-white">{initials}</span>
             </div>
             <div className="hidden min-w-0 sm:block">
-              <p className="truncate text-sm font-medium leading-tight text-ink">
+              <p className="truncate text-sm font-medium leading-tight text-white">
                 {displayName}
               </p>
-              <p className="text-xs leading-tight text-ink-muted">
+              <p className="text-xs leading-tight text-slate-400">
                 {roleSummary}
               </p>
             </div>
@@ -240,7 +246,7 @@ export function AppShellClient({
                   window.location.href = "/login";
                 }
               }}
-              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-ink-muted transition-all hover:bg-red-50 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400 border border-white/5 hover:border-red-500/20"
               title={t("common.signOut")}
               aria-label={t("common.signOut")}
             >
@@ -249,13 +255,14 @@ export function AppShellClient({
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 overflow-y-auto bg-slate-50 px-4 py-6 lg:px-8 lg:py-8">
+        <main id="main-content" className="flex-1 overflow-y-auto bg-transparent px-4 py-6 lg:px-8 lg:py-8 relative z-10">
           <div className="mx-auto w-full max-w-7xl">
             {children}
             <Footer
-              className="mt-10"
+              className="mt-10 opacity-70"
               developedBy={t("footer.developedBy")}
               university={t("footer.university")}
+              variant="dark"
             />
           </div>
         </main>

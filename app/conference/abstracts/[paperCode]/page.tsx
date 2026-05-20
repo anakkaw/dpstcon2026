@@ -13,7 +13,7 @@ import {
 import { getServerTranslator } from "@/lib/i18n/server";
 import { CONFERENCE_TZ } from "@/lib/conference-tz";
 import { getPublicAbstractByPaperCode } from "@/server/public-conference-data";
-import { Badge, Card, CardBody } from "@/components/ui";
+import { Badge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -62,11 +62,11 @@ export default async function AbstractDetailPage({
   return (
     <div>
       {/* ─── Back link ────────────────────────────────────── */}
-      <div className="bg-white border-b border-border">
+      <div className="bg-transparent border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <Link
             href="/conference/abstracts"
-            className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-brand-600 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-orange-400 font-medium transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             {t("conference.detail.backToList")}
@@ -75,40 +75,40 @@ export default async function AbstractDetailPage({
       </div>
 
       {/* ─── Title block ──────────────────────────────────── */}
-      <section className="relative bg-white border-b border-border overflow-hidden">
+      <section className="relative bg-transparent border-b border-white/5 overflow-hidden">
         <div
           className="absolute inset-0 pointer-events-none opacity-50"
           aria-hidden
         >
-          <div className="absolute -top-24 -right-32 w-[420px] h-[420px] bg-orb-brand opacity-20 blur-2xl" />
+          <div className="absolute -top-24 -right-32 w-[420px] h-[420px] bg-orange-500/5 opacity-20 blur-2xl" />
         </div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
           <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-6 lg:gap-10">
             {/* Marginalia */}
-            <aside className="flex flex-col gap-4 lg:border-r lg:border-border lg:pr-8">
+            <aside className="flex flex-col gap-4 lg:border-r lg:border-white/5 lg:pr-8">
               <div>
-                <div className="text-[10px] uppercase tracking-wide font-semibold text-ink-muted mb-1">
+                <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
                   {t("conference.detail.paperCode")}
                 </div>
-                <div className="inline-flex items-center px-3 py-1.5 rounded-button bg-brand-gradient text-white font-bold text-lg shadow-elev-1 tabular-nums">
+                <div className="inline-flex items-center px-3 py-1.5 rounded-xl bg-[linear-gradient(135deg,#fb923c_0%,#f97316_52%,#c2410c_100%)] text-white font-bold text-lg shadow-[0_0_15px_rgba(249,115,22,0.25)] border border-orange-500/20 tabular-nums">
                   {data.paperCode || "—"}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wide font-semibold text-ink-muted mb-1.5">
+                <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1.5">
                   {t("conference.detail.track")}
                 </div>
-                <div className="text-sm text-ink font-medium">
+                <div className="text-sm text-white font-bold">
                   {data.track?.name || "—"}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wide font-semibold text-ink-muted mb-1.5">
+                <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1.5">
                   {locale === "en" ? "Format" : "รูปแบบ"}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {formats.length === 0 ? (
-                    <span className="text-sm text-ink-muted">—</span>
+                    <span className="text-sm text-slate-400">—</span>
                   ) : (
                     formats.map((f) => (
                       <Badge key={f} tone={f === "ORAL" ? "info" : "success"}>
@@ -124,17 +124,17 @@ export default async function AbstractDetailPage({
 
             {/* Main title + authors */}
             <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-[40px] font-extrabold text-ink leading-[1.2] tracking-tight">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-[40px] font-black text-white leading-[1.2] tracking-tight">
                 {title}
               </h1>
               {titleSecondary && (
-                <h2 className="mt-3 text-lg lg:text-xl font-medium text-ink-muted leading-snug italic">
+                <h2 className="mt-3 text-lg lg:text-xl font-medium text-slate-400 leading-snug italic">
                   {titleSecondary}
                 </h2>
               )}
 
-              <div className="mt-8 pt-6 border-t border-border-light">
-                <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold text-ink-muted mb-3">
+              <div className="mt-8 pt-6 border-t border-white/5">
+                <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-3">
                   <Users className="h-3 w-3" />
                   {t("conference.detail.authors")}
                 </div>
@@ -145,19 +145,19 @@ export default async function AbstractDetailPage({
                     return (
                       <li
                         key={i}
-                        className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                        className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-slate-200"
                       >
                         <span
                           className={
                             a.isMain
-                              ? "font-semibold text-ink"
-                              : "text-ink"
+                              ? "font-bold text-white text-base"
+                              : "text-slate-200 text-sm"
                           }
                         >
                           {displayName}
                         </span>
                         {a.affiliation && (
-                          <span className="text-xs text-ink-muted">
+                          <span className="text-xs text-slate-400">
                             — {a.affiliation}
                           </span>
                         )}
@@ -173,9 +173,9 @@ export default async function AbstractDetailPage({
 
       {/* ─── Schedule ─────────────────────────────────────── */}
       {data.presentations.length > 0 && (
-        <section className="bg-surface-1 border-b border-border">
+        <section className="bg-slate-950/20 border-b border-white/5">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold text-brand-700 uppercase tracking-wide mb-4">
+            <div className="inline-flex items-center gap-2 text-xs font-bold text-orange-400 uppercase tracking-wider mb-4">
               <Calendar className="h-3.5 w-3.5" />
               {t("conference.detail.schedule")}
             </div>
@@ -183,12 +183,12 @@ export default async function AbstractDetailPage({
               {data.presentations.map((p) => {
                 const isOral = p.type === "ORAL";
                 const accent = isOral
-                  ? "bg-stat-info border-blue-100"
-                  : "bg-stat-success border-emerald-100";
+                  ? "bg-cyan-500/5 border-cyan-500/20 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.05)]"
+                  : "bg-emerald-500/5 border-emerald-500/20 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.05)]";
                 return (
                   <div
                     key={p.id}
-                    className={`rounded-card border ${accent} p-5 shadow-elev-1`}
+                    className={`rounded-2xl border ${accent} p-5 backdrop-blur-md`}
                   >
                     <Badge tone={isOral ? "info" : "success"}>
                       {isOral
@@ -197,7 +197,7 @@ export default async function AbstractDetailPage({
                     </Badge>
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       <div>
-                        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide font-semibold text-ink-muted mb-1">
+                        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
                           <Clock className="h-3 w-3" />
                           {locale === "en" ? "Time" : "เวลา"}
                         </div>
@@ -208,11 +208,11 @@ export default async function AbstractDetailPage({
                               const endsAt = new Date(slot.endsAt);
                               return (
                                 <div key={slot.id}>
-                                  <div className="text-sm font-bold text-ink tabular-nums leading-none">
+                                  <div className="text-sm font-bold text-white tabular-nums leading-none">
                                     {locale === "en" ? "Slot" : "รอบ"} {index + 1}:{" "}
                                     {timeFmt.format(startsAt)}-{timeFmt.format(endsAt)}
                                   </div>
-                                  <div className="text-xs text-ink-muted mt-1">
+                                  <div className="text-xs text-slate-400 mt-1">
                                     {dateFmt.format(startsAt)}
                                   </div>
                                 </div>
@@ -221,10 +221,10 @@ export default async function AbstractDetailPage({
                           </div>
                         ) : p.scheduledAt ? (
                           <>
-                            <div className="text-2xl font-bold text-ink tabular-nums leading-none">
+                            <div className="text-2xl font-black text-white tabular-nums leading-none">
                               {timeFmt.format(new Date(p.scheduledAt))}
                             </div>
-                            <div className="text-xs text-ink-muted mt-1">
+                            <div className="text-xs text-slate-400 mt-1">
                               {dateFmt.format(new Date(p.scheduledAt))}
                               {p.duration ? (
                                 <span className="ml-1">
@@ -234,17 +234,17 @@ export default async function AbstractDetailPage({
                             </div>
                           </>
                         ) : (
-                          <div className="text-sm text-ink-muted italic">
+                          <div className="text-sm text-slate-400 italic">
                             {t("conference.program.tba")}
                           </div>
                         )}
                       </div>
                       <div>
-                        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide font-semibold text-ink-muted mb-1">
+                        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
                           <MapPin className="h-3 w-3" />
                           {locale === "en" ? "Room" : "ห้อง"}
                         </div>
-                        <div className="text-base font-bold text-ink">
+                        <div className="text-base font-bold text-white">
                           {p.room || t("conference.program.tba")}
                         </div>
                       </div>
@@ -259,18 +259,18 @@ export default async function AbstractDetailPage({
 
       {/* ─── Abstract body ────────────────────────────────── */}
       {abstract && (
-        <section className="bg-white border-b border-border">
+        <section className="bg-transparent border-b border-white/5">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold text-brand-700 uppercase tracking-wide mb-4">
+            <div className="inline-flex items-center gap-2 text-xs font-bold text-orange-400 uppercase tracking-wider mb-4">
               <FileText className="h-3.5 w-3.5" />
               {t("conference.detail.abstract")}
             </div>
-            <div className="text-[15px] lg:text-base leading-[1.85] text-ink whitespace-pre-line">
+            <div className="text-[15px] lg:text-base leading-[1.85] text-slate-200 whitespace-pre-line font-medium">
               {abstract}
             </div>
             {keywords && (
-              <div className="mt-8 pt-6 border-t border-border-light">
-                <div className="text-[10px] uppercase tracking-wide font-semibold text-ink-muted mb-2">
+              <div className="mt-8 pt-6 border-t border-white/5">
+                <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">
                   {t("conference.detail.keywords")}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -280,7 +280,7 @@ export default async function AbstractDetailPage({
                     return (
                       <span
                         key={i}
-                        className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-chip bg-stat-brand text-brand-700 border border-brand-100"
+                        className="inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full bg-white/5 text-slate-300 border border-white/5"
                       >
                         {kt}
                       </span>
@@ -294,13 +294,13 @@ export default async function AbstractDetailPage({
       )}
 
       {/* ─── E-Abstract PDF ───────────────────────────────── */}
-      <section className="bg-surface-1">
+      <section className="bg-slate-950/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
-          <Card>
-            <CardBody>
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-border-light">
-                <h3 className="inline-flex items-center gap-2 text-sm font-bold text-ink">
-                  <FileText className="h-4 w-4 text-brand-600" />
+          <div className="bg-white/2 rounded-2xl border border-white/5 shadow-2xl backdrop-blur-md">
+            <div className="px-6 py-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-white/5">
+                <h3 className="inline-flex items-center gap-2 text-sm font-bold text-white">
+                  <FileText className="h-4 w-4 text-orange-400" />
                   {t("conference.detail.eAbstract")}
                 </h3>
                 {data.eAbstractFile && (
@@ -309,7 +309,7 @@ export default async function AbstractDetailPage({
                       href={`/api/public/files/${data.eAbstractFile.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button text-xs font-semibold bg-surface-2 hover:bg-surface-hover text-ink transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/3 border border-white/10 hover:bg-white/5 text-slate-200 hover:text-white transition-all duration-200"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       {t("conference.detail.openPdf")}
@@ -317,7 +317,7 @@ export default async function AbstractDetailPage({
                     <a
                       href={`/api/public/files/${data.eAbstractFile.id}`}
                       download={data.eAbstractFile.originalName}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button text-xs font-semibold bg-brand-gradient-btn text-white shadow-elev-1 hover:shadow-elev-2 transition-shadow"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[linear-gradient(135deg,#fb923c_0%,#f97316_52%,#c2410c_100%)] text-white shadow-[0_0_15px_rgba(249,115,22,0.25)] hover:scale-[1.02] transition-all duration-200"
                     >
                       <Download className="h-3.5 w-3.5" />
                       {t("conference.detail.downloadPdf")}
@@ -326,20 +326,20 @@ export default async function AbstractDetailPage({
                 )}
               </div>
               {data.eAbstractFile ? (
-                <div className="rounded-card overflow-hidden border border-border bg-white">
+                <div className="rounded-2xl overflow-hidden border border-white/10 bg-slate-950/40">
                   <iframe
                     src={`/api/public/files/${data.eAbstractFile.id}`}
                     title={data.eAbstractFile.originalName}
-                    className="w-full h-[80vh] min-h-[640px]"
+                    className="w-full h-[80vh] min-h-[640px] border-0"
                   />
                 </div>
               ) : (
-                <div className="py-12 text-center text-sm text-ink-muted italic">
+                <div className="py-12 text-center text-sm text-slate-400 italic">
                   {t("conference.detail.noEAbstract")}
                 </div>
               )}
-            </CardBody>
-          </Card>
+            </div>
+          </div>
         </div>
       </section>
     </div>

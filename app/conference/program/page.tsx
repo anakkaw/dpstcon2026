@@ -85,23 +85,23 @@ export default async function ConferenceProgramPage({
   return (
     <div>
       {/* ─── Page header ──────────────────────────────────── */}
-      <section className="bg-white border-b border-border">
+      <section className="bg-transparent border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 text-xs font-semibold text-brand-700 uppercase tracking-wide mb-2">
+              <div className="inline-flex items-center gap-2 text-xs font-bold text-orange-400 uppercase tracking-wider mb-2">
                 <Calendar className="h-3.5 w-3.5" />
                 {locale === "en" ? "Section 01" : "ส่วนที่ 01"}
               </div>
-              <h1 className="text-3xl lg:text-4xl font-extrabold text-ink tracking-tight">
+              <h1 className="text-3xl lg:text-4xl font-black text-white tracking-tight">
                 {t("conference.program.heading")}
               </h1>
-              <p className="mt-2 text-ink-muted max-w-2xl">
+              <p className="mt-2 text-slate-300 max-w-2xl font-medium">
                 {t("conference.program.subtitle")}
               </p>
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-chip bg-stat-brand border border-brand-100 text-brand-700 font-semibold">
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 font-bold shadow-[0_0_15px_rgba(249,115,22,0.1)]">
                 <Calendar className="h-3.5 w-3.5" />
                 {total}{" "}
                 {locale === "en" ? "sessions" : "เซสชัน"}
@@ -112,10 +112,10 @@ export default async function ConferenceProgramPage({
       </section>
 
       {/* ─── Filters (sticky chips) ───────────────────────── */}
-      <section className="sticky top-[63px] sm:top-[65px] z-20 bg-white/95 backdrop-blur border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-2">
+      <section className="sticky top-[63px] sm:top-[65px] z-20 bg-slate-950/40 backdrop-blur-md border-b border-white/5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wide font-semibold text-ink-muted w-14">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 w-14">
               {t("conference.program.filterType")}
             </span>
             <Chip
@@ -137,7 +137,7 @@ export default async function ConferenceProgramPage({
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wide font-semibold text-ink-muted w-14">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 w-14">
               {t("conference.program.filterTrack")}
             </span>
             <Chip
@@ -172,28 +172,28 @@ export default async function ConferenceProgramPage({
                 <section key={dKey}>
                   {/* Day header */}
                   <header className="flex items-center gap-4 mb-5">
-                    <div className="flex items-baseline gap-3 px-4 py-3 rounded-card bg-brand-gradient text-white shadow-elev-2">
-                      <div className="text-[10px] uppercase tracking-widest font-semibold text-brand-100">
+                    <div className="flex items-baseline gap-3 px-4 py-3 rounded-2xl border border-white/5 bg-gradient-to-r from-orange-500/10 to-amber-600/10 text-white shadow-[0_0_20px_rgba(249,115,22,0.05)] ring-1 ring-orange-500/10">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-orange-400">
                         Day {dIdx + 1}
                       </div>
-                      <div className="text-4xl font-extrabold leading-none tabular-nums">
+                      <div className="text-4xl font-black leading-none tabular-nums">
                         {date.toLocaleDateString("en-GB", { day: "numeric" })}
                       </div>
-                      <div className="text-sm font-semibold">
+                      <div className="text-sm font-semibold text-slate-300">
                         {date.toLocaleDateString(
                           locale === "en" ? "en-GB" : "th-TH",
                           { month: "short" }
                         )}
                       </div>
                     </div>
-                    <div className="text-sm text-ink-muted">
-                      <div className="font-semibold text-ink">
+                    <div className="text-sm text-slate-400">
+                      <div className="font-bold text-white text-base">
                         {date.toLocaleDateString(
                           locale === "en" ? "en-GB" : "th-TH",
                           { weekday: "long" }
                         )}
                       </div>
-                      <div className="text-xs">
+                      <div className="text-xs mt-0.5">
                         {sessions.length}{" "}
                         {locale === "en" ? "sessions" : "เซสชัน"}
                       </div>
@@ -201,7 +201,7 @@ export default async function ConferenceProgramPage({
                   </header>
 
                   {/* Session rows */}
-                  <div className="bg-white rounded-card border border-border shadow-elev-1 overflow-hidden divide-y divide-border-light">
+                  <div className="bg-white/2 rounded-2xl border border-white/5 shadow-2xl backdrop-blur-md overflow-hidden divide-y divide-white/5">
                     {sessions.map((s) => (
                       <SessionRow
                         key={s.presentationId}
@@ -249,23 +249,23 @@ function Pager({
   return (
     <div className="mt-6 flex items-center justify-between gap-3">
       {page > 1 ? (
-        <Link href={previousHref} className="text-sm font-semibold text-ink border border-border rounded-button px-4 py-2 hover:bg-surface-2">
+        <Link href={previousHref} className="text-sm font-bold text-slate-200 border border-white/10 rounded-xl bg-white/3 px-4 py-2 hover:bg-white/5 hover:text-white transition-all">
           Previous
         </Link>
       ) : (
-        <span className="text-sm font-semibold text-ink-muted border border-border rounded-button px-4 py-2 opacity-50">
+        <span className="text-sm font-bold text-slate-500 border border-white/5 rounded-xl bg-white/1 px-4 py-2 opacity-30">
           Previous
         </span>
       )}
-      <span className="text-sm text-ink-muted">
+      <span className="text-sm text-slate-400 font-medium">
         {page} / {totalPages}
       </span>
       {page < totalPages ? (
-        <Link href={nextHref} className="text-sm font-semibold text-ink border border-border rounded-button px-4 py-2 hover:bg-surface-2">
+        <Link href={nextHref} className="text-sm font-bold text-slate-200 border border-white/10 rounded-xl bg-white/3 px-4 py-2 hover:bg-white/5 hover:text-white transition-all">
           Next
         </Link>
       ) : (
-        <span className="text-sm font-semibold text-ink-muted border border-border rounded-button px-4 py-2 opacity-50">
+        <span className="text-sm font-bold text-slate-500 border border-white/5 rounded-xl bg-white/1 px-4 py-2 opacity-30">
           Next
         </span>
       )}
@@ -286,15 +286,15 @@ function Chip({
 }) {
   const activeClasses = active
     ? tone === "info"
-      ? "bg-blue-600 text-white border-blue-600"
+      ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
       : tone === "success"
-      ? "bg-emerald-600 text-white border-emerald-600"
-      : "bg-brand-500 text-white border-brand-500"
-    : "bg-white text-ink-muted border-border hover:border-ink hover:text-ink";
+      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
+      : "bg-orange-500/20 text-orange-300 border-orange-500/40 shadow-[0_0_12px_rgba(249,115,22,0.15)]"
+    : "bg-white/3 text-slate-300 border-white/5 hover:border-white/20 hover:bg-white/5 hover:text-white";
   return (
     <Link
       href={href}
-      className={`inline-flex items-center px-3 py-1.5 text-xs font-medium border rounded-chip transition-colors ${activeClasses}`}
+      className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold border rounded-full transition-all duration-200 ${activeClasses}`}
     >
       {label}
     </Link>
@@ -340,25 +340,27 @@ function SessionRow({
     };
   });
 
-  const accentBar = isOral ? "bg-blue-500" : "bg-emerald-500";
+  const accentBar = isOral 
+    ? "bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.4)]" 
+    : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]";
 
   return (
-    <div className="group relative grid grid-cols-[8px_90px_1fr_auto] sm:grid-cols-[8px_110px_1fr_160px] gap-3 sm:gap-5 items-start py-4 sm:py-5 pl-3 pr-4 sm:pr-5 hover:bg-surface-2 transition-colors">
+    <div className="group relative grid grid-cols-[8px_90px_1fr_auto] sm:grid-cols-[8px_110px_1fr_160px] gap-3 sm:gap-5 items-start py-4 sm:py-5 pl-3 pr-4 sm:pr-5 hover:bg-white/4 transition-colors">
       {/* Type accent bar */}
       <span className={`${accentBar} w-[3px] self-stretch rounded-full`} />
 
       {/* Time */}
       <div className="pt-0.5">
-        <div className="text-xl sm:text-2xl font-bold text-ink tabular-nums leading-none flex items-baseline gap-1">
-          <Clock className="h-3.5 w-3.5 text-ink-muted" />
+        <div className="text-xl sm:text-2xl font-black text-white tabular-nums leading-none flex items-baseline gap-1">
+          <Clock className="h-3.5 w-3.5 text-slate-400" />
           {time}
         </div>
         {session.duration ? (
-          <div className="mt-1 text-[11px] uppercase tracking-wide font-semibold text-ink-muted tabular-nums">
+          <div className="mt-1 text-[11px] uppercase tracking-wider font-bold text-slate-400 tabular-nums">
             {session.duration} min
           </div>
         ) : !isOral && posterSlotLabels.length > 0 ? (
-          <div className="mt-1 text-[11px] uppercase tracking-wide font-semibold text-ink-muted tabular-nums">
+          <div className="mt-1 text-[11px] uppercase tracking-wider font-bold text-slate-400 tabular-nums">
             {posterSlotLabels.length} {locale === "en" ? "slots" : "รอบ"}
           </div>
         ) : null}
@@ -371,14 +373,14 @@ function SessionRow({
             {isOral ? "Oral" : "Poster"}
           </Badge>
           {session.paperCode && (
-            <span className="text-[11px] font-mono uppercase tracking-wide text-ink-muted">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 bg-white/5 px-1.5 py-0.5 rounded-md border border-white/5">
               {session.paperCode}
             </span>
           )}
           {session.track?.name && (
             <>
-              <span className="text-ink-muted">·</span>
-              <span className="text-xs text-ink-muted">
+              <span className="text-slate-500">·</span>
+              <span className="text-xs font-semibold text-slate-400">
                 {session.track.name}
               </span>
             </>
@@ -387,14 +389,14 @@ function SessionRow({
         {linkHref ? (
           <Link
             href={linkHref}
-            className="block font-semibold text-ink leading-snug group-hover:text-brand-600 transition-colors"
+            className="block font-bold text-white text-base sm:text-lg leading-snug group-hover:text-orange-400 transition-colors"
           >
             {title}
           </Link>
         ) : (
-          <h3 className="font-semibold text-ink leading-snug">{title}</h3>
+          <h3 className="font-bold text-white text-base sm:text-lg leading-snug">{title}</h3>
         )}
-        <div className="text-xs sm:text-sm text-ink-muted mt-1">
+        <div className="text-xs sm:text-sm text-slate-300 font-medium mt-1">
           {presenter}
         </div>
         {!isOral && posterSlotLabels.length > 0 && (
@@ -402,7 +404,7 @@ function SessionRow({
             {posterSlotLabels.map((slot) => (
               <span
                 key={slot.id}
-                className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700"
+                className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300"
               >
                 <Clock className="h-3 w-3" />
                 {slot.label}
@@ -415,17 +417,17 @@ function SessionRow({
       {/* Right column */}
       <div className="flex flex-col items-start sm:items-end gap-1.5 pt-0.5">
         {session.room ? (
-          <div className="inline-flex items-center gap-1 text-sm font-semibold text-ink whitespace-nowrap">
-            <MapPin className="h-3.5 w-3.5 text-ink-muted" />
+          <div className="inline-flex items-center gap-1 text-sm font-bold text-slate-200 whitespace-nowrap">
+            <MapPin className="h-3.5 w-3.5 text-slate-400" />
             {session.room}
           </div>
         ) : (
-          <div className="text-xs text-ink-muted italic">{tba}</div>
+          <div className="text-xs text-slate-400 font-medium italic">{tba}</div>
         )}
         {linkHref && (
           <Link
             href={linkHref}
-            className="inline-flex items-center gap-0.5 text-xs font-semibold text-brand-600 hover:text-brand-700 whitespace-nowrap"
+            className="inline-flex items-center gap-0.5 text-xs font-bold text-orange-400 hover:text-orange-300 whitespace-nowrap"
           >
             {readLabel}
             <ArrowRight className="h-3 w-3" />
