@@ -43,7 +43,10 @@ import {
   parsePosterOrderValue,
   posterOrderSettingsKey,
 } from "@/lib/poster-planner-order";
-import { getRemovedPosterSessionSlotTemplates } from "@/lib/poster-session-slots";
+import {
+  getOrphanPosterSlotAssignmentIds,
+  getRemovedPosterSessionSlotTemplates,
+} from "@/lib/poster-session-slots";
 import {
   normalizePosterSubgroups,
   parsePosterSubgroupsValue,
@@ -344,6 +347,42 @@ async function deleteRemovedPosterSlotAssignments(
 
   if (!whereCondition) return;
   await db.delete(posterSlotJudges).where(whereCondition);
+}
+
+async function deleteOrphanPosterSlotAssignments(
+  activeTemplates: Array<{ startsAt: string; endsAt: string }>
+) {
+  const plannedAssignments = await db.query.posterSlotJudges.findMany({
+    where: ne(posterSlotJudges.status, "COMPLETED"),
+    columns: {
+      id: true,
+      submissionId: true,
+      startsAt: true,
+      endsAt: true,
+    },
+  });
+  const orphanAssignmentIds = getOrphanPosterSlotAssignmentIds({
+    activeTemplates,
+    assignments: plannedAssignments,
+  });
+
+  if (orphanAssignmentIds.length === 0) return;
+  const orphanAssignmentIdSet = new Set(orphanAssignmentIds);
+  const affectedSubmissionIds = Array.from(
+    new Set(
+      plannedAssignments
+        .filter((assignment) => orphanAssignmentIdSet.has(assignment.id))
+        .map((assignment) => assignment.submissionId)
+    )
+  );
+
+  await db
+    .delete(posterSlotJudges)
+    .where(inArray(posterSlotJudges.id, orphanAssignmentIds));
+
+  await Promise.all(
+    affectedSubmissionIds.map((submissionId) => markPosterPresentationDraft(submissionId))
+  );
 }
 
 function sessionSettingsChanged(
@@ -1575,6 +1614,7 @@ app.put("/poster-session", async (c) => {
     await deleteRemovedPosterSlotAssignments(removedTemplates);
     await markAllPosterSchedulesDraft();
   }
+  await deleteOrphanPosterSlotAssignments(sessionSettings.slotTemplates);
 
   return c.json({ sessionSettings });
 });

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { getTrackRoleIds, hasRole } from "@/lib/permissions";
 import { isAcceptedSubmissionStatus } from "@/lib/submission-status";
 import type { ServerAuthUser } from "@/server/auth-helpers";
@@ -27,6 +27,7 @@ import {
   posterSubgroupsSettingsKey,
   type PosterPlannerSubgroup,
 } from "@/lib/poster-subgroups";
+import { getOrphanPosterSlotAssignmentIds } from "@/lib/poster-session-slots";
 
 export type { PosterPlannerSubgroup };
 
@@ -137,12 +138,62 @@ async function getScopedTrackIds(currentUser: ServerAuthUser) {
   return scoped.size > 0 ? Array.from(scoped) : [];
 }
 
+async function cleanupOrphanPosterSlotAssignments(
+  slotTemplates: PosterSessionSlotTemplate[]
+) {
+  const plannedSlots = await db.query.posterSlotJudges.findMany({
+    where: ne(posterSlotJudges.status, "COMPLETED"),
+    columns: {
+      id: true,
+      submissionId: true,
+      startsAt: true,
+      endsAt: true,
+    },
+  });
+  const orphanSlotIds = getOrphanPosterSlotAssignmentIds({
+    activeTemplates: slotTemplates,
+    assignments: plannedSlots,
+  });
+  if (orphanSlotIds.length === 0) return;
+
+  const orphanSlotIdSet = new Set(orphanSlotIds);
+  const affectedSubmissionIds = Array.from(
+    new Set(
+      plannedSlots
+        .filter((slot) => orphanSlotIdSet.has(slot.id))
+        .map((slot) => slot.submissionId)
+    )
+  );
+
+  await db.delete(posterSlotJudges).where(inArray(posterSlotJudges.id, orphanSlotIds));
+  if (affectedSubmissionIds.length > 0) {
+    await db
+      .update(presentationAssignments)
+      .set({
+        status: "PENDING",
+        scheduledAt: null,
+        room: null,
+        duration: null,
+      })
+      .where(
+        and(
+          eq(presentationAssignments.type, "POSTER"),
+          inArray(presentationAssignments.submissionId, affectedSubmissionIds),
+          ne(presentationAssignments.status, "COMPLETED")
+        )
+      );
+  }
+}
+
 export async function getPosterPlannerPageData(currentUser: ServerAuthUser) {
   // Run independent queries in parallel
   const [scopedTrackIds, sessionSettings] = await Promise.all([
     getScopedTrackIds(currentUser),
     getPosterSessionSettings(),
   ]);
+  if (hasRole(currentUser, "ADMIN")) {
+    await cleanupOrphanPosterSlotAssignments(sessionSettings.slotTemplates);
+  }
 
   const posterRows = await db.query.presentationAssignments.findMany({
     where: eq(presentationAssignments.type, "POSTER"),
