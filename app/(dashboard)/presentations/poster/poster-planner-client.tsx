@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, memo } from "react";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -1496,195 +1496,24 @@ export function PosterPlannerClient({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRows.map((row, rowIndex) => {
-                      const readiness = getPosterScheduleReadiness(row.judgeAssignments);
-                      const assignmentsBySlot = new Map<string, PosterJudgeAssignment[]>();
-                      for (const assignment of row.judgeAssignments) {
-                        const assignments = assignmentsBySlot.get(assignment.slotTemplateId) ?? [];
-                        assignments.push(assignment);
-                        assignmentsBySlot.set(assignment.slotTemplateId, assignments);
-                      }
-                      const assignedJudgeIds = row.judgeAssignments.map((assignment) => assignment.judgeId);
-                      const isPublished = isPublishedPresentationStatus(row.presentationStatus);
-                      const hasDuplicateSlots = readiness.duplicateSlotCount > 0;
-                      const readinessTone = readiness.isReady ? "success" : hasDuplicateSlots || readiness.duplicateJudgeCount > 0 ? "danger" : "warning";
-                      const readinessLabel = readiness.isReady
-                        ? t("poster.ready")
-                        : hasDuplicateSlots
-                          ? t("poster.duplicateSlots")
-                          : readiness.duplicateJudgeCount > 0
-                            ? t("poster.duplicateJudges")
-                          : t("poster.needJudges", { n: readiness.missingJudgeCount });
-
-                      return (
-                        <tr key={row.submissionId} className="border-b border-border/40 align-top transition-colors hover:bg-gray-50/50">
-                          <td className="sticky left-0 z-10 bg-white px-4 py-3">
-                            <div className="flex gap-3">
-                              <div className="flex shrink-0 flex-col gap-1 pt-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => movePosterRow(row, "up")}
-                                  disabled={rowIndex === 0 || savingKey === `move-${row.submissionId}-up`}
-                                  title={t("poster.moveUp")}
-                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-white text-ink-muted transition-colors hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-35"
-                                >
-                                  <ArrowUp className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => movePosterRow(row, "down")}
-                                  disabled={rowIndex === filteredRows.length - 1 || savingKey === `move-${row.submissionId}-down`}
-                                  title={t("poster.moveDown")}
-                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-white text-ink-muted transition-colors hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-35"
-                                >
-                                  <ArrowDown className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                              <div className="space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge>{row.paperCode || "NO-CODE"}</Badge>
-                                  <Badge tone={isPublished ? "success" : "warning"}>
-                                    {isPublished ? t("presentations.statusScheduled") : t("presentations.statusPending")}
-                                  </Badge>
-                                </div>
-                                <p className="max-w-[240px] font-medium leading-snug text-ink" title={row.title}>
-                                  {row.title}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-ink-muted">{row.authorName}</td>
-                          {visibleSlotTemplates.map((slot) => {
-                            const slotAssignments = assignmentsBySlot.get(slot.id) ?? [];
-                            const assignment = slotAssignments[0];
-                            const duplicateSlotAssignments = slotAssignments.slice(1);
-                            const currentJudgeId = assignment?.judgeId ?? "";
-                            const isSaving = savingKey === `assign-${row.submissionId}-${slot.id}`;
-                            const isEmptyLocked = !assignment && row.judgeAssignments.length >= POSTER_REQUIRED_JUDGE_COUNT;
-                            const unavailableJudges = getUnavailableJudgeIdsForSlot({
-                              slot,
-                              currentSubmissionId: row.submissionId,
-                              busySlots: judgeBusySlots,
-                            });
-                            const currentBusySlot = currentJudgeId
-                              ? judgeBusySlots.find((busySlot) =>
-                                  busySlot.judgeId === currentJudgeId &&
-                                  busySlot.submissionId !== row.submissionId &&
-                                  posterSlotRangesOverlap(
-                                    slot.startsAt,
-                                    slot.endsAt,
-                                    busySlot.startsAt,
-                                    busySlot.endsAt
-                                  )
-                                )
-                              : null;
-
-                            return (
-                              <td key={slot.id} className="px-3 py-3">
-                                <Select
-                                  value={currentJudgeId}
-                                  onChange={(event) => handleMatrixJudgeChange(row, slot, event.target.value)}
-                                  disabled={isSaving || Boolean(slot.isOrphan) || isEmptyLocked}
-                                  className={`w-full rounded-lg border px-2.5 py-2 text-xs transition-colors ${
-                                    currentBusySlot
-                                      ? "border-red-300 bg-red-50/70 text-red-900"
-                                      : currentJudgeId
-                                        ? "border-brand-200 bg-brand-50/40 text-ink"
-                                        : isEmptyLocked
-                                          ? "border-gray-100 bg-gray-50 text-gray-400"
-                                        : "border-border/60 bg-white text-ink-muted"
-                                  } ${isSaving ? "cursor-wait opacity-50" : "hover:border-brand-300 focus:border-brand-400 focus:ring-1 focus:ring-brand-200"} focus:outline-none`}
-                                >
-                                  <option value="">
-                                    {isEmptyLocked ? t("poster.posterAlreadyComplete") : t("poster.selectJudgeOption")}
-                                  </option>
-                                  {trackCommitteeUsers.map((cu) => {
-                                    const duplicateSelected = assignedJudgeIds.some(
-                                      (judgeId) => judgeId === cu.id && currentJudgeId !== cu.id
-                                    );
-                                    const isBusy = unavailableJudges.has(cu.id) && currentJudgeId !== cu.id;
-                                    const busySlot = isBusy
-                                      ? judgeBusySlots.find((candidate) =>
-                                          candidate.judgeId === cu.id &&
-                                          candidate.submissionId !== row.submissionId &&
-                                          posterSlotRangesOverlap(
-                                            slot.startsAt,
-                                            slot.endsAt,
-                                            candidate.startsAt,
-                                            candidate.endsAt
-                                          )
-                                        )
-                                      : null;
-                                    const disabled = duplicateSelected || isBusy;
-                                    return (
-                                      <option key={cu.id} value={cu.id} disabled={disabled}>
-                                        {isBusy
-                                          ? t("poster.judgeBusyOption", {
-                                              name: cu.name,
-                                              paper: busySlot?.label ?? t("poster.anotherTrackConflict"),
-                                            })
-                                          : duplicateSelected
-                                            ? t("poster.judgeDuplicateOption", { name: cu.name })
-                                            : cu.name}
-                                      </option>
-                                    );
-                                  })}
-                                </Select>
-                                {currentBusySlot && (
-                                  <p className="mt-1 text-[11px] font-semibold leading-tight text-red-700">
-                                    {t("poster.existingConflictWarning", {
-                                      paper: currentBusySlot.label ?? t("poster.anotherTrackConflict"),
-                                    })}
-                                  </p>
-                                )}
-                                {duplicateSlotAssignments.length > 0 && (
-                                  <div className="mt-1 space-y-1">
-                                    {duplicateSlotAssignments.map((duplicate) => (
-                                      <button
-                                        key={duplicate.slotId}
-                                        type="button"
-                                        onClick={() =>
-                                          runAction(`delete-duplicate-${duplicate.slotId}`, async () => {
-                                            await deletePosterSlot(duplicate.slotId);
-                                            await refreshPlanner();
-                                            setMessage(t("poster.duplicateSlotRemoved"));
-                                          })
-                                        }
-                                        disabled={savingKey === `delete-duplicate-${duplicate.slotId}`}
-                                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:cursor-wait disabled:opacity-50"
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                        {t("poster.removeDuplicateSlot")}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td className="px-3 py-3">
-                            <div className="space-y-1.5">
-                              <Badge tone={readinessTone}>{readinessLabel}</Badge>
-                              {readiness.extraJudgeCount > 0 && (
-                                <p className="text-[11px] font-semibold text-red-700">
-                                  {t("poster.extraJudges", { n: readiness.extraJudgeCount })}
-                                </p>
-                              )}
-                              {readiness.duplicateJudgeCount > 0 && (
-                                <p className="text-[11px] font-semibold text-red-700">
-                                  {t("poster.duplicateJudges")}
-                                </p>
-                              )}
-                              {readiness.duplicateSlotCount > 0 && (
-                                <p className="text-[11px] font-semibold text-red-700">
-                                  {t("poster.duplicateSlots")}
-                                </p>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {filteredRows.map((row, rowIndex) => (
+                      <PosterPlannerRow
+                        key={row.submissionId}
+                        row={row}
+                        rowIndex={rowIndex}
+                        filteredRowsLength={filteredRows.length}
+                        visibleSlotTemplates={visibleSlotTemplates}
+                        trackCommitteeUsers={trackCommitteeUsers}
+                        judgeBusySlots={judgeBusySlots}
+                        savingKey={savingKey}
+                        movePosterRow={movePosterRow}
+                        handleMatrixJudgeChange={handleMatrixJudgeChange}
+                        deletePosterSlot={deletePosterSlot}
+                        refreshPlanner={refreshPlanner}
+                        runAction={runAction}
+                        t={t}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </CardBody>
@@ -1721,32 +1550,11 @@ export function PosterPlannerClient({
                   </thead>
                   <tbody>
                     {judgeWorkloadGrid.map((judge) => (
-                      <tr key={judge.id} className="border-b border-border/40 hover:bg-gray-50/50 transition-colors">
-                        <td className="sticky left-0 z-10 bg-white px-4 py-2 text-ink">{judge.name}</td>
-                        {visibleSlotTemplates.map((slot) => {
-                          const label = judge.slots.get(slot.id);
-                          return (
-                            <td key={slot.id} className="px-2 py-2 text-center">
-                              <span className={`inline-flex min-h-6 min-w-16 items-center justify-center rounded-md border px-2 py-1 text-[11px] font-semibold ${
-                                label
-                                  ? "border-brand-200 bg-brand-50 text-brand-700"
-                                  : "border-gray-100 bg-gray-50 text-gray-300"
-                              }`}>
-                                {label || "-"}
-                              </span>
-                            </td>
-                          );
-                        })}
-                        <td className="px-4 py-2 text-center">
-                          <span className={`inline-flex min-w-[2rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
-                            judge.count === 0
-                              ? "bg-gray-100 text-gray-400"
-                              : "bg-brand-100 text-brand-700"
-                          }`}>
-                            {judge.count}
-                          </span>
-                        </td>
-                      </tr>
+                      <JudgeWorkloadRow
+                        key={judge.id}
+                        judge={judge}
+                        visibleSlotTemplates={visibleSlotTemplates}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -1758,3 +1566,268 @@ export function PosterPlannerClient({
     </div>
   );
 }
+
+interface JudgeWorkloadItem {
+  id: string;
+  name: string;
+  count: number;
+  slots: Map<string, string>;
+}
+
+const PosterPlannerRow = memo(function PosterPlannerRow({
+  row,
+  rowIndex,
+  filteredRowsLength,
+  visibleSlotTemplates,
+  trackCommitteeUsers,
+  judgeBusySlots,
+  savingKey,
+  movePosterRow,
+  handleMatrixJudgeChange,
+  deletePosterSlot,
+  refreshPlanner,
+  runAction,
+  t,
+}: {
+  row: ScheduleRow;
+  rowIndex: number;
+  filteredRowsLength: number;
+  visibleSlotTemplates: ScheduleSlotTemplate[];
+  trackCommitteeUsers: AdminCommitteeUser[];
+  judgeBusySlots: PosterJudgeBusySlot[];
+  savingKey: string | null;
+  movePosterRow: (row: ScheduleRow, direction: "up" | "down") => void;
+  handleMatrixJudgeChange: (row: ScheduleRow, slot: ScheduleSlotTemplate, newJudgeId: string) => void;
+  deletePosterSlot: (slotId: string) => Promise<void>;
+  refreshPlanner: () => Promise<void>;
+  runAction: (key: string, action: () => Promise<void>) => Promise<void>;
+  t: any;
+}) {
+  const readiness = getPosterScheduleReadiness(row.judgeAssignments);
+  const assignmentsBySlot = useMemo(() => {
+    const map = new Map<string, PosterJudgeAssignment[]>();
+    for (const assignment of row.judgeAssignments) {
+      const assignments = map.get(assignment.slotTemplateId) ?? [];
+      assignments.push(assignment);
+      map.set(assignment.slotTemplateId, assignments);
+    }
+    return map;
+  }, [row.judgeAssignments]);
+
+  const assignedJudgeIds = useMemo(() => row.judgeAssignments.map((assignment) => assignment.judgeId), [row.judgeAssignments]);
+  const isPublished = isPublishedPresentationStatus(row.presentationStatus);
+  const hasDuplicateSlots = readiness.duplicateSlotCount > 0;
+  const readinessTone = readiness.isReady ? "success" : hasDuplicateSlots || readiness.duplicateJudgeCount > 0 ? "danger" : "warning";
+  const readinessLabel = readiness.isReady
+    ? t("poster.ready")
+    : hasDuplicateSlots
+      ? t("poster.duplicateSlots")
+      : readiness.duplicateJudgeCount > 0
+        ? t("poster.duplicateJudges")
+      : t("poster.needJudges", { n: readiness.missingJudgeCount });
+
+  return (
+    <tr className="border-b border-border/40 align-top transition-colors hover:bg-gray-50/50">
+      <td className="sticky left-0 z-10 bg-white px-4 py-3">
+        <div className="flex gap-3">
+          <div className="flex shrink-0 flex-col gap-1 pt-0.5">
+            <button
+              type="button"
+              onClick={() => movePosterRow(row, "up")}
+              disabled={rowIndex === 0 || savingKey === `move-${row.submissionId}-up`}
+              title={t("poster.moveUp")}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-white text-ink-muted transition-colors hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => movePosterRow(row, "down")}
+              disabled={rowIndex === filteredRowsLength - 1 || savingKey === `move-${row.submissionId}-down`}
+              title={t("poster.moveDown")}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-white text-ink-muted transition-colors hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{row.paperCode || "NO-CODE"}</Badge>
+              <Badge tone={isPublished ? "success" : "warning"}>
+                {isPublished ? t("presentations.statusScheduled") : t("presentations.statusPending")}
+              </Badge>
+            </div>
+            <p className="max-w-[240px] font-medium leading-snug text-ink" title={row.title}>
+              {row.title}
+            </p>
+          </div>
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-3 py-3 text-ink-muted">{row.authorName}</td>
+      {visibleSlotTemplates.map((slot) => {
+        const slotAssignments = assignmentsBySlot.get(slot.id) ?? [];
+        const assignment = slotAssignments[0];
+        const duplicateSlotAssignments = slotAssignments.slice(1);
+        const currentJudgeId = assignment?.judgeId ?? "";
+        const isSaving = savingKey === `assign-${row.submissionId}-${slot.id}`;
+        const isEmptyLocked = !assignment && row.judgeAssignments.length >= POSTER_REQUIRED_JUDGE_COUNT;
+        const unavailableJudges = getUnavailableJudgeIdsForSlot({
+          slot,
+          currentSubmissionId: row.submissionId,
+          busySlots: judgeBusySlots,
+        });
+        const currentBusySlot = currentJudgeId
+          ? judgeBusySlots.find((busySlot) =>
+              busySlot.judgeId === currentJudgeId &&
+              busySlot.submissionId !== row.submissionId &&
+              posterSlotRangesOverlap(
+                slot.startsAt,
+                slot.endsAt,
+                busySlot.startsAt,
+                busySlot.endsAt
+              )
+            )
+          : null;
+
+        return (
+          <td key={slot.id} className="px-3 py-3">
+            <Select
+              value={currentJudgeId}
+              onChange={(event) => handleMatrixJudgeChange(row, slot, event.target.value)}
+              disabled={isSaving || Boolean(slot.isOrphan) || isEmptyLocked}
+              className={`w-full rounded-lg border px-2.5 py-2 text-xs transition-colors ${
+                currentBusySlot
+                  ? "border-red-300 bg-red-50/70 text-red-900"
+                  : currentJudgeId
+                    ? "border-brand-200 bg-brand-50/40 text-ink"
+                    : isEmptyLocked
+                      ? "border-gray-100 bg-gray-50 text-gray-400"
+                    : "border-border/60 bg-white text-ink-muted"
+              } ${isSaving ? "cursor-wait opacity-50" : "hover:border-brand-300 focus:border-brand-400 focus:ring-1 focus:ring-brand-200"} focus:outline-none`}
+            >
+              <option value="">
+                {isEmptyLocked ? t("poster.posterAlreadyComplete") : t("poster.selectJudgeOption")}
+              </option>
+              {trackCommitteeUsers.map((cu) => {
+                const duplicateSelected = assignedJudgeIds.some(
+                  (judgeId) => judgeId === cu.id && currentJudgeId !== cu.id
+                );
+                const isBusy = unavailableJudges.has(cu.id) && currentJudgeId !== cu.id;
+                const busySlot = isBusy
+                  ? judgeBusySlots.find((candidate) =>
+                      candidate.judgeId === cu.id &&
+                      candidate.submissionId !== row.submissionId &&
+                      posterSlotRangesOverlap(
+                        slot.startsAt,
+                        slot.endsAt,
+                        candidate.startsAt,
+                        candidate.endsAt
+                      )
+                    )
+                  : null;
+                const disabled = duplicateSelected || isBusy;
+                return (
+                  <option key={cu.id} value={cu.id} disabled={disabled}>
+                    {isBusy
+                      ? t("poster.judgeBusyOption", {
+                          name: cu.name,
+                          paper: busySlot?.label ?? t("poster.anotherTrackConflict"),
+                        })
+                      : duplicateSelected
+                        ? t("poster.judgeDuplicateOption", { name: cu.name })
+                        : cu.name}
+                  </option>
+                );
+              })}
+            </Select>
+            {currentBusySlot && (
+              <p className="mt-1 text-[11px] font-semibold leading-tight text-red-700">
+                {t("poster.existingConflictWarning", {
+                  paper: currentBusySlot.label ?? t("poster.anotherTrackConflict"),
+                })}
+              </p>
+            )}
+            {duplicateSlotAssignments.length > 0 && (
+              <div className="mt-1 space-y-1">
+                {duplicateSlotAssignments.map((duplicate) => (
+                  <button
+                    key={duplicate.slotId}
+                    type="button"
+                    onClick={() =>
+                      runAction(`delete-duplicate-${duplicate.slotId}`, async () => {
+                        await deletePosterSlot(duplicate.slotId);
+                        await refreshPlanner();
+                      })
+                    }
+                    disabled={savingKey === `delete-duplicate-${duplicate.slotId}`}
+                    className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:cursor-wait disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    {t("poster.removeDuplicateSlot")}
+                  </button>
+                ))}
+              </div>
+            )}
+          </td>
+        );
+      })}
+      <td className="px-3 py-3">
+        <div className="space-y-1.5">
+          <Badge tone={readinessTone}>{readinessLabel}</Badge>
+          {readiness.extraJudgeCount > 0 && (
+            <p className="text-[11px] font-semibold text-red-700">
+              {t("poster.extraJudges", { n: readiness.extraJudgeCount })}
+            </p>
+          )}
+          {readiness.duplicateJudgeCount > 0 && (
+            <p className="text-[11px] font-semibold text-red-700">
+              {t("poster.duplicateJudges")}
+            </p>
+          )}
+          {readiness.duplicateSlotCount > 0 && (
+            <p className="text-[11px] font-semibold text-red-700">
+              {t("poster.duplicateSlots")}
+            </p>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+const JudgeWorkloadRow = memo(function JudgeWorkloadRow({
+  judge,
+  visibleSlotTemplates,
+}: {
+  judge: JudgeWorkloadItem;
+  visibleSlotTemplates: ScheduleSlotTemplate[];
+}) {
+  return (
+    <tr className="border-b border-border/40 hover:bg-gray-50/50 transition-colors">
+      <td className="sticky left-0 z-10 bg-white px-4 py-2 text-ink">{judge.name}</td>
+      {visibleSlotTemplates.map((slot) => {
+        const label = judge.slots.get(slot.id);
+        return (
+          <td key={slot.id} className="px-2 py-2 text-center">
+            <span className={`inline-flex min-h-6 min-w-16 items-center justify-center rounded-md border px-2 py-1 text-[11px] font-semibold ${
+              label
+                ? "border-brand-200 bg-brand-50 text-brand-700"
+                : "border-gray-100 bg-gray-50 text-gray-300"
+            }`}>
+              {label || "-"}
+            </span>
+          </td>
+        );
+      })}
+      <td className="px-4 py-2 text-center">
+        <span className={`inline-flex min-w-[2rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
+          judge.count === 0
+            ? "bg-gray-100 text-gray-400"
+            : "bg-brand-100 text-brand-700"
+        }`}>
+          {judge.count}
+        </span>
+      </td>
+    </tr>
+  );
+});

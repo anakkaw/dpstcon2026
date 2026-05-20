@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useMemo, useCallback, memo } from "react";
+import { Fragment, useState, useMemo, useCallback, memo, useEffect } from "react";
 import Link from "next/link";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { useDashboardAuth } from "@/components/dashboard-auth-context";
@@ -61,6 +61,55 @@ interface PresentationsClientProps {
   canPublish: boolean;
 }
 
+const getPresentationLabel = (presentation: PresentationData | ScoringPresentation) =>
+  `${presentation.submission.paperCode || "NO-CODE"} · ${presentation.submission.title}`;
+
+const getPresentationStatusLabel = (status: string, t: any) => {
+  if (status === "COMPLETED") return t("presentations.completedStatus");
+  return isPublishedPresentationStatus(status)
+    ? t("presentations.statusScheduled")
+    : t("presentations.statusPending");
+};
+
+const getPresentationStatusTone = (status: string) =>
+  isPublishedPresentationStatus(status) ? "success" : "warning";
+
+const getRenderScheduleTime = (presentation: PresentationData, t: any) => {
+  if (presentation.type === "POSTER" && presentation.posterSlots.length > 0) {
+    return (
+      <div className="space-y-1">
+        {presentation.posterSlots.map((slot, index) => (
+          <div key={slot.id} className="text-xs text-ink-light">
+            {t("presentations.posterSlot")} {index + 1}: {formatDateTime(slot.startsAt)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return presentation.scheduledAt ? (
+    <span className="text-xs text-ink-light">{formatDateTime(presentation.scheduledAt)}</span>
+  ) : (
+    <span className="text-xs text-ink-muted">—</span>
+  );
+};
+
+const getRenderDuration = (presentation: PresentationData, t: any) => {
+  if (presentation.type === "POSTER" && presentation.posterSlots.length > 0) {
+    return (
+      <span className="text-xs text-ink-light">
+        {presentation.posterSlots.length} {t("presentations.posterSlotUnit")}
+      </span>
+    );
+  }
+
+  return presentation.duration ? (
+    <span className="text-xs text-ink-light">{presentation.duration}</span>
+  ) : (
+    <span className="text-xs text-ink-muted">—</span>
+  );
+};
+
 export function PresentationsClient({
   type,
   initialPresentations,
@@ -97,50 +146,17 @@ export function PresentationsClient({
   const title = type === "ORAL" ? t("presentations.oral") : t("presentations.poster");
   const isPosterMode = type === "POSTER";
   const TitleIcon = type === "ORAL" ? Mic : ImageIcon;
+
   const presentationLabel = (presentation: PresentationData | ScoringPresentation) =>
-    `${presentation.submission.paperCode || "NO-CODE"} · ${presentation.submission.title}`;
-  const presentationStatusLabel = (status: string) => {
-    if (status === "COMPLETED") return t("presentations.completedStatus");
-    return isPublishedPresentationStatus(status)
-      ? t("presentations.statusScheduled")
-      : t("presentations.statusPending");
-  };
+    getPresentationLabel(presentation);
+  const presentationStatusLabel = (status: string) =>
+    getPresentationStatusLabel(status, t);
   const presentationStatusTone = (status: string) =>
-    isPublishedPresentationStatus(status) ? "success" : "warning";
-  const renderScheduleTime = (presentation: PresentationData) => {
-    if (presentation.type === "POSTER" && presentation.posterSlots.length > 0) {
-      return (
-        <div className="space-y-1">
-          {presentation.posterSlots.map((slot, index) => (
-            <div key={slot.id} className="text-xs text-ink-light">
-              {t("presentations.posterSlot")} {index + 1}: {formatDateTime(slot.startsAt)}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    return presentation.scheduledAt ? (
-      <span className="text-xs text-ink-light">{formatDateTime(presentation.scheduledAt)}</span>
-    ) : (
-      <span className="text-xs text-ink-muted">—</span>
-    );
-  };
-  const renderDuration = (presentation: PresentationData) => {
-    if (presentation.type === "POSTER" && presentation.posterSlots.length > 0) {
-      return (
-        <span className="text-xs text-ink-light">
-          {presentation.posterSlots.length} {t("presentations.posterSlotUnit")}
-        </span>
-      );
-    }
-
-    return presentation.duration ? (
-      <span className="text-xs text-ink-light">{presentation.duration}</span>
-    ) : (
-      <span className="text-xs text-ink-muted">—</span>
-    );
-  };
+    getPresentationStatusTone(status);
+  const renderScheduleTime = (presentation: PresentationData) =>
+    getRenderScheduleTime(presentation, t);
+  const renderDuration = (presentation: PresentationData) =>
+    getRenderDuration(presentation, t);
 
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((prev) => {
@@ -157,6 +173,18 @@ export function PresentationsClient({
     const data = await fetch(`/api/presentations?type=${type}`).then((r) => r.json());
     setPresentations(data.presentations || []);
   }
+
+  const handleEdit = useCallback((id: string) => {
+    setEditingId(id);
+  }, []);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingId(null);
+  }, []);
+
+  const handleToggleAssign = useCallback((id: string) => {
+    setAssignPresId((prev) => (prev === id ? null : id));
+  }, []);
 
   const filteredPresentations = useMemo(() =>
     presentations.filter((presentation) => !trackFilter || presentation.submission.track?.id === trackFilter),
@@ -207,14 +235,15 @@ export function PresentationsClient({
     return { scheduledCount: scheduled, pendingCount: pending };
   }, [filteredPresentations]);
 
-  async function handleSchedule(presentationId: string) {
+  const handleSchedule = useCallback(async (presentationId: string, formPayload?: { scheduledAt: string; room: string; duration: string }) => {
     setSaving(true);
 
     try {
+      const formToUse = formPayload || editForm;
       const payload = {
-        scheduledAt: editForm.scheduledAt.trim() || null,
-        room: editForm.room.trim() || null,
-        duration: editForm.duration.trim() ? Number(editForm.duration) : null,
+        scheduledAt: formToUse.scheduledAt.trim() || null,
+        room: formToUse.room.trim() || null,
+        duration: formToUse.duration.trim() ? Number(formToUse.duration) : null,
       };
 
       const res = await fetch(`/api/presentations/${presentationId}/schedule`, {
@@ -240,7 +269,7 @@ export function PresentationsClient({
     }
 
     setSaving(false);
-  }
+  }, [editForm, t, reload]);
 
   async function handlePublish(presentationId: string) {
     setPublishingId(presentationId);
@@ -296,14 +325,15 @@ export function PresentationsClient({
     }
   }
 
-  async function handleAssignCommittee(presentationId: string) {
+  const handleAssignCommittee = useCallback(async (presentationId: string, judgeIds?: string[]) => {
     setAssigningSaving(true);
 
     try {
+      const judgesToUse = judgeIds || selectedJudges;
       const res = await fetch(`/api/presentations/${presentationId}/committee`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ judgeIds: selectedJudges }),
+        body: JSON.stringify({ judgeIds: judgesToUse }),
       });
 
       if (res.ok) {
@@ -322,7 +352,7 @@ export function PresentationsClient({
     }
 
     setAssigningSaving(false);
-  }
+  }, [selectedJudges, t, reload]);
 
   function handleTabChange(tab: typeof activeTab) {
     setActiveTab(tab);
@@ -427,101 +457,22 @@ export function PresentationsClient({
           <>
             <div className="space-y-3 lg:hidden">
               {sortedPresentations.map((presentation) => (
-                <Card key={presentation.id}>
-                  <CardBody className="space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-base font-semibold text-ink">{presentationLabel(presentation)}</p>
-                        <p className="mt-1 text-sm text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
-                      </div>
-                      <Badge tone={presentationStatusTone(presentation.status)} dot>
-                        {presentationStatusLabel(presentation.status)}
-                      </Badge>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {presentation.submission.track && <Badge tone="info">{presentation.submission.track.name}</Badge>}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 rounded-xl bg-surface-alt p-4 text-sm sm:grid-cols-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.dateTime")}</p>
-                        <div className="mt-1">{renderScheduleTime(presentation)}</div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.room")}</p>
-                        <p className="mt-1 text-ink">{presentation.room || "—"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{isPosterMode ? t("presentations.posterSlots") : t("presentations.minutes")}</p>
-                        <div className="mt-1">{renderDuration(presentation)}</div>
-                      </div>
-                    </div>
-
-                    {canManage && editingId === presentation.id ? (
-                      <div className="space-y-3 rounded-xl border border-brand-200/50 bg-brand-50/40 p-4">
-                        <Field label={t("presentations.dateTime")}>
-                          <Input type="datetime-local" value={editForm.scheduledAt} onChange={(e) => setEditForm({ ...editForm, scheduledAt: e.target.value })} />
-                        </Field>
-                        <Field label={t("presentations.room")}>
-                          <Input value={editForm.room} onChange={(e) => setEditForm({ ...editForm, room: e.target.value })} placeholder={t("presentations.roomPlaceholder")} />
-                        </Field>
-                        <Field label={t("presentations.durationMinutes")}>
-                          <Input type="number" value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: e.target.value })} placeholder="15" />
-                        </Field>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                          <Button size="sm" onClick={() => handleSchedule(presentation.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>{t("common.cancel")}</Button>
-                        </div>
-                      </div>
-                    ) : canManage && isPosterMode ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Link href="/presentations/poster">
-                          <Button size="sm" variant="outline">
-                            {t("presentations.managePosterSlots")}
-                          </Button>
-                        </Link>
-                      </div>
-                    ) : canManage ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setEditingId(presentation.id);
-                            setEditForm({
-                              scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
-                              room: presentation.room || "",
-                              duration: presentation.duration?.toString() || "",
-                            });
-                          }}
-                        >
-                          {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
-                        </Button>
-                        {canPublish && !isPublishedPresentationStatus(presentation.status) && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            onClick={() => handlePublish(presentation.id)}
-                            loading={publishingId === presentation.id}
-                            disabled={!presentation.scheduledAt}
-                          >
-                            <Megaphone className="h-3.5 w-3.5" />
-                            {t("presentations.publish")}
-                          </Button>
-                        )}
-                      </div>
-                    ) : null}
-                    {isCommittee && (
-                      <Link href={`/presentations/${presentation.id}/score`}>
-                        <Button size="sm" variant="primary">
-                          <Star className="h-3.5 w-3.5" />
-                          {t("scoring.giveScore")}
-                        </Button>
-                      </Link>
-                    )}
-                  </CardBody>
-                </Card>
+                <PresentationMobileCard
+                  key={presentation.id}
+                  presentation={presentation}
+                  isEditing={editingId === presentation.id}
+                  isSaving={saving}
+                  isPublishing={publishingId === presentation.id}
+                  canManage={canManage}
+                  canPublish={canPublish}
+                  isPosterMode={isPosterMode}
+                  isCommittee={isCommittee}
+                  onSaveSchedule={handleSchedule}
+                  onCancelEdit={handleCancelEdit}
+                  onEdit={() => handleEdit(presentation.id)}
+                  onPublish={() => handlePublish(presentation.id)}
+                  t={t}
+                />
               ))}
             </div>
 
@@ -542,110 +493,22 @@ export function PresentationsClient({
                     </thead>
                     <tbody>
                       {sortedPresentations.map((presentation) => (
-                        <Fragment key={presentation.id}>
-                          <tr className="group border-t border-border/40 transition-colors hover:bg-surface-hover/50">
-                            <td className="px-5 py-3.5">
-                              <p className="leading-snug font-medium text-ink">{presentationLabel(presentation)}</p>
-                              <p className="mt-0.5 text-xs text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              {presentation.submission.track ? <Badge tone="info">{presentation.submission.track.name}</Badge> : <span className="text-xs text-ink-muted">—</span>}
-                            </td>
-                            <td className="px-4 py-3.5">
-                              {renderScheduleTime(presentation)}
-                            </td>
-                            <td className="px-4 py-3.5">
-                              {presentation.room ? (
-                                <span className="inline-flex items-center gap-1 text-xs text-ink-light"><MapPin className="h-3 w-3" />{presentation.room}</span>
-                              ) : (
-                                <span className="text-xs text-ink-muted">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3.5 text-center">
-                              {renderDuration(presentation)}
-                            </td>
-                            <td className="px-4 py-3.5 text-center">
-                              <Badge tone={presentationStatusTone(presentation.status)} dot>
-                                {presentationStatusLabel(presentation.status)}
-                              </Badge>
-                            </td>
-                            <td className="px-5 py-3.5 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                {canManage && editingId === presentation.id ? (
-                                  <>
-                                    <Button size="sm" onClick={() => handleSchedule(presentation.id)} loading={saving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
-                                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
-                                  </>
-                                ) : canManage && isPosterMode ? (
-                                  <Link href="/presentations/poster">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
-                                    >
-                                      {t("presentations.managePosterSlots")}
-                                    </Button>
-                                  </Link>
-                                ) : canManage ? (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
-                                      onClick={() => {
-                                        setEditingId(presentation.id);
-                                        setEditForm({
-                                          scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
-                                          room: presentation.room || "",
-                                          duration: presentation.duration?.toString() || "",
-                                        });
-                                      }}
-                                    >
-                                      {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
-                                    </Button>
-                                    {canPublish && !isPublishedPresentationStatus(presentation.status) && (
-                                      <Button
-                                        size="sm"
-                                        variant="primary"
-                                        onClick={() => handlePublish(presentation.id)}
-                                        loading={publishingId === presentation.id}
-                                        disabled={!presentation.scheduledAt}
-                                      >
-                                        <Megaphone className="h-3.5 w-3.5" />
-                                        {t("presentations.publish")}
-                                      </Button>
-                                    )}
-                                  </>
-                                ) : null}
-                                {isCommittee && (
-                                  <Link href={`/presentations/${presentation.id}/score`}>
-                                    <Button size="sm" variant="primary">
-                                      <Star className="h-3.5 w-3.5" />
-                                      {t("scoring.giveScore")}
-                                    </Button>
-                                  </Link>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                          {canManage && editingId === presentation.id && (
-                            <tr className="bg-brand-50/40">
-                              <td colSpan={7} className="px-5 py-4">
-                                <div className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
-                                  <Field label={t("presentations.dateTime")}>
-                                    <Input type="datetime-local" value={editForm.scheduledAt} onChange={(e) => setEditForm({ ...editForm, scheduledAt: e.target.value })} />
-                                  </Field>
-                                  <Field label={t("presentations.room")}>
-                                    <Input value={editForm.room} onChange={(e) => setEditForm({ ...editForm, room: e.target.value })} placeholder={t("presentations.roomPlaceholder")} />
-                                  </Field>
-                                  <Field label={t("presentations.durationMinutes")}>
-                                    <Input type="number" value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: e.target.value })} placeholder="15" />
-                                  </Field>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
+                        <PresentationRow
+                          key={presentation.id}
+                          presentation={presentation}
+                          isEditing={editingId === presentation.id}
+                          isSaving={saving}
+                          isPublishing={publishingId === presentation.id}
+                          canManage={canManage}
+                          canPublish={canPublish}
+                          isPosterMode={isPosterMode}
+                          isCommittee={isCommittee}
+                          onSaveSchedule={handleSchedule}
+                          onCancelEdit={handleCancelEdit}
+                          onEdit={() => handleEdit(presentation.id)}
+                          onPublish={() => handlePublish(presentation.id)}
+                          t={t}
+                        />
                       ))}
                     </tbody>
                   </table>
@@ -673,83 +536,16 @@ export function PresentationsClient({
           <>
             <div className="space-y-3 lg:hidden">
               {filteredPresentations.map((presentation) => (
-                <Card key={presentation.id}>
-                  <CardBody className="space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-base font-semibold text-ink">{presentationLabel(presentation)}</p>
-                        <p className="mt-1 text-sm text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
-                      </div>
-                      {presentation.submission.track && <Badge tone="info">{presentation.submission.track.name}</Badge>}
-                    </div>
-
-                    <Button
-                      size="sm"
-                      variant={assignPresId === presentation.id ? "secondary" : "outline"}
-                      onClick={() => {
-                        if (assignPresId === presentation.id) {
-                          setAssignPresId(null);
-                          setSelectedJudges([]);
-                        } else {
-                          setAssignPresId(presentation.id);
-                          setSelectedJudges([]);
-                        }
-                      }}
-                    >
-                      <UserPlus className="h-3.5 w-3.5" />
-                      {assignPresId === presentation.id ? t("common.cancel") : t("presentations.committee")}
-                    </Button>
-
-                    {assignPresId === presentation.id && (
-                      <div className="space-y-3 rounded-xl border border-blue-200/60 bg-blue-50/40 p-4">
-                        {committeeUsers.length === 0 ? (
-                          <p className="text-xs text-danger">{t("presentations.noCommittee")}</p>
-                        ) : (
-                          <>
-                            <p className="text-xs font-medium text-ink-light">{t("presentations.selectCommittee")}</p>
-                            <div className="grid grid-cols-1 gap-2">
-                              {committeeUsers.map((committeeUser) => {
-                                const isSelected = selectedJudges.includes(committeeUser.id);
-                                return (
-                                  <label
-                                    key={committeeUser.id}
-                                    className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
-                                      isSelected
-                                        ? "border-blue-300 bg-blue-50 shadow-sm"
-                                        : "border-transparent bg-white hover:bg-surface-hover"
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={(e) => {
-                                        if (e.target.checked) setSelectedJudges([...selectedJudges, committeeUser.id]);
-                                        else setSelectedJudges(selectedJudges.filter((id) => id !== committeeUser.id));
-                                      }}
-                                      className="rounded border-border text-brand-500 focus:ring-brand-500"
-                                    />
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-medium text-ink">{displayNameTh(committeeUser)}</p>
-                                      <p className="text-xs text-ink-muted">{committeeUser.email}</p>
-                                    </div>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                            {selectedJudges.length > 0 && (
-                              <div className="flex flex-col gap-2 border-t border-blue-200/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-xs text-ink-muted">{t("presentations.selectedCount", { n: selectedJudges.length })}</p>
-                                <Button size="sm" onClick={() => handleAssignCommittee(presentation.id)} loading={assigningSaving}>
-                                  <Check className="h-3.5 w-3.5" />{t("presentations.appoint")}
-                                </Button>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </CardBody>
-                </Card>
+                <PresentationCommitteeMobileCard
+                  key={presentation.id}
+                  presentation={presentation}
+                  isAssigning={assignPresId === presentation.id}
+                  committeeUsers={committeeUsers}
+                  isSaving={assigningSaving}
+                  onAssignCommittee={handleAssignCommittee}
+                  onToggleAssign={() => handleToggleAssign(presentation.id)}
+                  t={t}
+                />
               ))}
             </div>
 
@@ -766,85 +562,16 @@ export function PresentationsClient({
                     </thead>
                     <tbody>
                       {filteredPresentations.map((presentation) => (
-                        <Fragment key={presentation.id}>
-                          <tr className="group border-t border-border/40 transition-colors hover:bg-surface-hover/50">
-                            <td className="px-5 py-3.5">
-                              <p className="leading-snug font-medium text-ink">{presentationLabel(presentation)}</p>
-                              <p className="mt-0.5 text-xs text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              {presentation.submission.track ? <Badge tone="info">{presentation.submission.track.name}</Badge> : <span className="text-xs text-ink-muted">—</span>}
-                            </td>
-                            <td className="px-5 py-3.5 text-right">
-                              <Button
-                                size="sm"
-                                variant={assignPresId === presentation.id ? "secondary" : "outline"}
-                                onClick={() => {
-                                  if (assignPresId === presentation.id) {
-                                    setAssignPresId(null);
-                                    setSelectedJudges([]);
-                                  } else {
-                                    setAssignPresId(presentation.id);
-                                    setSelectedJudges([]);
-                                  }
-                                }}
-                              >
-                                <UserPlus className="h-3.5 w-3.5" />
-                                {assignPresId === presentation.id ? t("common.cancel") : t("presentations.committee")}
-                              </Button>
-                            </td>
-                          </tr>
-                          {assignPresId === presentation.id && (
-                            <tr className="bg-blue-50/40">
-                              <td colSpan={3} className="px-5 py-4">
-                                {committeeUsers.length === 0 ? (
-                                  <p className="text-xs text-danger">{t("presentations.noCommittee")}</p>
-                                ) : (
-                                  <div className="space-y-3">
-                                    <p className="text-xs font-medium text-ink-light">{t("presentations.selectCommittee")}</p>
-                                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                                      {committeeUsers.map((committeeUser) => {
-                                        const isSelected = selectedJudges.includes(committeeUser.id);
-                                        return (
-                                          <label
-                                            key={committeeUser.id}
-                                            className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
-                                              isSelected
-                                                ? "border-blue-300 bg-blue-50 shadow-sm"
-                                                : "border-transparent bg-white hover:bg-surface-hover"
-                                            }`}
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              checked={isSelected}
-                                              onChange={(e) => {
-                                                if (e.target.checked) setSelectedJudges([...selectedJudges, committeeUser.id]);
-                                                else setSelectedJudges(selectedJudges.filter((id) => id !== committeeUser.id));
-                                              }}
-                                              className="rounded border-border text-brand-500 focus:ring-brand-500"
-                                            />
-                                            <div className="min-w-0">
-                                              <p className="truncate text-sm font-medium text-ink">{displayNameTh(committeeUser)}</p>
-                                              <p className="truncate text-xs text-ink-muted">{committeeUser.email}</p>
-                                            </div>
-                                          </label>
-                                        );
-                                      })}
-                                    </div>
-                                    {selectedJudges.length > 0 && (
-                                      <div className="flex items-center justify-between border-t border-blue-200/60 pt-2">
-                                        <p className="text-xs text-ink-muted">{t("presentations.selectedCount", { n: selectedJudges.length })}</p>
-                                        <Button size="sm" onClick={() => handleAssignCommittee(presentation.id)} loading={assigningSaving}>
-                                          <Check className="h-3.5 w-3.5" />{t("presentations.appoint")}
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
+                        <PresentationCommitteeRow
+                          key={presentation.id}
+                          presentation={presentation}
+                          isAssigning={assignPresId === presentation.id}
+                          committeeUsers={committeeUsers}
+                          isSaving={assigningSaving}
+                          onAssignCommittee={handleAssignCommittee}
+                          onToggleAssign={() => handleToggleAssign(presentation.id)}
+                          t={t}
+                        />
                       ))}
                     </tbody>
                   </table>
@@ -974,5 +701,468 @@ const SortTh = memo(function SortTh({
         )}
       </span>
     </th>
+  );
+});
+	
+interface PresentationRowProps {
+  presentation: PresentationData;
+  isEditing: boolean;
+  isSaving: boolean;
+  isPublishing: boolean;
+  canManage: boolean;
+  canPublish: boolean;
+  isPosterMode: boolean;
+  isCommittee: boolean;
+  onSaveSchedule: (presentationId: string, form: { scheduledAt: string; room: string; duration: string }) => Promise<void>;
+  onCancelEdit: () => void;
+  onEdit: () => void;
+  onPublish: () => void;
+  t: any;
+}
+
+const PresentationRow = memo(function PresentationRow({
+  presentation,
+  isEditing,
+  isSaving,
+  isPublishing,
+  canManage,
+  canPublish,
+  isPosterMode,
+  isCommittee,
+  onSaveSchedule,
+  onCancelEdit,
+  onEdit,
+  onPublish,
+  t,
+}: PresentationRowProps) {
+  const [localForm, setLocalForm] = useState({
+    scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
+    room: presentation.room || "",
+    duration: presentation.duration?.toString() || "",
+  });
+
+  useEffect(() => {
+    if (isEditing) {
+      setLocalForm({
+        scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
+        room: presentation.room || "",
+        duration: presentation.duration?.toString() || "",
+      });
+    }
+  }, [isEditing, presentation]);
+
+  return (
+    <Fragment>
+      <tr className="group border-t border-border/40 transition-colors hover:bg-surface-hover/50">
+        <td className="px-5 py-3.5">
+          <p className="leading-snug font-medium text-ink">{getPresentationLabel(presentation)}</p>
+          <p className="mt-0.5 text-xs text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
+        </td>
+        <td className="px-4 py-3.5">
+          {presentation.submission.track ? <Badge tone="info">{presentation.submission.track.name}</Badge> : <span className="text-xs text-ink-muted">—</span>}
+        </td>
+        <td className="px-4 py-3.5">
+          {getRenderScheduleTime(presentation, t)}
+        </td>
+        <td className="px-4 py-3.5">
+          {presentation.room ? (
+            <span className="inline-flex items-center gap-1 text-xs text-ink-light"><MapPin className="h-3 w-3" />{presentation.room}</span>
+          ) : (
+            <span className="text-xs text-ink-muted">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3.5 text-center">
+          {getRenderDuration(presentation, t)}
+        </td>
+        <td className="px-4 py-3.5 text-center">
+          <Badge tone={getPresentationStatusTone(presentation.status)} dot>
+            {getPresentationStatusLabel(presentation.status, t)}
+          </Badge>
+        </td>
+        <td className="px-5 py-3.5 text-right">
+          <div className="flex items-center justify-end gap-1">
+            {canManage && isEditing ? (
+              <>
+                <Button size="sm" onClick={() => onSaveSchedule(presentation.id, localForm)} loading={isSaving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
+                <Button size="sm" variant="ghost" onClick={onCancelEdit}><X className="h-3.5 w-3.5" /></Button>
+              </>
+            ) : canManage && isPosterMode ? (
+              <Link href="/presentations/poster">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+                >
+                  {t("presentations.managePosterSlots")}
+                </Button>
+              </Link>
+            ) : canManage ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+                  onClick={onEdit}
+                >
+                  {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
+                </Button>
+                {canPublish && !isPublishedPresentationStatus(presentation.status) && (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={onPublish}
+                    loading={isPublishing}
+                    disabled={!presentation.scheduledAt}
+                  >
+                    <Megaphone className="h-3.5 w-3.5" />
+                    {t("presentations.publish")}
+                  </Button>
+                )}
+              </>
+            ) : null}
+            {isCommittee && (
+              <Link href={`/presentations/${presentation.id}/score`}>
+                <Button size="sm" variant="primary">
+                  <Star className="h-3.5 w-3.5" />
+                  {t("scoring.giveScore")}
+                </Button>
+              </Link>
+            )}
+          </div>
+        </td>
+      </tr>
+      {canManage && isEditing && (
+        <tr className="bg-brand-50/40">
+          <td colSpan={7} className="px-5 py-4">
+            <div className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label={t("presentations.dateTime")}>
+                <Input type="datetime-local" value={localForm.scheduledAt} onChange={(e) => setLocalForm({ ...localForm, scheduledAt: e.target.value })} />
+              </Field>
+              <Field label={t("presentations.room")}>
+                <Input value={localForm.room} onChange={(e) => setLocalForm({ ...localForm, room: e.target.value })} placeholder={t("presentations.roomPlaceholder")} />
+              </Field>
+              <Field label={t("presentations.durationMinutes")}>
+                <Input type="number" value={localForm.duration} onChange={(e) => setLocalForm({ ...localForm, duration: e.target.value })} placeholder="15" />
+              </Field>
+            </div>
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  );
+});
+
+const PresentationMobileCard = memo(function PresentationMobileCard({
+  presentation,
+  isEditing,
+  isSaving,
+  isPublishing,
+  canManage,
+  canPublish,
+  isPosterMode,
+  isCommittee,
+  onSaveSchedule,
+  onCancelEdit,
+  onEdit,
+  onPublish,
+  t,
+}: PresentationRowProps) {
+  const [localForm, setLocalForm] = useState({
+    scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
+    room: presentation.room || "",
+    duration: presentation.duration?.toString() || "",
+  });
+
+  useEffect(() => {
+    if (isEditing) {
+      setLocalForm({
+        scheduledAt: toDateTimeLocalValue(presentation.scheduledAt),
+        room: presentation.room || "",
+        duration: presentation.duration?.toString() || "",
+      });
+    }
+  }, [isEditing, presentation]);
+
+  return (
+    <Card>
+      <CardBody className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-ink">{getPresentationLabel(presentation)}</p>
+            <p className="mt-1 text-sm text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
+          </div>
+          <Badge tone={getPresentationStatusTone(presentation.status)} dot>
+            {getPresentationStatusLabel(presentation.status, t)}
+          </Badge>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {presentation.submission.track && <Badge tone="info">{presentation.submission.track.name}</Badge>}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 rounded-xl bg-surface-alt p-4 text-sm sm:grid-cols-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.dateTime")}</p>
+            <div className="mt-1">{getRenderScheduleTime(presentation, t)}</div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{t("presentations.room")}</p>
+            <p className="mt-1 text-ink">{presentation.room || "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{isPosterMode ? t("presentations.posterSlots") : t("presentations.minutes")}</p>
+            <div className="mt-1">{getRenderDuration(presentation, t)}</div>
+          </div>
+        </div>
+
+        {canManage && isEditing ? (
+          <div className="space-y-3 rounded-xl border border-brand-200/50 bg-brand-50/40 p-4">
+            <Field label={t("presentations.dateTime")}>
+              <Input type="datetime-local" value={localForm.scheduledAt} onChange={(e) => setLocalForm({ ...localForm, scheduledAt: e.target.value })} />
+            </Field>
+            <Field label={t("presentations.room")}>
+              <Input value={localForm.room} onChange={(e) => setLocalForm({ ...localForm, room: e.target.value })} placeholder={t("presentations.roomPlaceholder")} />
+            </Field>
+            <Field label={t("presentations.durationMinutes")}>
+              <Input type="number" value={localForm.duration} onChange={(e) => setLocalForm({ ...localForm, duration: e.target.value })} placeholder="15" />
+            </Field>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button size="sm" onClick={() => onSaveSchedule(presentation.id, localForm)} loading={isSaving}><Check className="h-3.5 w-3.5" />{t("common.save")}</Button>
+              <Button size="sm" variant="ghost" onClick={onCancelEdit}>{t("common.cancel")}</Button>
+            </div>
+          </div>
+        ) : canManage && isPosterMode ? (
+          <div className="flex flex-wrap gap-2">
+            <Link href="/presentations/poster">
+              <Button size="sm" variant="outline">
+                {t("presentations.managePosterSlots")}
+              </Button>
+            </Link>
+          </div>
+        ) : canManage ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onEdit}
+            >
+              {presentation.scheduledAt ? t("presentations.editSchedule") : t("presentations.setSchedule")}
+            </Button>
+            {canPublish && !isPublishedPresentationStatus(presentation.status) && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={onPublish}
+                loading={isPublishing}
+                disabled={!presentation.scheduledAt}
+              >
+                <Megaphone className="h-3.5 w-3.5" />
+                {t("presentations.publish")}
+              </Button>
+            )}
+          </div>
+        ) : null}
+        {isCommittee && (
+          <Link href={`/presentations/${presentation.id}/score`}>
+            <Button size="sm" variant="primary">
+              <Star className="h-3.5 w-3.5" />
+              {t("scoring.giveScore")}
+            </Button>
+          </Link>
+        )}
+      </CardBody>
+    </Card>
+  );
+});
+
+interface PresentationCommitteeRowProps {
+  presentation: PresentationData;
+  isAssigning: boolean;
+  committeeUsers: CommitteeUser[];
+  isSaving: boolean;
+  onAssignCommittee: (presentationId: string, judgeIds: string[]) => Promise<void>;
+  onToggleAssign: () => void;
+  t: any;
+}
+
+const PresentationCommitteeRow = memo(function PresentationCommitteeRow({
+  presentation,
+  isAssigning,
+  committeeUsers,
+  isSaving,
+  onAssignCommittee,
+  onToggleAssign,
+  t,
+}: PresentationCommitteeRowProps) {
+  const [selectedJudges, setSelectedJudges] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isAssigning) {
+      setSelectedJudges([]);
+    }
+  }, [isAssigning]);
+
+  return (
+    <Fragment>
+      <tr className="group border-t border-border/40 transition-colors hover:bg-surface-hover/50">
+        <td className="px-5 py-3.5">
+          <p className="leading-snug font-medium text-ink">{getPresentationLabel(presentation)}</p>
+          <p className="mt-0.5 text-xs text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
+        </td>
+        <td className="px-4 py-3.5">
+          {presentation.submission.track ? <Badge tone="info">{presentation.submission.track.name}</Badge> : <span className="text-xs text-ink-muted">—</span>}
+        </td>
+        <td className="px-5 py-3.5 text-right">
+          <Button
+            size="sm"
+            variant={isAssigning ? "secondary" : "outline"}
+            onClick={onToggleAssign}
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            {isAssigning ? t("common.cancel") : t("presentations.committee")}
+          </Button>
+        </td>
+      </tr>
+      {isAssigning && (
+        <tr className="bg-blue-50/40">
+          <td colSpan={3} className="px-5 py-4">
+            {committeeUsers.length === 0 ? (
+              <p className="text-xs text-danger">{t("presentations.noCommittee")}</p>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-ink-light">{t("presentations.selectCommittee")}</p>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {committeeUsers.map((committeeUser) => {
+                    const isSelected = selectedJudges.includes(committeeUser.id);
+                    return (
+                      <label
+                        key={committeeUser.id}
+                        className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
+                          isSelected
+                            ? "border-blue-300 bg-blue-50 shadow-sm"
+                            : "border-transparent bg-white hover:bg-surface-hover"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedJudges([...selectedJudges, committeeUser.id]);
+                            else setSelectedJudges(selectedJudges.filter((id) => id !== committeeUser.id));
+                          }}
+                          className="rounded border-border text-brand-500 focus:ring-brand-500"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-ink">{displayNameTh(committeeUser)}</p>
+                          <p className="truncate text-xs text-ink-muted">{committeeUser.email}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                {selectedJudges.length > 0 && (
+                  <div className="flex items-center justify-between border-t border-blue-200/60 pt-2">
+                    <p className="text-xs text-ink-muted">{t("presentations.selectedCount", { n: selectedJudges.length })}</p>
+                    <Button size="sm" onClick={() => onAssignCommittee(presentation.id, selectedJudges)} loading={isSaving}>
+                      <Check className="h-3.5 w-3.5" />{t("presentations.appoint")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  );
+});
+
+const PresentationCommitteeMobileCard = memo(function PresentationCommitteeMobileCard({
+  presentation,
+  isAssigning,
+  committeeUsers,
+  isSaving,
+  onAssignCommittee,
+  onToggleAssign,
+  t,
+}: PresentationCommitteeRowProps) {
+  const [selectedJudges, setSelectedJudges] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isAssigning) {
+      setSelectedJudges([]);
+    }
+  }, [isAssigning]);
+
+  return (
+    <Card>
+      <CardBody className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-ink">{getPresentationLabel(presentation)}</p>
+            <p className="mt-1 text-sm text-ink-muted">{displayNameTh(presentation.submission.author)}</p>
+          </div>
+          {presentation.submission.track && <Badge tone="info">{presentation.submission.track.name}</Badge>}
+        </div>
+
+        <Button
+          size="sm"
+          variant={isAssigning ? "secondary" : "outline"}
+          onClick={onToggleAssign}
+        >
+          <UserPlus className="h-3.5 w-3.5" />
+          {isAssigning ? t("common.cancel") : t("presentations.committee")}
+        </Button>
+
+        {isAssigning && (
+          <div className="space-y-3 rounded-xl border border-blue-200/60 bg-blue-50/40 p-4">
+            {committeeUsers.length === 0 ? (
+              <p className="text-xs text-danger">{t("presentations.noCommittee")}</p>
+            ) : (
+              <>
+                <p className="text-xs font-medium text-ink-light">{t("presentations.selectCommittee")}</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {committeeUsers.map((committeeUser) => {
+                    const isSelected = selectedJudges.includes(committeeUser.id);
+                    return (
+                      <label
+                        key={committeeUser.id}
+                        className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
+                          isSelected
+                            ? "border-blue-300 bg-blue-50 shadow-sm"
+                            : "border-transparent bg-white hover:bg-surface-hover"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedJudges([...selectedJudges, committeeUser.id]);
+                            else setSelectedJudges(selectedJudges.filter((id) => id !== committeeUser.id));
+                          }}
+                          className="rounded border-border text-brand-500 focus:ring-brand-500"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-ink">{displayNameTh(committeeUser)}</p>
+                          <p className="text-xs text-ink-muted">{committeeUser.email}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                {selectedJudges.length > 0 && (
+                  <div className="flex flex-col gap-2 border-t border-blue-200/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-ink-muted">{t("presentations.selectedCount", { n: selectedJudges.length })}</p>
+                    <Button size="sm" onClick={() => onAssignCommittee(presentation.id, selectedJudges)} loading={isSaving}>
+                      <Check className="h-3.5 w-3.5" />{t("presentations.appoint")}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </CardBody>
+    </Card>
   );
 });
