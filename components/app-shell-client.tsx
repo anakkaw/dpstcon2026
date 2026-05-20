@@ -112,7 +112,6 @@ export function AppShellClient({
       <Link
         key={item.href}
         href={item.href}
-        onClick={() => setSidebarOpen(false)}
         aria-current={isActive ? "page" : undefined}
         className={cn(
           "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 border",
@@ -141,7 +140,7 @@ export function AppShellClient({
 
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden animate-fade-in"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden animate-fade-in"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -152,7 +151,7 @@ export function AppShellClient({
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/5 bg-slate-950/95 backdrop-blur-md",
           "transition-transform duration-300 ease-out",
-          "lg:static lg:translate-x-0",
+          "md:static md:translate-x-0",
           sidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         )}
       >
@@ -167,7 +166,7 @@ export function AppShellClient({
           <button
             type="button"
             aria-label={t("common.closeNavigation")}
-            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 lg:hidden"
+            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 md:hidden"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="h-5 w-5" aria-hidden="true" />
@@ -196,13 +195,13 @@ export function AppShellClient({
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden bg-dashboard-light relative dashboard-theme text-slate-800">
-        <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-slate-200/60 bg-white/70 px-4 backdrop-blur-md lg:px-8 relative z-10">
+        <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-slate-200/60 bg-white/70 px-4 backdrop-blur-md md:px-8 relative z-10">
           <button
             type="button"
             aria-label={t("common.openNavigation")}
             aria-expanded={sidebarOpen}
             aria-controls="app-sidebar"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 md:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
@@ -251,7 +250,7 @@ export function AppShellClient({
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 overflow-y-auto bg-transparent px-4 py-6 lg:px-8 lg:py-8 relative z-10">
+        <main id="main-content" className="flex-1 overflow-y-auto bg-transparent px-4 py-6 md:px-8 md:py-8 relative z-10">
           <div className="mx-auto w-full max-w-7xl">
             {children}
             <Footer
