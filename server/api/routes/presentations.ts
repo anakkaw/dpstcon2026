@@ -43,6 +43,7 @@ import {
   parsePosterOrderValue,
   posterOrderSettingsKey,
 } from "@/lib/poster-planner-order";
+import { getRemovedPosterSessionSlotTemplates } from "@/lib/poster-session-slots";
 import {
   normalizePosterSubgroups,
   parsePosterSubgroupsValue,
@@ -322,6 +323,27 @@ async function markAllPosterSchedulesDraft() {
       .set({ status: "PLANNED", updatedAt: now })
       .where(ne(posterSlotJudges.status, "COMPLETED")),
   ]);
+}
+
+async function deleteRemovedPosterSlotAssignments(
+  removedTemplates: Array<{ startsAt: string; endsAt: string }>
+) {
+  if (removedTemplates.length === 0) return;
+
+  const removedSlotConditions = removedTemplates.map((slot) =>
+    and(
+      eq(posterSlotJudges.startsAt, new Date(slot.startsAt)),
+      eq(posterSlotJudges.endsAt, new Date(slot.endsAt)),
+      ne(posterSlotJudges.status, "COMPLETED")
+    )
+  );
+  const whereCondition =
+    removedSlotConditions.length === 1
+      ? removedSlotConditions[0]
+      : or(...removedSlotConditions);
+
+  if (!whereCondition) return;
+  await db.delete(posterSlotJudges).where(whereCondition);
 }
 
 function sessionSettingsChanged(
@@ -1544,8 +1566,13 @@ app.put("/poster-session", async (c) => {
     room: parsed.data.room ?? "",
     slotTemplates: parsed.data.slotTemplates,
   });
+  const removedTemplates = getRemovedPosterSessionSlotTemplates({
+    before: before.slotTemplates,
+    after: sessionSettings.slotTemplates,
+  });
 
   if (sessionSettingsChanged(before, sessionSettings)) {
+    await deleteRemovedPosterSlotAssignments(removedTemplates);
     await markAllPosterSchedulesDraft();
   }
 

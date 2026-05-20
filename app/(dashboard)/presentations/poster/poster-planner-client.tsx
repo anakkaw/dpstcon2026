@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { RubricManager } from "@/components/presentations/rubric-manager";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Select } from "@/components/ui/select";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
 import {
   POSTER_REQUIRED_JUDGE_COUNT,
   buildPosterJudgeAssignments,
@@ -1601,7 +1601,7 @@ const PosterPlannerRow = memo(function PosterPlannerRow({
   deletePosterSlot: (slotId: string) => Promise<void>;
   refreshPlanner: () => Promise<void>;
   runAction: (key: string, action: () => Promise<void>) => Promise<void>;
-  t: any;
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
 }) {
   const readiness = getPosterScheduleReadiness(row.judgeAssignments);
   const assignmentsBySlot = useMemo(() => {
