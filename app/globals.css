@@ -439,7 +439,12 @@ input[type="checkbox"] {
     border: 1px solid rgba(239, 68, 68, 0.15) !important;
   }
 
-  /* Table Headers & Lists */
+  /* Table Headers & Lists - high-density compact styling */
+  th, td {
+    padding: 10px 14px !important;
+    font-size: 13.5px !important;
+  }
+  
   th {
     color: #475569 !important;
     background-color: rgba(15, 23, 42, 0.02) !important;
@@ -453,6 +458,82 @@ input[type="checkbox"] {
   /* Horizontal line dividers */
   .divide-y > :not([hidden]) ~ :not([hidden]) {
     border-color: rgba(15, 23, 42, 0.05) !important;
+  }
+
+  /* Compact workspace container overrides */
+  .p-6 {
+    padding: 1.15rem !important; /* Tighten standard card padding */
+  }
+  .p-8 {
+    padding: 1.35rem !important; /* Tighten detailed view padding */
+  }
+  
+  /* Condensed spacing and grid gaps */
+  .gap-6 {
+    gap: 1.15rem !important;
+  }
+  .gap-8 {
+    gap: 1.35rem !important;
+  }
+  
+  .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1.15rem !important;
+  }
+  .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1.35rem !important;
+  }
+  
+  .py-3 {
+    padding-top: 0.55rem !important;
+    padding-bottom: 0.55rem !important;
+  }
+  .py-4 {
+    padding-top: 0.7rem !important;
+    padding-bottom: 0.7rem !important;
+  }
+
+  /* Compact Input fields & Select elements overrides */
+  input[type="text"], input[type="email"], input[type="password"], textarea, select {
+    padding-top: 0.45rem !important;
+    padding-bottom: 0.45rem !important;
+    height: 2.25rem !important;
+    font-size: 13.5px !important;
+  }
+  textarea {
+    height: auto !important;
+  }
+  
+  input[type="text"]:focus, select:focus, textarea:focus {
+    border-color: rgba(249, 115, 22, 0.4) !important;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08) !important;
+  }
+
+  /* Option dropdown inside selects */
+  select option {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Badge styling overrides for modern look */
+  .bg-green-50, .bg-emerald-50, .bg-emerald-500\/10 {
+    background-color: rgba(34, 197, 94, 0.08) !important;
+    color: #166534 !important;
+    border: 1px solid rgba(34, 197, 94, 0.15) !important;
+  }
+  .bg-amber-50, .bg-yellow-50, .bg-amber-550\/10 {
+    background-color: rgba(245, 158, 11, 0.08) !important;
+    color: #9a3412 !important;
+    border: 1px solid rgba(245, 158, 11, 0.15) !important;
+  }
+  .bg-blue-50, .bg-blue-500\/10 {
+    background-color: rgba(59, 130, 246, 0.08) !important;
+    color: #1e40af !important;
+    border: 1px solid rgba(59, 130, 246, 0.15) !important;
+  }
+  .bg-red-50, .bg-red-500\/10 {
+    background-color: rgba(239, 68, 68, 0.08) !important;
+    color: #991b1b !important;
+    border: 1px solid rgba(239, 68, 68, 0.15) !important;
   }
 
   /* Active Tabs filters */

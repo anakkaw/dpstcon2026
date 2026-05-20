@@ -195,7 +195,7 @@ export function AppShellClient({
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden bg-dashboard-light relative dashboard-theme text-slate-800">
-        <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-slate-200/60 bg-white/70 px-4 backdrop-blur-md md:px-8 relative z-10">
+        <header className="flex h-16 shrink-0 items-center gap-4 border-b border-slate-200/60 bg-white/70 px-4 backdrop-blur-md md:px-6 relative z-10">
           <button
             type="button"
             aria-label={t("common.openNavigation")}
@@ -250,11 +250,11 @@ export function AppShellClient({
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 overflow-y-auto bg-transparent px-4 py-6 md:px-8 md:py-8 relative z-10">
+        <main id="main-content" className="flex-1 overflow-y-auto bg-transparent px-4 py-5 md:px-6 md:py-6 relative z-10">
           <div className="mx-auto w-full max-w-7xl">
             {children}
             <Footer
-              className="mt-10 opacity-60"
+              className="mt-8 opacity-60"
               developedBy={t("footer.developedBy")}
               university={t("footer.university")}
               variant="light"
